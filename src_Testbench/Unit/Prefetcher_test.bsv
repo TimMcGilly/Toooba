@@ -78,6 +78,9 @@ module mkTargetTableTest(Empty);
                 let x <- t.readResp(); // get from short table
                 doAssert(x == Valid('h6fde), "test fail!"); //entry still there
             endaction
+            action
+                $display("Test finished!");
+            endaction
         endseq
     );
 endmodule
@@ -254,6 +257,9 @@ module mkTargetTableDoubleTest(Empty);
                 let x <- t.readResp();
                 doAssert(x == tuple2(Invalid, Invalid), "test fail!"); //entry was removed!
             endaction
+            action
+                $display("Test finished!");
+            endaction
         endseq
     );
 endmodule
@@ -378,6 +384,9 @@ module mkMultiWindowTargetPrefetcherTest(Empty);
                 let x <- p.getNextPrefetchAddr; 
                 doAssert(x == 'h800200, "test fail!"); // window addresss recommended
             endaction
+            action
+                $display("Test finished!");
+            endaction
         endseq
     );
 endmodule
@@ -447,6 +456,9 @@ module mkSingleWindowTargetPrefetcherTest(Empty);
             action
                 let x <- p.getNextPrefetchAddr; 
                 doAssert(x == 'h80000180, "test fail!"); // window addresss recommended
+            endaction
+            action
+                $display("Test finished!");
             endaction
         endseq
     );
@@ -523,6 +535,9 @@ module mkStridePCPrefetcherTest(Empty);
             action
                 let x <- p.getNextPrefetchAddr;
                 doAssert(x == 'h900000a0, "test fail!");
+            endaction
+            action
+                $display("Test finished!");
             endaction
         endseq
     );
@@ -636,6 +651,9 @@ module mkStrideAdaptivePCPrefetcherTest(Empty);
             endaction
             action p.reportAccess('h800000b0, 'h0069, MISS); endaction
             action p.reportAccess('h800000b8, 'h0069, MISS); endaction
+            action
+                $display("Test finished!");
+            endaction
         endseq
     );
 endmodule
@@ -703,6 +721,9 @@ module mkMarkovOnHit2PrefetcherTest(Empty);
                 let x <- p.getNextPrefetchAddr; 
                 doAssert(x == 'h80010000, "test fail!");
             endaction
+            action
+                $display("Test finished!");
+            endaction
         endseq
     );
 endmodule
@@ -751,6 +772,9 @@ module mkMarkovPrefetcherTest(Empty);
             action
                 let x <- p.getNextPrefetchAddr; 
                 doAssert(x == 'ha000, "test fail!");
+            endaction
+            action
+                $display("Test finished!");
             endaction
         endseq
     );
@@ -827,6 +851,9 @@ module mkOverflowPipelineFifoTest(Empty);
             endaction
             action
                 $display("test done!");
+            endaction
+            action
+                $display("Test finished!");
             endaction
         endseq
     );
@@ -905,6 +932,9 @@ module mkOverflowBypassFifoTest(Empty);
             endaction
             action
                 $display("test done!");
+            endaction
+            action
+                $display("Test finished!");
             endaction
         endseq
     );
@@ -1003,6 +1033,9 @@ module mkStride2PCPrefetcherTest(Empty);
                 let x <- p.getNextPrefetchAddr;
                 doAssert(x == 'hb0000800, "test fail!");
             endaction
+            action
+                $display("Test finished!");
+            endaction
         endseq
     );
 endmodule
@@ -1062,6 +1095,9 @@ module mkPrefetcherVectorTest(Empty);
                 $display("%t Got %x", $time, x);
                 doAssert(x == tuple2('ha0000080, 2), "test fail!");
             endaction
+            action
+                $display("Test finished!");
+            endaction
         endseq
     );
 endmodule
@@ -1094,6 +1130,12 @@ module mkSimpleStridePCPrefetcherTest(Empty);
             action
                 let x <- p.getNextPrefetchAddr;
                 doAssert(x == 'h80000000, "test fail!");
+            endaction
+            action
+                $display("Test finished!");
+            endaction
+            action
+                $display("Test finished!");
             endaction
         endseq
     );

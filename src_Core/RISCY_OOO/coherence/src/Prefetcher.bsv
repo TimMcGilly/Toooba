@@ -36,6 +36,8 @@ import Vector::*;
 import BuildVector::*;
 import ProcTypes::*;
 
+`define VERBOSE False
+
 typedef enum {
     HIT = 1'b0, MISS = 1'b1
 } HitOrMiss deriving (Bits, Eq, FShow);
@@ -71,10 +73,10 @@ endmodule
 module mkPrintPrefetcher(Prefetcher);
     method Action reportAccess(Addr addr, HitOrMiss hitMiss);
         if (hitMiss == HIT) begin
-            $display("%t PrintPrefetcher report HIT %h", $time, addr);
+            if (`VERBOSE) $display("%t PrintPrefetcher report HIT %h", $time, addr);
         end
         else begin
-            $display("%t PrintPrefetcher report MISS %h", $time, addr);
+            if (`VERBOSE) $display("%t PrintPrefetcher report MISS %h", $time, addr);
         end
     endmethod
     method ActionValue#(Addr) getNextPrefetchAddr if (False);
@@ -93,10 +95,10 @@ module mkNextLineOnMissPrefetcher#(Parameter#(nextLinesOnMiss) _)(Prefetcher)
 
     method Action reportAccess(Addr addr, HitOrMiss hitMiss);
         if (hitMiss == HIT) begin
-            $display("%t Prefetcher report HIT %h", $time, addr);
+            if (`VERBOSE) $display("%t Prefetcher report HIT %h", $time, addr);
         end
         else begin
-            $display("%t Prefetcher report MISS %h", $time, addr);
+            if (`VERBOSE) $display("%t Prefetcher report MISS %h", $time, addr);
             lastMissAddr <= addr;
             sentRequestCounter <= 0;
         end
@@ -106,7 +108,7 @@ module mkNextLineOnMissPrefetcher#(Parameter#(nextLinesOnMiss) _)(Prefetcher)
 
         sentRequestCounter <= sentRequestCounter + 1;
         let addrToRequest = lastMissAddr + (zeroExtend(sentRequestCounter) + 1)*fromInteger(valueOf(DataSz));
-        $display("%t Prefetcher getNextPrefetchAddr requesting %h", $time, addrToRequest);
+        if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr requesting %h", $time, addrToRequest);
         return addrToRequest;
     endmethod
 endmodule
@@ -121,12 +123,12 @@ module mkNextLineOnAllPrefetcher#(Parameter#(nextLinesOnAccess) _)(Prefetcher)
 
     method Action reportAccess(Addr addr, HitOrMiss hitMiss);
         if (hitMiss == HIT) begin
-            $display("%t Prefetcher report HIT %h", $time, addr);
+            if (`VERBOSE) $display("%t Prefetcher report HIT %h", $time, addr);
             lastAccessAddr <= addr;
             sentRequestCounter <= 0;
         end
         else begin
-            $display("%t Prefetcher report MISS %h", $time, addr);
+            if (`VERBOSE) $display("%t Prefetcher report MISS %h", $time, addr);
             lastAccessAddr <= addr;
             sentRequestCounter <= 0;
         end
@@ -136,7 +138,7 @@ module mkNextLineOnAllPrefetcher#(Parameter#(nextLinesOnAccess) _)(Prefetcher)
 
         sentRequestCounter <= sentRequestCounter + 1;
         let addrToRequest = lastAccessAddr + (zeroExtend(sentRequestCounter) + 1)*fromInteger(valueOf(DataSz));
-        $display("%t Prefetcher getNextPrefetchAddr requesting %h", $time, addrToRequest);
+        if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr requesting %h", $time, addrToRequest);
         return addrToRequest;
     endmethod
 endmodule
@@ -152,11 +154,11 @@ module mkSingleWindowPrefetcher#(Parameter#(cacheLinesInRange) _)(Prefetcher);
             cl < rangeEnd) begin
 
             let nextEnd = cl + fromInteger(cacheLinesInRange) + 1;
-            $display("%t Prefetcher report HIT %h, moving window end to %h", $time, addr, Addr'{nextEnd, '0});
+            if (`VERBOSE) $display("%t Prefetcher report HIT %h, moving window end to %h", $time, addr, Addr'{nextEnd, '0});
             rangeEnd <= nextEnd;
         end
         else if (hitMiss == MISS) begin
-            $display("%t Prefetcher report MISS %h", $time, addr);
+            if (`VERBOSE) $display("%t Prefetcher report MISS %h", $time, addr);
             //Reset window
             nextToAsk <= getLineAddr(addr) + 1;
             rangeEnd <= getLineAddr(addr) + fromInteger(cacheLinesInRange) + 1;
@@ -165,7 +167,7 @@ module mkSingleWindowPrefetcher#(Parameter#(cacheLinesInRange) _)(Prefetcher);
     method ActionValue#(Addr) getNextPrefetchAddr if (nextToAsk != rangeEnd);
         nextToAsk <= nextToAsk + 1;
         let retAddr = Addr'{nextToAsk, '0}; //extend cache line address to regular address
-        $display("%t Prefetcher getNextPrefetchAddr requesting %h", $time, retAddr);
+        if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr requesting %h", $time, retAddr);
         return retAddr; 
     endmethod
 endmodule
@@ -180,11 +182,11 @@ module mkSingleWindowL1LLPrefetcher#(Parameter#(cacheLinesInRange) _)(Prefetcher
             cl < rangeEnd) begin
 
             let nextEnd = cl + fromInteger(cacheLinesInRange) + 1;
-            $display("%t Prefetcher report HIT %h, moving window end to %h", $time, addr, Addr'{nextEnd, '0});
+            if (`VERBOSE) $display("%t Prefetcher report HIT %h, moving window end to %h", $time, addr, Addr'{nextEnd, '0});
             rangeEnd <= nextEnd;
         end
         else if (hitMiss == MISS) begin
-            $display("%t Prefetcher report MISS %h", $time, addr);
+            if (`VERBOSE) $display("%t Prefetcher report MISS %h", $time, addr);
             //Reset window
             nextToAsk <= getLineAddr(addr) + 1;
             rangeEnd <= getLineAddr(addr) + fromInteger(cacheLinesInRange) + 1;
@@ -193,7 +195,7 @@ module mkSingleWindowL1LLPrefetcher#(Parameter#(cacheLinesInRange) _)(Prefetcher
     method ActionValue#(Addr) getNextPrefetchAddr if (nextToAsk != rangeEnd);
         nextToAsk <= nextToAsk + 1;
         let retAddr = Addr'{nextToAsk, '0}; //extend cache line address to regular address
-        $display("%t Prefetcher getNextPrefetchAddr requesting %h", $time, retAddr);
+        if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr requesting %h", $time, retAddr);
         return retAddr; 
     endmethod
 endmodule
@@ -260,13 +262,13 @@ provisos(
             moveWindowToFront(pack(idx)); //Update window as just used
             let newRangeEnd = getLineAddr(addr) + fromInteger(cacheLinesInRange) + 1;
             if (hitMiss == HIT) begin
-                $display("%t Prefetcher report HIT %h, moving window end to %h for window idx %h", 
+                if (`VERBOSE) $display("%t Prefetcher report HIT %h, moving window end to %h for window idx %h", 
                     $time, addr, Addr'{newRangeEnd, '0}, idx);
                 streams[idx].rangeEnd <= newRangeEnd;
             end
             else if (hitMiss == MISS) begin
                 //Also reset nextToAsk on miss
-                $display("%t Prefetcher report MISS %h, moving window end to %h for window idx %h", 
+                if (`VERBOSE) $display("%t Prefetcher report MISS %h, moving window end to %h for window idx %h", 
                     $time, addr, Addr'{newRangeEnd, '0}, idx);
                 streams[idx] <= 
                     StreamEntry {nextToAsk: getLineAddr(addr) + 1, 
@@ -274,7 +276,7 @@ provisos(
             end
         end
         else if (hitMiss == MISS) begin
-            $display("%t Prefetcher report MISS %h, allocating new window, idx %h", $time, addr, shiftReg[3]);
+            if (`VERBOSE) $display("%t Prefetcher report MISS %h, allocating new window, idx %h", $time, addr, shiftReg[3]);
             streams[shiftReg[3]] <= 
                 StreamEntry {nextToAsk: getLineAddr(addr) + 1,
                             rangeEnd: getLineAddr(addr) + fromInteger(cacheLinesInRange) + 1};
@@ -290,7 +292,7 @@ provisos(
 
         streams[shiftReg[0]].nextToAsk <= streams[shiftReg[0]].nextToAsk + 1;
         let retAddr = Addr'{streams[shiftReg[0]].nextToAsk, '0}; //extend cache line address to regular address
-        $display("%t Prefetcher getNextPrefetchAddr requesting %h from window idx %h", $time, retAddr, shiftReg[0]);
+        if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr requesting %h from window idx %h", $time, retAddr, shiftReg[0]);
         return retAddr; 
     endmethod
 
@@ -351,13 +353,13 @@ provisos(
         if (idxMaybe matches tagged Valid .idx) begin
             moveWindowToFront(pack(idx)); //Update window as just used
             let newRangeEnd = getLineAddr(addr) + fromInteger(cacheLinesInRange) + 1;
-            $display("%t Prefetcher report access %h, moving window end to %h for window idx %h", 
+            if (`VERBOSE) $display("%t Prefetcher report access %h, moving window end to %h for window idx %h", 
                 $time, addr, Addr'{newRangeEnd, '0}, idx);
             streams[idx].rangeEnd <= newRangeEnd;
         end
         else if (hitMiss == MISS) begin
             //A miss in L1 is not necessarily a miss in L2, so this might create a window for lines already in L2
-            $display("%t Prefetcher report MISS %h, allocating new window, idx %h", $time, addr, shiftReg[3]);
+            if (`VERBOSE) $display("%t Prefetcher report MISS %h, allocating new window, idx %h", $time, addr, shiftReg[3]);
             streams[shiftReg[3]] <= 
                 StreamEntry {nextToAsk: getLineAddr(addr) + 1,
                             rangeEnd: getLineAddr(addr) + fromInteger(cacheLinesInRange) + 1};
@@ -373,7 +375,7 @@ provisos(
 
         streams[shiftReg[0]].nextToAsk <= streams[shiftReg[0]].nextToAsk + 1;
         let retAddr = Addr'{streams[shiftReg[0]].nextToAsk, '0}; //extend cache line address to regular address
-        $display("%t Prefetcher getNextPrefetchAddr requesting %h from window idx %h", $time, retAddr, shiftReg[0]);
+        if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr requesting %h from window idx %h", $time, retAddr, shiftReg[0]);
         return retAddr; 
     endmethod
 
@@ -456,12 +458,12 @@ module mkTargetTable(TargetTable#(narrowTableSize, wideTableSize)) provisos
         Bit#(wideTableIdxBits) wideIdx = truncate(addrHash);
         if (narrowTable.rdResp matches tagged Valid .entry 
             &&& entry.tag == addrHash[23:valueOf(narrowTableIdxBits)]) begin
-            $display("%t found narrow table entry %h", $time, addr + signExtend(pack(entry.distance)));
+            if (`VERBOSE) $display("%t found narrow table entry %h", $time, addr + signExtend(pack(entry.distance)));
             return Valid(addr + signExtend(pack(entry.distance)));
         end
         else if (wideTable.rdResp matches tagged Valid .entry 
             &&& entry.tag == addrHash[23:valueOf(wideTableIdxBits)]) begin
-            $display("%t found wide table entry %h", $time, entry.target);
+            if (`VERBOSE) $display("%t found wide table entry %h", $time, entry.target);
             return Valid(entry.target);
         end
         else begin
@@ -541,12 +543,12 @@ module mkTargetTableDouble(TargetTableDouble#(narrowTableSize, wideTableSize)) p
     actionvalue
         if (narrowWrapped matches tagged Valid .narrow
             &&& narrowTagMatch(addrHash, narrow)) begin
-            //$display("%t found narrow table entry %h", $time, addr + signExtend(pack(narrow.distance)));
+            //if (`VERBOSE) $display("%t found narrow table entry %h", $time, addr + signExtend(pack(narrow.distance)));
             return Valid(addr + signExtend(pack(narrow.distance)));
         end
         else if (wideWrapped matches tagged Valid .wide
             &&& wideTagMatch(addrHash, wide)) begin
-            //$display("%t found wide table entry %h", $time, wide.target);
+            //if (`VERBOSE) $display("%t found wide table entry %h", $time, wide.target);
             return Valid(wide.target);
         end
         else
@@ -601,7 +603,7 @@ module mkTargetTableDouble(TargetTableDouble#(narrowTableSize, wideTableSize)) p
     action
         let distance = currAddr - lastMissAddr;
         Bit#(32) lastMissAddrHash = hash(lastMissAddr);
-        $display("%t Recording miss from %x to %x", $time, lastMissAddr, currAddr);
+        if (`VERBOSE) $display("%t Recording miss from %x to %x", $time, lastMissAddr, currAddr);
         if (abs(distance) < fromInteger(valueOf(narrowMaxDistanceAbs))) begin
             //Store lastMissAddr -> currAddr in narrow MRU table
 
@@ -611,7 +613,7 @@ module mkTargetTableDouble(TargetTableDouble#(narrowTableSize, wideTableSize)) p
             entry.distance = truncate(distance);
 
             if (Valid(entry) != lastMissNarrowMRUEntry) begin
-                //$display("%t Recording miss -- modifying narrow table", $time);
+                //if (`VERBOSE) $display("%t Recording miss -- modifying narrow table", $time);
                 //Maintain the property that one address can only have 
                 // at most 2 of 4 table entries for it.
                 //Shift narrow table entries down, storing in MRU.
@@ -631,7 +633,7 @@ module mkTargetTableDouble(TargetTableDouble#(narrowTableSize, wideTableSize)) p
             entry.target = currAddr;
 
             if (Valid(entry) != lastMissWideMRUEntry) begin
-                //$display("%t Recording miss -- modifying wide table", $time);
+                //if (`VERBOSE) $display("%t Recording miss -- modifying wide table", $time);
                 wideTableMRU.wrReq(idx, Valid(entry));
                 wideTableLRU.wrReq(idx, lastMissWideMRUEntry);
                 Bit#(narrowTableIdxBits) narrowIdx = truncate(lastMissAddrHash);
@@ -643,7 +645,7 @@ module mkTargetTableDouble(TargetTableDouble#(narrowTableSize, wideTableSize)) p
     endfunction
 
     method Action sendReadWriteReq(LineAddr addr, HitOrMiss hitMiss);
-        $display("%t send read write req for %x", $time, addr);
+        if (`VERBOSE) $display("%t send read write req for %x", $time, addr);
         Bit#(32) addrHash = hash(addr);
         Bit#(narrowTableIdxBits) narrowIdx = truncate(addrHash);
         narrowTableMRU.rdReq(narrowIdx);
@@ -678,7 +680,7 @@ module mkTargetTableDouble(TargetTableDouble#(narrowTableSize, wideTableSize)) p
         let entryMRU <- checkReadResp(addr, addrHash, narrowTableMRU.rdResp, wideTableMRU.rdResp);
         let entryLRU <- checkReadResp(addr, addrHash, narrowTableLRU.rdResp, wideTableLRU.rdResp);
         Tuple2#(Maybe#(LineAddr), Maybe#(LineAddr)) retval = tuple2(entryMRU, entryLRU);
-        $display("%t Prefetcher read resp for %x returning ", $time, addr, fshow(retval));
+        if (`VERBOSE) $display("%t Prefetcher read resp for %x returning ", $time, addr, fshow(retval));
         return retval;
     endmethod
 endmodule
@@ -706,17 +708,17 @@ module mkSingleWindowTargetPrefetcher#(Parameter#(numLastRequests) _, Parameter#
 
     method Action reportAccess(Addr addr, HitOrMiss hitMiss);
         let cl = getLineAddr(addr);
-        $display("%t prefecher reportAccess", $time);
+        if (`VERBOSE) $display("%t prefecher reportAccess", $time);
         if (hitMiss == HIT && 
             rangeEnd - fromInteger(cacheLinesInRange) - 1 < cl && 
             cl < rangeEnd) begin
 
             let nextEnd = cl + fromInteger(cacheLinesInRange) + 1;
-            $display("%t Prefetcher report HIT %h, moving window end to %h", $time, addr, Addr'{nextEnd, '0});
+            if (`VERBOSE) $display("%t Prefetcher report HIT %h, moving window end to %h", $time, addr, Addr'{nextEnd, '0});
             rangeEnd <= nextEnd;
         end
         else if (hitMiss == MISS) begin
-            $display("%t Prefetcher report MISS %h", $time, addr);
+            if (`VERBOSE) $display("%t Prefetcher report MISS %h", $time, addr);
             //Reset window
             nextToAsk <= cl + 1;
             rangeEnd <= cl + fromInteger(cacheLinesInRange) + 1;
@@ -724,14 +726,14 @@ module mkSingleWindowTargetPrefetcher#(Parameter#(numLastRequests) _, Parameter#
 
         if (hitMiss == MISS && cl != lastChildRequest + 1 && cl != lastChildRequest && cl != lastChildRequest - 1) begin
             //Try only recording table entries on a miss!
-            $display("%t Prefetcher add target entry from addr %h to addr %h", $time, Addr'{lastChildRequest, '0}, addr);
+            if (`VERBOSE) $display("%t Prefetcher add target entry from addr %h to addr %h", $time, Addr'{lastChildRequest, '0}, addr);
             targetTable.writeReq(lastChildRequest, cl);
         end
 
         // Send target request if not in last numLastRequests hits.
         if (!elem(hash(cl), lastTargetRequests)) begin 
             targetTable.readReq(cl);
-            $display("%t Prefetcher sending target read request for %h", $time, cl);
+            if (`VERBOSE) $display("%t Prefetcher sending target read request for %h", $time, cl);
             lastTargetRequests <= shiftInAt0(lastTargetRequests, hash(cl));
         end
         lastChildRequest <= cl;
@@ -744,13 +746,13 @@ module mkSingleWindowTargetPrefetcher#(Parameter#(numLastRequests) _, Parameter#
             // prefetch the stored target first
             retAddr = {targetTableReadResp.first, '0};
             targetTableReadResp.deq();
-            $display("%t Prefetcher getNextPrefetchAddr requesting target entry %h", $time, retAddr);
+            if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr requesting target entry %h", $time, retAddr);
         end
         else begin
             //If no table entry, prefetch further in window
             nextToAsk <= nextToAsk + 1;
             retAddr = {nextToAsk, '0}; 
-            $display("%t Prefetcher getNextPrefetchAddr requesting next-line %h", $time, retAddr);
+            if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr requesting next-line %h", $time, retAddr);
         end
         return retAddr; 
     endmethod
@@ -775,7 +777,7 @@ provisos(
     rule sendReadReq;
         if (!elem(hash(lastChildRequest), lastTargetRequests)) begin 
             targetTable.readReq(lastChildRequest);
-            $display("%t Prefetcher sending target read request for %h", $time, Addr'{lastChildRequest, 'h0});
+            if (`VERBOSE) $display("%t Prefetcher sending target read request for %h", $time, Addr'{lastChildRequest, 'h0});
             lastTargetRequests <= shiftInAt0(lastTargetRequests, hash(lastChildRequest));
         end
     endrule
@@ -835,13 +837,13 @@ provisos(
             moveWindowToFront(pack(idx)); //Update window as just used
             let newRangeEnd = getLineAddr(addr) + fromInteger(cacheLinesInRange) + 1;
             if (hitMiss == HIT) begin
-                $display("%t Prefetcher report HIT %h, moving window end to %h for window idx %h", 
+                if (`VERBOSE) $display("%t Prefetcher report HIT %h, moving window end to %h for window idx %h", 
                     $time, addr, Addr'{newRangeEnd, '0}, idx);
                 streams[idx].rangeEnd <= newRangeEnd;
             end
             else if (hitMiss == MISS) begin
                 //Also reset nextToAsk on miss
-                $display("%t Prefetcher report MISS %h, moving window end to %h for window idx %h", 
+                if (`VERBOSE) $display("%t Prefetcher report MISS %h, moving window end to %h for window idx %h", 
                     $time, addr, Addr'{newRangeEnd, '0}, idx);
                 streams[idx] <= 
                     StreamEntry {nextToAsk: getLineAddr(addr) + 1, 
@@ -849,7 +851,7 @@ provisos(
             end
         end
         else if (hitMiss == MISS) begin
-            $display("%t Prefetcher report MISS %h, allocating new window, idx %h", $time, addr, shiftReg[3]);
+            if (`VERBOSE) $display("%t Prefetcher report MISS %h, allocating new window, idx %h", $time, addr, shiftReg[3]);
             streams[shiftReg[3]] <= 
                 StreamEntry {nextToAsk: getLineAddr(addr) + 1,
                             rangeEnd: getLineAddr(addr) + fromInteger(cacheLinesInRange) + 1};
@@ -861,7 +863,7 @@ provisos(
 
         // Update target prefetcher
         if (hitMiss == MISS && cl != lastChildRequest + 1 && cl != lastChildRequest && cl != lastChildRequest - 1) begin
-            $display("%t Prefetcher add target entry from addr %h to addr %h", $time, Addr'{lastChildRequest, '0}, addr);
+            if (`VERBOSE) $display("%t Prefetcher add target entry from addr %h to addr %h", $time, Addr'{lastChildRequest, '0}, addr);
             targetTable.writeReq(lastChildRequest, cl);
         end
         lastChildRequest <= cl;
@@ -877,12 +879,12 @@ provisos(
             // prefetch the stored target first
             retAddr = {targetTableReadResp.first, '0};
             targetTableReadResp.deq();
-            $display("%t Prefetcher getNextPrefetchAddr requesting target entry %h", $time, retAddr);
+            if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr requesting target entry %h", $time, retAddr);
         end
         else begin
             streams[shiftReg[0]].nextToAsk <= streams[shiftReg[0]].nextToAsk + 1;
             retAddr = Addr'{streams[shiftReg[0]].nextToAsk, '0}; //extend cache line address to regular address
-            $display("%t Prefetcher getNextPrefetchAddr requesting %h from window idx %h", $time, retAddr, shiftReg[0]);
+            if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr requesting %h from window idx %h", $time, retAddr, shiftReg[0]);
         end
         return retAddr; 
     endmethod
@@ -907,7 +909,7 @@ module mkMarkovPrefetcher#(Parameter#(maxChainLength) _, Parameter#(narrowEntrie
     Reg#(LineAddr) chainNextToLookup <- mkReg(?);
 
     rule sendReadReq (chainNumberToPrefetch != 0);
-        $display ("%t Prefetcher send read req for  %h", $time, Addr'{chainNextToLookup, '0});
+        if (`VERBOSE) if (`VERBOSE) $display ("%t Prefetcher send read req for  %h", $time, Addr'{chainNextToLookup, '0});
         targetTable.readReq(chainNextToLookup);
     endrule
 
@@ -919,10 +921,10 @@ module mkMarkovPrefetcher#(Parameter#(maxChainLength) _, Parameter#(narrowEntrie
             targetTableReadResp.enq(cline);
             chainNextToLookup <= cline;
             chainNumberToPrefetch <= chainNumberToPrefetch - 1;
-            $display("%t Prefetcher found read resp data! %h", $time, Addr'{cline, '0});
+            if (`VERBOSE) if (`VERBOSE) $display("%t Prefetcher found read resp data! %h", $time, Addr'{cline, '0});
         end
         else begin
-            $display("%t Prefetcher found read resp invalid!", $time);
+            if (`VERBOSE) if (`VERBOSE) $display("%t Prefetcher found read resp invalid!", $time);
             chainNumberToPrefetch <= 0;
         end
     endrule
@@ -931,7 +933,7 @@ module mkMarkovPrefetcher#(Parameter#(maxChainLength) _, Parameter#(narrowEntrie
         targetTableReadResp.deq();
         let cline = targetTableReadResp.first;
         Addr retAddr = {cline, '0};
-        $display("%t Prefetcher getNextPrefetchAddr requesting chain entry %h", $time, retAddr);
+        if (`VERBOSE) if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr requesting chain entry %h", $time, retAddr);
         return retAddr; 
     endmethod
 
@@ -939,7 +941,7 @@ module mkMarkovPrefetcher#(Parameter#(maxChainLength) _, Parameter#(narrowEntrie
         let cl = getLineAddr(addr);
         if (hitMiss == MISS && cl != lastChildRequest) begin
             //Test only tracking misses, to avoid double noise of too many requests, many to the same location
-            $display("%t Prefetcher report %s add target entry from addr %h to addr %h", 
+            if (`VERBOSE) if (`VERBOSE) $display("%t Prefetcher report %s add target entry from addr %h to addr %h", 
                 $time, hitMiss == HIT ? "HIT" : "MISS", Addr'{lastChildRequest, '0}, Addr'{cl, '0});
             targetTable.writeReq(lastChildRequest, cl);
             lastChildRequest <= cl;
@@ -947,7 +949,7 @@ module mkMarkovPrefetcher#(Parameter#(maxChainLength) _, Parameter#(narrowEntrie
         end
 
         if (hitMiss == MISS) begin 
-            $display("%t Prefetcher start new chain with %h", $time, addr);
+            if (`VERBOSE) if (`VERBOSE) $display("%t Prefetcher start new chain with %h", $time, addr);
             chainNextToLookup <= cl;
             chainNumberToPrefetch <= fromInteger(valueOf(maxChainLength));
         end
@@ -970,7 +972,7 @@ module mkMarkovOnHitPrefetcher#(Parameter#(maxChainLength) _, Parameter#(numLast
     Reg#(LineAddr) chainNextToLookup <- mkReg(?);
 
     rule sendReadReq (chainNumberToPrefetch != 0);
-        $display ("%t Prefetcher send read req for  %h", $time, Addr'{chainNextToLookup, '0});
+        if (`VERBOSE) $display ("%t Prefetcher send read req for  %h", $time, Addr'{chainNextToLookup, '0});
         targetTable.readReq(chainNextToLookup);
     endrule
 
@@ -982,10 +984,10 @@ module mkMarkovOnHitPrefetcher#(Parameter#(maxChainLength) _, Parameter#(numLast
             targetTableReadResp.enq(cline);
             chainNextToLookup <= cline;
             chainNumberToPrefetch <= chainNumberToPrefetch - 1;
-            $display("%t Prefetcher found read resp data! %h", $time, Addr'{cline, '0});
+            if (`VERBOSE) $display("%t Prefetcher found read resp data! %h", $time, Addr'{cline, '0});
         end
         else begin
-            $display("%t Prefetcher found read resp invalid!", $time);
+            if (`VERBOSE) $display("%t Prefetcher found read resp invalid!", $time);
             chainNumberToPrefetch <= 0;
         end
     endrule
@@ -994,7 +996,7 @@ module mkMarkovOnHitPrefetcher#(Parameter#(maxChainLength) _, Parameter#(numLast
         targetTableReadResp.deq();
         let cline = targetTableReadResp.first;
         Addr retAddr = {cline, '0};
-        $display("%t Prefetcher getNextPrefetchAddr requesting chain entry %h", $time, retAddr);
+        if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr requesting chain entry %h", $time, retAddr);
         return retAddr; 
     endmethod
 
@@ -1002,7 +1004,7 @@ module mkMarkovOnHitPrefetcher#(Parameter#(maxChainLength) _, Parameter#(numLast
         let cl = getLineAddr(addr);
         if (hitMiss == MISS && cl != lastChildRequest) begin
             //Test only tracking misses, to avoid double noise of too many requests, many to the same location
-            $display("%t Prefetcher report %s add target entry from addr %h to addr %h", 
+            if (`VERBOSE) $display("%t Prefetcher report %s add target entry from addr %h to addr %h", 
                 $time, hitMiss == HIT ? "HIT" : "MISS", Addr'{lastChildRequest, '0}, Addr'{cl, '0});
             targetTable.writeReq(lastChildRequest, cl);
             lastChildRequest <= cl;
@@ -1011,7 +1013,7 @@ module mkMarkovOnHitPrefetcher#(Parameter#(maxChainLength) _, Parameter#(numLast
 
         if (!elem(hash(cl), lastAddrRequests)) begin 
             //Don't start markov chain if we started a markov chain with that address recently
-            $display("%t Prefetcher start new chain with %h", $time, addr);
+            if (`VERBOSE) $display("%t Prefetcher start new chain with %h", $time, addr);
             lastAddrRequests <= shiftInAt0(lastAddrRequests, hash(cl));
             chainNextToLookup <= cl;
             chainNumberToPrefetch <= fromInteger(valueOf(maxChainLength));
@@ -1037,7 +1039,7 @@ module mkMarkovOnHit2Prefetcher#(Parameter#(maxChainLength) _, Parameter#(numLas
     // but checking for LRU and everything.
 
     rule addPrefetchesToQueues;
-        $display("%t Prefetcher Add prefetch to queue!", $time);
+        if (`VERBOSE) $display("%t Prefetcher Add prefetch to queue!", $time);
         match { .highPrio, .lowPrio } <- targetTable.readResp();
         if (highPrio matches tagged Valid .cl) begin
             highPriorityPrefetches.enq(cl);
@@ -1058,18 +1060,18 @@ module mkMarkovOnHit2Prefetcher#(Parameter#(maxChainLength) _, Parameter#(numLas
             retAddr = {lowPriorityPrefetches.first, '0};
             lowPriorityPrefetches.deq;
         end
-        $display("%t Prefetcher getNextPrefetchAddr requesting chain entry %h", $time, retAddr);
+        if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr requesting chain entry %h", $time, retAddr);
         return retAddr; 
     endmethod
 
     method Action reportAccess(Addr addr, HitOrMiss hitMiss);
         let cl = getLineAddr(addr);
         if (hitMiss == MISS)
-            $display("%t Prefetcher report MISS %h", $time, addr);
+            if (`VERBOSE) $display("%t Prefetcher report MISS %h", $time, addr);
 
         if (hitMiss == MISS || !elem(hash(cl), lastAddrRequests)) begin 
             //Don't start a markov chain if we started a markov chain with that address recently
-            $display("%t Prefetcher start new chain with %h", $time, addr);
+            if (`VERBOSE) $display("%t Prefetcher start new chain with %h", $time, addr);
             targetTable.sendReadWriteReq(cl, hitMiss);
             lastAddrRequests <= shiftInAt0(lastAddrRequests, hash(cl));
         end
@@ -1085,24 +1087,24 @@ module mkBlockPrefetcher#(Parameter#(numLinesEachWay) _)(Prefetcher) provisos (
     Reg#(lineCountT) linesEachWayPrefetched <- mkReg(fromInteger(valueOf(numLinesEachWay)));
     method Action reportAccess(Addr addr, HitOrMiss hitMiss);
         if (hitMiss == MISS) begin
-            $display("%t Prefetcher report MISS %h", $time, addr);
+            if (`VERBOSE) $display("%t Prefetcher report MISS %h", $time, addr);
             nextIsForward <= True;
             prefetchAround <= getLineAddr(addr);
             linesEachWayPrefetched <= 0;
         end
         else 
-            $display("%t Prefetcher report HIT %h", $time, addr);
+            if (`VERBOSE) $display("%t Prefetcher report HIT %h", $time, addr);
     endmethod
     method ActionValue#(Addr) getNextPrefetchAddr if (linesEachWayPrefetched != fromInteger(valueOf(numLinesEachWay)));
         nextIsForward <= !nextIsForward;
         if (nextIsForward) begin
             Addr retAddr = {prefetchAround + (extend(linesEachWayPrefetched)+1), 0};
-            $display("%t Prefetcher getNextPrefetchAddr requesting forward %h", $time, retAddr);
+            if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr requesting forward %h", $time, retAddr);
             return retAddr;
         end
         else begin
             Addr retAddr = {prefetchAround - (extend(linesEachWayPrefetched)+1), 0};
-            $display("%t Prefetcher getNextPrefetchAddr requesting backward %h", $time, retAddr);
+            if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr requesting backward %h", $time, retAddr);
             linesEachWayPrefetched <= linesEachWayPrefetched + 1;
             return retAddr;
         end
@@ -1132,9 +1134,9 @@ endmodule
 module mkPrintPCPrefetcher(PCPrefetcher);
     method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
         if (hitMiss == HIT)
-            $display("%t PCPrefetcher report HIT %h", $time, addr);
+            if (`VERBOSE) $display("%t PCPrefetcher report HIT %h", $time, addr);
         else
-            $display("%t PCPrefetcher report MISS %h", $time, addr);
+            if (`VERBOSE) $display("%t PCPrefetcher report MISS %h", $time, addr);
     endmethod
     method ActionValue#(Addr) getNextPrefetchAddr if (False);
         return 64'h0000000080000080;
@@ -1168,7 +1170,7 @@ provisos(
 
     rule sendReadReq if (!holdReadReq);
         match {.addr, .pcHash, .hitMiss} = memAccesses.first;
-        $display("%t Sending read req for %h!", $time, pcHash);
+        if (`VERBOSE) $display("%t Sending read req for %h!", $time, pcHash);
         strideTable.rdReq(truncate(pcHash));
         rdRespEntry <= memAccesses.first;
         memAccesses.deq;
@@ -1195,17 +1197,17 @@ provisos(
             if (hitMiss == MISS) begin 
                 seNext.lastAddr = truncate(addr);
                 seNext.state = INIT;
-                $display(", allocate entry");
+                if (`VERBOSE) $display(", allocate entry");
             end
             else begin
-                $display(", ignore");
+                if (`VERBOSE) $display(", ignore");
             end
         end 
         else if (se.state == INIT && observedStride != 0) begin
             seNext.stride = observedStride;
             seNext.state = TRANSIENT;
             seNext.lastAddr = truncate(addr);
-            $display(", set stride to %h", seNext.stride);
+            if (`VERBOSE) $display(", set stride to %h", seNext.stride);
         end
         else if ((se.state == TRANSIENT || se.state == STEADY) && observedStride != 0) begin
             if (observedStride == se.stride) begin
@@ -1223,17 +1225,17 @@ provisos(
                 end
                 seNext.state = STEADY;
                 seNext.lastAddr = truncate(addr);
-                $display(", stride %h is confirmed!", seNext.stride);
+                if (`VERBOSE) $display(", stride %h is confirmed!", seNext.stride);
             end
             else begin
                 seNext.state = TRANSIENT;
                 seNext.stride = observedStride;
                 seNext.lastAddr = truncate(addr);
-                $display(", old stride is broken! New stride: %h", seNext.stride);
+                if (`VERBOSE) $display(", old stride is broken! New stride: %h", seNext.stride);
             end
         end
         else
-            $display("");
+            if (`VERBOSE) $display("");
         
         strideEntryForPrefetch.enq(tuple3(seNext, addr, pcHash));
     endrule
@@ -1270,11 +1272,11 @@ provisos(
             // so hold off any potential read requests until we do a writeback
             holdReadReq.send();
             cLinesPrefetchedLatest <= Valid(cLinesPrefetched + 1);
-            $display("%t Stride Prefetcher getNextPrefetchAddr requesting %h for entry %h", $time, reqAddr, pcHash[7:0]);
+            if (`VERBOSE) $display("%t Stride Prefetcher getNextPrefetchAddr requesting %h for entry %h", $time, reqAddr, pcHash[7:0]);
         end
         else begin
             //cant prefetch
-            $display("%t Stride Prefetcher no possible prefetch for entry %h", $time, strideTableIndexT'(truncate(pcHash)));
+            if (`VERBOSE) $display("%t Stride Prefetcher no possible prefetch for entry %h", $time, strideTableIndexT'(truncate(pcHash)));
             strideEntryForPrefetch.deq;
             se.cLinesPrefetched = cLinesPrefetched;
             cLinesPrefetchedLatest <= Invalid;
@@ -1321,7 +1323,7 @@ provisos(
 
     rule sendReadReq if (!holdReadReq);
         match {.addr, .pcHash, .hitMiss} = memAccesses.first;
-        $display("%t Sending read req for %h!", $time, pcHash);
+        if (`VERBOSE) $display("%t Sending read req for %h!", $time, pcHash);
         strideTable.rdReq(truncate(pcHash));
         rdRespEntry <= memAccesses.first;
         memAccesses.deq;
@@ -1348,12 +1350,12 @@ provisos(
             if (se.stride == observedStride) begin
                 //fast track to steady
                 seNext.state = STEADY;
-                $display(", stride matches so fast track back to STEADY");
+                if (`VERBOSE) $display(", stride matches so fast track back to STEADY");
             end
             else begin
                 seNext.stride = observedStride;
                 seNext.state = TRANSIENT;
-                $display(", stride doesn't match, so set to %h", seNext.stride);
+                if (`VERBOSE) $display(", stride doesn't match, so set to %h", seNext.stride);
             end
             seNext.lastAddr = truncate(addr);
         end
@@ -1362,13 +1364,13 @@ provisos(
                 //stride confimed, move to steady
                 seNext.cLinesPrefetched = 0;
                 seNext.state = STEADY;
-                $display(", stride %h is confirmed!", seNext.stride);
+                if (`VERBOSE) $display(", stride %h is confirmed!", seNext.stride);
             end
             else begin
                 //We're seeing random accesses, go to no pred
                 seNext.state = NO_PRED;
                 seNext.stride = observedStride;
-                $display(", we have a random stride (%h), go to NO_PRED", seNext.stride);
+                if (`VERBOSE) $display(", we have a random stride (%h), go to NO_PRED", seNext.stride);
             end
             seNext.lastAddr = truncate(addr);
         end
@@ -1379,29 +1381,29 @@ provisos(
                     seNext.cLinesPrefetched = 
                         (se.cLinesPrefetched == 0) ? 0 : se.cLinesPrefetched - 1;
                 end
-                $display(", stride %h stays confirmed!", seNext.stride);
+                if (`VERBOSE) $display(", stride %h stays confirmed!", seNext.stride);
             end
             else begin
                 //We jump to some other random location, so reset number of lines prefetched
                 seNext.cLinesPrefetched = 0;
                 seNext.state = INIT;
-                $display(", random jump (%x)! Move to INIT, don't reset stride", observedStride);
+                if (`VERBOSE) $display(", random jump (%x)! Move to INIT, don't reset stride", observedStride);
             end
             seNext.lastAddr = truncate(addr);
         end
         else if (se.state == NO_PRED && observedStride != 0) begin
             if (observedStride == se.stride) begin
                 seNext.state = TRANSIENT;
-                $display(", have repeated stride: %h, move to TRANSIENT", seNext.stride);
+                if (`VERBOSE) $display(", have repeated stride: %h, move to TRANSIENT", seNext.stride);
             end
             else begin
                 seNext.stride = observedStride;
-                $display(", have random stride: %h", seNext.stride);
+                if (`VERBOSE) $display(", have random stride: %h", seNext.stride);
             end
             seNext.lastAddr = truncate(addr);
         end
         else
-            $display("");
+            if (`VERBOSE) $display("");
         
         strideEntryForPrefetch.enq(tuple3(seNext, addr, pcHash));
     endrule
@@ -1431,11 +1433,11 @@ provisos(
             // so hold off any potential read requests until we do a writeback
             holdReadReq.send();
             cLinesPrefetchedLatest <= Valid(cLinesPrefetched + 1);
-            $display("%t Stride Prefetcher getNextPrefetchAddr requesting %h for entry %h", $time, reqAddr, pcHash[7:0]);
+            if (`VERBOSE) $display("%t Stride Prefetcher getNextPrefetchAddr requesting %h for entry %h", $time, reqAddr, pcHash[7:0]);
         end
         else begin
             //cant prefetch
-            $display("%t Stride Prefetcher no possible prefetch for entry %h", $time, strideTableIndexT'(truncate(pcHash)));
+            if (`VERBOSE) $display("%t Stride Prefetcher no possible prefetch for entry %h", $time, strideTableIndexT'(truncate(pcHash)));
             strideEntryForPrefetch.deq;
             se.cLinesPrefetched = cLinesPrefetched;
             cLinesPrefetchedLatest <= Invalid;
@@ -1476,7 +1478,7 @@ provisos(
     Ehr#(2, Bit#(3)) prefetchesIssued <- mkEhr(fromInteger(valueOf(cLinesAheadToPrefetch)));
 
     method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
-        $display("%t reportAccess %x %x", $time, addr, pcHash);
+        if (`VERBOSE) $display("%t reportAccess %x %x", $time, addr, pcHash);
         strideTableIndexT idx = truncate(pcHash);
         SimpleStrideEntry entry = strideTable[idx];
         Int#(13) calc_stride = unpack(truncate(addr - entry.lastAddr));
@@ -1518,7 +1520,7 @@ provisos(
             (pack(signExtend(strideToUse)) * zeroExtend(prefetchesIssued[0] + 1));
 
         check(reqAddr[63:12] == addrToPrefetch[63:12]);
-        $display("%t getNextPrefetchAddr returning %x", $time, reqAddr);
+        if (`VERBOSE) $display("%t getNextPrefetchAddr returning %x", $time, reqAddr);
         return reqAddr;
     endmethod
 
@@ -1600,7 +1602,7 @@ provisos(
 
     rule sendReadReq if (!holdReadReq);
         match {.addr, .pcHash, .hitMiss} = memAccesses.first;
-        $display("%t Sending read req for %h!", $time, pcHash);
+        if (`VERBOSE) $display("%t Sending read req for %h!", $time, pcHash);
         strideTable.rdReq(truncate(pcHash));
         rdRespEntry <= memAccesses.first;
         memAccesses.deq;
@@ -1627,29 +1629,29 @@ provisos(
             if (hitMiss == MISS) begin 
                 seNext.lastAddr = truncate(addr);
                 seNext.state = INIT;
-                $display(", allocate entry");
+                if (`VERBOSE) $display(", allocate entry");
             end
             else begin
-                $display(", ignore");
+                if (`VERBOSE) $display(", ignore");
             end
         end 
         else if (se.state == INIT && observedStride != 0) begin
             seNext.stride = observedStride;
             seNext.state = TRANSIENT;
             seNext.lastAddr = truncate(addr);
-            $display(", set stride to %h", seNext.stride);
+            if (`VERBOSE) $display(", set stride to %h", seNext.stride);
         end
         else if (se.state == TRANSIENT && observedStride != 0) begin
             if (observedStride == se.stride) begin
                 //Here we transition from TRANSIENT to STEADY, so init this field
                 seNext.cLinesPrefetched = 0;
                 seNext.state = STEADY1;
-                $display(", stride %h is confirmed!", seNext.stride);
+                if (`VERBOSE) $display(", stride %h is confirmed!", seNext.stride);
             end
             else begin
                 seNext.state = TRANSIENT;
                 seNext.stride = observedStride;
-                $display(", old stride is broken! New stride: %h", seNext.stride);
+                if (`VERBOSE) $display(", old stride is broken! New stride: %h", seNext.stride);
             end
             seNext.lastAddr = truncate(addr);
         end
@@ -1661,23 +1663,23 @@ provisos(
                         (se.cLinesPrefetched == 0) ? 0 : se.cLinesPrefetched - 1;
                 end
                 seNext.state = incrementSteady(se.state);
-                $display(", stride %h is sustained, advance STEADY number!", se.stride);
+                if (`VERBOSE) $display(", stride %h is sustained, advance STEADY number!", se.stride);
             end
             else if (se.state == STEADY4 || se.state == STEADYLAST) begin
                 //Leniency towards some stride changes
                 seNext.state = STEADY1;
                 seNext.cLinesPrefetched = 0; //We've jumped to some other address, so start fetching again!
-                $display(", old stride is broken, but tolerate it! Keep old stride: %h", se.stride);
+                if (`VERBOSE) $display(", old stride is broken, but tolerate it! Keep old stride: %h", se.stride);
             end
             else begin
                 seNext.state = TRANSIENT;
                 seNext.stride = observedStride;
-                $display(", old stride is broken! New stride: %h", seNext.stride);
+                if (`VERBOSE) $display(", old stride is broken! New stride: %h", seNext.stride);
             end
             seNext.lastAddr = truncate(addr);
         end
         else
-            $display("");
+            if (`VERBOSE) $display("");
         
         strideEntryForPrefetch.enq(tuple3(seNext, addr, pcHash));
     endrule
@@ -1714,11 +1716,11 @@ provisos(
             // so hold off any potential read requests until we do a writeback
             holdReadReq.send();
             cLinesPrefetchedLatest <= Valid(cLinesPrefetched + 1);
-            $display("%t Stride Prefetcher getNextPrefetchAddr requesting %h for entry %h", $time, reqAddr, pcHash[7:0]);
+            if (`VERBOSE) $display("%t Stride Prefetcher getNextPrefetchAddr requesting %h for entry %h", $time, reqAddr, pcHash[7:0]);
         end
         else begin
             //cant prefetch
-            $display("%t Stride Prefetcher no possible prefetch for entry %h", $time, strideTableIndexT'(truncate(pcHash)));
+            if (`VERBOSE) $display("%t Stride Prefetcher no possible prefetch for entry %h", $time, strideTableIndexT'(truncate(pcHash)));
             strideEntryForPrefetch.deq;
             se.cLinesPrefetched = cLinesPrefetched;
             cLinesPrefetchedLatest <= Invalid;
