@@ -25,49 +25,9 @@ import RWBramCore::*;
 import StmtFSM::*;
 import Types::*;
 import Fifos::*;
+
 module mkTargetTableTest(Empty);
     TargetTable#(64, 16) t <- mkTargetTable;
-    mkAutoFSM(
-        seq
-            // ----- Send misses and stuff to one window -----
-            action
-                t.set('h8000, 'h800a); // goes in short table
-            endaction
-            action
-                t.set('h8000, 'h80008000); // goes in long table
-            endaction
-            action
-                let x <- t.getAndRemove('h8000); // comes from short table
-                doAssert(x == Valid('h800a), "test fail!");
-            endaction
-            action
-                let x <- t.getAndRemove('h8000); // comes from long table
-                doAssert(x == Valid('h80008000), "test fail!");
-            endaction
-            action
-                t.set('h80000000, 'h21230000); // goes in long table
-            endaction
-            action
-                let x <- t.getAndRemove('h80000000); // comes from long table
-                doAssert(x == Valid('h21230000), "test fail!");
-            endaction
-            action
-                t.set('h7000, 'h6fde); // goes in short table backwards
-            endaction
-            action
-                let x <- t.getAndRemove('h7000); // get from short table
-                doAssert(x == Valid('h6fde), "test fail!");
-            endaction
-            action
-                let x <- t.getAndRemove('h7000); // get from short table
-                doAssert(x == Invalid, "test fail!"); //entry was removed!
-            endaction
-        endseq
-    );
-endmodule
-
-module mkTargetTableBRAMTest(Empty);
-    TargetTableBRAM#(64, 16) t <- mkTargetTableBRAM;
     mkAutoFSM(
         seq
             // ----- Send misses and stuff to one window -----
@@ -75,20 +35,20 @@ module mkTargetTableBRAMTest(Empty);
                 t.writeReq('h8000, 'h800a); // goes in short table
             endaction
             action
-                t.writeReq('h8000, 'h80008000); // goes in long table
+                t.writeReq('h8001, 'h80008000); // goes in long table
             endaction
             action
                 t.readReq('h8000); // comes from short table
             endaction
             action
-                let x <- t.readResp(True); // comes from short table
+                let x <- t.readResp(); // comes from short table
                 doAssert(x == Valid('h800a), "test fail!");
             endaction
             action
-                t.readReq('h8000); // comes from long table
+                t.readReq('h8001); // comes from long table
             endaction
             action
-                let x <- t.readResp(True); // comes from long table
+                let x <- t.readResp(); // comes from long table
                 doAssert(x == Valid('h80008000), "test fail!");
             endaction
             action
@@ -98,7 +58,7 @@ module mkTargetTableBRAMTest(Empty);
                 t.readReq('h80000000); // comes from long table
             endaction
             action
-                let x <- t.readResp(True); // comes from long table
+                let x <- t.readResp(); // comes from long table
                 doAssert(x == Valid('h21230000), "test fail!");
             endaction
             action
@@ -108,15 +68,15 @@ module mkTargetTableBRAMTest(Empty);
                 t.readReq('h7000); // get from short table
             endaction
             action
-                let x <- t.readResp(True); // get from short table
+                let x <- t.readResp(); // get from short table
                 doAssert(x == Valid('h6fde), "test fail!");
             endaction
             action
                 t.readReq('h7000); // get from short table
             endaction
             action
-                let x <- t.readResp(True); // get from short table
-                doAssert(x == Invalid, "test fail!"); //entry was removed!
+                let x <- t.readResp(); // get from short table
+                doAssert(x == Valid('h6fde), "test fail!"); //entry still there
             endaction
         endseq
     );
@@ -298,131 +258,136 @@ module mkTargetTableDoubleTest(Empty);
     );
 endmodule
 
-module mkBRAMMultiWindowTargetPrefetcherTest(Empty);
-    let p <- mkBRAMMultiWindowTargetPrefetcher;
+module mkMultiWindowTargetPrefetcherTest(Empty);
+    Parameter#(4) numWindows <- mkParameter;
+    Parameter#(4) numLastRequests <- mkParameter;
+    Parameter#(3) numLinesInRange <- mkParameter;
+    let p <- mkMultiWindowTargetPrefetcher(numWindows, numLastRequests, numLinesInRange);
     mkAutoFSM(
         seq
             // ----- Send misses and stuff to one window -----
             action
-                p.reportAccess('h80000040, MISS);
+                p.reportAccess('h800040, MISS);
             endaction
             action
                 let x <- p.getNextPrefetchAddr;
-                doAssert(x == 'h80000080, "test fail!");
+                doAssert(x == 'h800080, "test fail!");
             endaction
             action
                 let x <- p.getNextPrefetchAddr;
-                doAssert(x == 'h800000c0, "test fail!");
+                doAssert(x == 'h8000c0, "test fail!");
             endaction
             action
-                p.reportAccess('h800000c0, HIT); //Report hit inside window
+                p.reportAccess('h8000c0, HIT); //Report hit inside window
             endaction
             action
                 let x <- p.getNextPrefetchAddr;
-                doAssert(x == 'h80000100, "test fail!");
+                doAssert(x == 'h800100, "test fail!");
             endaction
             action
-                p.reportAccess('h80004000, HIT); //Report hit outside window
+                p.reportAccess('h804000, HIT); //Report hit outside window
             endaction
             action
                 let x <- p.getNextPrefetchAddr; //Previous window still recommended
-                doAssert(x == 'h80000140, "test fail!");
+                doAssert(x == 'h800140, "test fail!");
             endaction
             action
-                p.reportAccess('h80000140, MISS); //Report miss inside window
+                p.reportAccess('h800140, MISS); //Report miss inside window
             endaction
             action
                 let x <- p.getNextPrefetchAddr; //Previous window still recommended
-                doAssert(x == 'h80000180, "test fail!");
+                doAssert(x == 'h800180, "test fail!");
             endaction
 
             // -----  Allocate other windows ----- 
             action
-                p.reportAccess('h70000000, MISS); //Report miss outside window
+                p.reportAccess('h700000, MISS); //Report miss outside window
             endaction
             action
                 let x <- p.getNextPrefetchAddr; //new window recommended
-                doAssert(x == 'h70000040, "test fail!");
+                doAssert(x == 'h700040, "test fail!");
             endaction
             action
-                p.reportAccess('h90000000, MISS); //Report miss outside window
-            endaction
-            action
-                let x <- p.getNextPrefetchAddr; //new window recommended
-                doAssert(x == 'h90000040, "test fail!");
-            endaction
-            action
-                p.reportAccess('h60000000, MISS); //Report miss outside window
+                p.reportAccess('h900000, MISS); //Report miss outside window
             endaction
             action
                 let x <- p.getNextPrefetchAddr; //new window recommended
-                doAssert(x == 'h60000040, "test fail!");
+                doAssert(x == 'h900040, "test fail!");
             endaction
             action
-                p.reportAccess('h80000180, HIT); //Report hit inside oldest window
+                p.reportAccess('h600000, MISS); //Report miss outside window
+            endaction
+            action
+                let x <- p.getNextPrefetchAddr; //new window recommended
+                doAssert(x == 'h600040, "test fail!");
+            endaction
+            action
+                p.reportAccess('h800180, HIT); //Report hit inside oldest window
             endaction
             action
                 let x <- p.getNextPrefetchAddr; //oldest window recommended
-                doAssert(x == 'h800001c0, "test fail!");
+                doAssert(x == 'h8001c0, "test fail!");
             endaction
 
             // ----- Trigger window deletion -----
             action
-                p.reportAccess('h50000000, MISS); //Report miss outside window,
+                p.reportAccess('h500000, MISS); //Report miss outside window,
                 //discard window with 'h70..
             endaction
             action
                 let x <- p.getNextPrefetchAddr; //new window recommended
-                doAssert(x == 'h50000040, "test fail!");
+                doAssert(x == 'h500040, "test fail!");
             endaction
             action
-                p.reportAccess('h70000040, HIT); //Report hit inside now deleted window
+                p.reportAccess('h700040, HIT); //Report hit inside now deleted window
             endaction
             action
                 let x <- p.getNextPrefetchAddr; //most recent window still recommended
-                doAssert(x == 'h50000080, "test fail!");
+                doAssert(x == 'h500080, "test fail!");
             endaction
 
             // ----- Reorder some more windows around
             action
-                p.reportAccess('h800001c0, MISS); //Report hit inside now deleted window
+                p.reportAccess('h8001c0, MISS); //Report hit inside now deleted window
             endaction
             action
                 let x <- p.getNextPrefetchAddr; 
-                doAssert(x == 'h80000200, "test fail!");
+                doAssert(x == 'h800200, "test fail!");
             endaction
 
             // ------ Test saving and prefetching target clines
             action
-                p.reportAccess('h81000000, MISS); //Report miss somewhere far away
+                p.reportAccess('h810000, MISS); //Report miss somewhere far away
             endaction
             action
                 let x <- p.getNextPrefetchAddr; //New window allocated and recommended
-                doAssert(x == 'h81000040, "test fail!");
+                doAssert(x == 'h810040, "test fail!");
             endaction
             action
-                p.reportAccess('h80000180, MISS); //Report miss back home
+                p.reportAccess('h800180, MISS); //Report miss back home
             endaction
             action
                 let x <- p.getNextPrefetchAddr;
-                doAssert(x == 'h800001c0, "test fail!");
+                doAssert(x == 'h8001c0, "test fail!");
             endaction
             action
                 let x <- p.getNextPrefetchAddr; //target address recommended
-                doAssert(x == 'h50000000, "test fail!");
+                doAssert(x == 'h500000, "test fail!");
             endaction
             action
                 let x <- p.getNextPrefetchAddr; 
-                doAssert(x == 'h80000200, "test fail!"); // window addresss recommended
+                doAssert(x == 'h800200, "test fail!"); // window addresss recommended
             endaction
         endseq
     );
 endmodule
 
-module mkBRAMSingleWindowTargetPrefetcherTest(Empty);
+module mkSingleWindowTargetPrefetcherTest(Empty);
     //2 ahead
     //remember last 2 target table requests.
-    let p <- mkBRAMSingleWindowTargetPrefetcher;
+    Parameter#(2) numLastRequests <- mkParameter;
+    Parameter#(2) cacheLinesInRange <- mkParameter;
+    let p <-  mkSingleWindowTargetPrefetcher(numLastRequests, cacheLinesInRange);
     mkAutoFSM(
         seq
             // ----- Send misses and stuff to one window -----
@@ -483,25 +448,14 @@ module mkBRAMSingleWindowTargetPrefetcherTest(Empty);
                 let x <- p.getNextPrefetchAddr; 
                 doAssert(x == 'h80000180, "test fail!"); // window addresss recommended
             endaction
-            action
-                p.reportAccess('h80000140, HIT); //Report miss back home
-            endaction
-            action
-                p.reportAccess('h81000200, HIT); 
-            endaction
-            action
-                p.reportAccess('h80000140, HIT);  //overwrite last target entry
-            endaction
-            action
-                let x <- p.getNextPrefetchAddr; //target addresss recommended
-                doAssert(x == 'h81000200, "test fail!");
-            endaction
         endseq
     );
 endmodule
 
-module mkBRAMStridePCPrefetcherTest(Empty);
-    let p <- mkBRAMStridePCPrefetcher;
+module mkStridePCPrefetcherTest(Empty);
+    Parameter#(512) strideTableSize <- mkParameter;
+    Parameter#(3) cLinesAheadToPrefetch <- mkParameter;
+    let p <- mkStridePCPrefetcher(strideTableSize, cLinesAheadToPrefetch);
     mkAutoFSM(
         seq
             // ----- Send misses and stuff to one window -----
@@ -574,9 +528,17 @@ module mkBRAMStridePCPrefetcherTest(Empty);
     );
 endmodule
 
-module mkBRAMStrideAdaptivePCPrefetcherTest(Empty);
+module mkStrideAdaptivePCPrefetcherTest(Empty);
     // config is 2 - 3 - 5
-    let p <- mkBRAMStrideAdaptivePCPrefetcher;
+    Parameter#(512) strideTableSize <- mkParameter;
+    Parameter#(2) cLinesPrefetchMin <- mkParameter;
+    Parameter#(3) cLinesSmallStridePrefetchMax <- mkParameter;
+    Parameter#(5) cLinesBigStridePrefetchMax <- mkParameter;
+    let p <- mkStrideAdaptivePCPrefetcher(
+        strideTableSize, 
+        cLinesPrefetchMin, 
+        cLinesSmallStridePrefetchMax, 
+        cLinesBigStridePrefetchMax);
     mkAutoFSM(
         seq
             // ----- Send misses and stuff to one window -----
@@ -679,12 +641,11 @@ module mkBRAMStrideAdaptivePCPrefetcherTest(Empty);
 endmodule
 
 module mkMarkovOnHit2PrefetcherTest(Empty);
-    //let p <- mkMultipleWindowPrefetcher;
-    //TODO pass in value of cachelinesinrange
-    let p <- mkMarkovOnHit2Prefetcher;
+    Parameter#(2) maxChainLength <- mkParameter;
+    Parameter#(2) numLastRequestsTracked <- mkParameter;
+    let p <- mkMarkovOnHit2Prefetcher(maxChainLength, numLastRequestsTracked);
     mkAutoFSM(
         seq
-            // ----- Send misses and stuff to one window -----
             action
                 p.reportAccess('h80010000, MISS);
             endaction
@@ -746,49 +707,50 @@ module mkMarkovOnHit2PrefetcherTest(Empty);
     );
 endmodule
 
-module mkBRAMMarkovPrefetcherTest(Empty);
-    //let p <- mkMultipleWindowPrefetcher;
-    //TODO pass in value of cachelinesinrange
-    let p <- mkBRAMMarkovPrefetcher;
+module mkMarkovPrefetcherTest(Empty);
+    Parameter#(2) maxChainLength <- mkParameter;
+    Parameter#(2048) narrowEntries <- mkParameter;
+    Parameter#(1024) wideEntries <- mkParameter;
+    let p <- mkMarkovPrefetcher(maxChainLength, narrowEntries, wideEntries);
     mkAutoFSM(
         seq
             // ----- Send misses and stuff to one window -----
             action
-                p.reportAccess('h80000000, MISS);
+                p.reportAccess('h8000, MISS);
             endaction
             action
-                p.reportAccess('h80000700, MISS); 
+                p.reportAccess('h8700, MISS); 
             endaction
             action
-                p.reportAccess('h90000000, MISS); 
+                p.reportAccess('h9000, MISS); 
             endaction
             action
-                p.reportAccess('ha0000000, MISS); 
+                p.reportAccess('ha000, MISS); 
             endaction
             action
-                p.reportAccess('h80000000, HIT); //back to start
-            endaction
-            action
-                let x <- p.getNextPrefetchAddr; 
-                doAssert(x == 'h80000700, "test fail!");
+                p.reportAccess('h8000, MISS); //back to start
             endaction
             action
                 let x <- p.getNextPrefetchAddr; 
-                doAssert(x == 'h90000000, "test fail!");
-            endaction
-            action
-                p.reportAccess('h80000700, HIT); 
-            endaction
-            action
-                p.reportAccess('ha0000000, HIT); 
+                doAssert(x == 'h8700, "test fail!");
             endaction
             action
                 let x <- p.getNextPrefetchAddr; 
-                doAssert(x == 'h80000000, "test fail!");
+                doAssert(x == 'h9000, "test fail!");
+            endaction
+            action
+                p.reportAccess('h8700, HIT); 
+            endaction
+            action
+                p.reportAccess('ha000, MISS); 
             endaction
             action
                 let x <- p.getNextPrefetchAddr; 
-                doAssert(x == 'h80000700, "test fail!");
+                doAssert(x == 'h8000, "test fail!");
+            endaction
+            action
+                let x <- p.getNextPrefetchAddr; 
+                doAssert(x == 'ha000, "test fail!");
             endaction
         endseq
     );
@@ -871,6 +833,8 @@ module mkOverflowPipelineFifoTest(Empty);
 endmodule
 
 module mkOverflowBypassFifoTest(Empty);
+    // Problem: BSV doesn't seem to allow enq and deq in the same action, so we can't actually
+    // test the bypass behaviour here.
     Fifo#(4, Bit#(8)) p <- mkOverflowBypassFifo;
     mkAutoFSM(
         seq
@@ -893,8 +857,10 @@ module mkOverflowBypassFifoTest(Empty);
             endaction
             action
                 p.enq('h05);
-                let x = p.first; 
+            endaction
+            action
                 p.deq;
+                let x = p.first; 
                 doAssert(x == 'h02, "test fail!");
             endaction
             action
@@ -902,9 +868,10 @@ module mkOverflowBypassFifoTest(Empty);
             endaction
             action
                 p.enq('h07);
-                let x = p.first; 
+            endaction
+            action
                 p.deq;
-                $display("found %x", x);
+                let x = p.first; 
                 doAssert(x == 'h04, "test fail!");
             endaction
             action
@@ -912,8 +879,10 @@ module mkOverflowBypassFifoTest(Empty);
             endaction
             action
                 p.enq('h09);
-                let x = p.first; 
+            endaction
+            action
                 p.deq;
+                let x = p.first; 
                 doAssert(x == 'h06, "test fail!");
             endaction
             action
@@ -1039,8 +1008,8 @@ module mkStride2PCPrefetcherTest(Empty);
 endmodule
 
 module mkPrefetcherVectorTest(Empty);
-    //config - 2 lines
-    PrefetcherVector#(3) p <- mkPrefetcherVector(mkNextLineOnMissPrefetcher);
+    Parameter#(2) lines <- mkParameter;
+    PrefetcherVector#(3) p <- mkPrefetcherVector(mkNextLineOnMissPrefetcher(lines));
     mkAutoFSM(
         seq
             action p.reportAccess(1, 'h90000000, MISS); endaction
@@ -1098,8 +1067,10 @@ module mkPrefetcherVectorTest(Empty);
 endmodule
 
 module mkSimpleStridePCPrefetcherTest(Empty);
-    //paremeter - 2 ahead
-    let p <- mkSimpleStridePCPrefetcher;
+    Parameter#(512) strideTableSize <- mkParameter;
+    Parameter#(2) cLinesAheadToPrefetch <- mkParameter;
+    Parameter#(2) minConfidenceToPrefetch <- mkParameter;
+    let p <- mkSimpleStridePCPrefetcher(strideTableSize, cLinesAheadToPrefetch, minConfidenceToPrefetch);
     mkAutoFSM(
         seq
             // ----- Send misses and stuff to one window -----

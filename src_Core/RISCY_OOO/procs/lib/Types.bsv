@@ -46,6 +46,12 @@ import CHERICC_Fat::*;
 import RVFI_DII_Types::*;
 `endif
 
+interface Parameter#(numeric type param);
+endinterface
+
+module mkParameter(Parameter#(param));
+endmodule
+
 typedef 64 AddrSz;
 typedef Bit#(AddrSz) Addr;
 

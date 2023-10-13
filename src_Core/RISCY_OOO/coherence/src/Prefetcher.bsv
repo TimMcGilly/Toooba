@@ -44,8 +44,12 @@ interface Prefetcher;
     (* always_ready *)
     method Action reportAccess(Addr addr, HitOrMiss hitMiss);
     method ActionValue#(Addr) getNextPrefetchAddr();
-    //method Action flush;
-    //method Bool flush_done;
+endinterface
+
+interface PCPrefetcher;
+    (* always_ready *)
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
+    method ActionValue#(Addr) getNextPrefetchAddr();
 endinterface
 
 module mkDoNothingPrefetcher(Prefetcher);
@@ -60,7 +64,7 @@ module mkAlwaysRequestPrefetcher(Prefetcher);
     method Action reportAccess(Addr addr, HitOrMiss hitMiss);
     endmethod
     method ActionValue#(Addr) getNextPrefetchAddr;
-        return 64'h80000040;
+        return 64'h8000ff00;
     endmethod
 endmodule
 
@@ -78,10 +82,11 @@ module mkPrintPrefetcher(Prefetcher);
     endmethod
 endmodule
 
-module mkNextLineOnMissPrefetcher(Prefetcher)
+
+module mkNextLineOnMissPrefetcher#(Parameter#(nextLinesOnMiss) _)(Prefetcher)
     provisos (
-        NumAlias#(nextLinesOnMiss, 1),
-        Alias#(rqCntT, Bit#(TLog#(TAdd#(nextLinesOnMiss, 1))))
+        Alias#(rqCntT, Bit#(TLog#(TAdd#(nextLinesOnMiss, 1)))),
+        Add#(a__, TLog#(TAdd#(nextLinesOnMiss,1)), 64)
     );
     Reg#(Addr) lastMissAddr <- mkReg(0);
     Reg#(rqCntT) sentRequestCounter <- mkReg(fromInteger(valueOf(nextLinesOnMiss)));
@@ -106,10 +111,10 @@ module mkNextLineOnMissPrefetcher(Prefetcher)
     endmethod
 endmodule
 
-module mkNextLineOnAllPrefetcher(Prefetcher)
+module mkNextLineOnAllPrefetcher#(Parameter#(nextLinesOnAccess) _)(Prefetcher)
     provisos (
-        NumAlias#(nextLinesOnAccess, 3),
-        Alias#(rqCntT, Bit#(TLog#(TAdd#(nextLinesOnAccess, 1))))
+        Alias#(rqCntT, Bit#(TLog#(TAdd#(nextLinesOnAccess, 1)))),
+        Add#(a__, TLog#(TAdd#(nextLinesOnAccess,1)), AddrSz)
     );
     Reg#(Addr) lastAccessAddr <- mkReg(0);
     Reg#(rqCntT) sentRequestCounter <- mkReg(fromInteger(valueOf(nextLinesOnAccess)));
@@ -136,8 +141,8 @@ module mkNextLineOnAllPrefetcher(Prefetcher)
     endmethod
 endmodule
 
-module mkSingleWindowPrefetcher(Prefetcher);
-    Integer cacheLinesInRange = 2;
+module mkSingleWindowPrefetcher#(Parameter#(cacheLinesInRange) _)(Prefetcher);
+    Integer cacheLinesInRange = valueOf(cacheLinesInRange);
     Reg#(LineAddr) rangeEnd <- mkReg(0); //Points to one CLine after end of range
     Reg#(LineAddr) nextToAsk <- mkReg(0);
     method Action reportAccess(Addr addr, HitOrMiss hitMiss);
@@ -165,8 +170,8 @@ module mkSingleWindowPrefetcher(Prefetcher);
     endmethod
 endmodule
 
-module mkSingleWindowL1LLPrefetcher(Prefetcher);
-    Integer cacheLinesInRange = 2;
+module mkSingleWindowL1LLPrefetcher#(Parameter#(cacheLinesInRange) _)(Prefetcher);
+    Integer cacheLinesInRange = valueOf(cacheLinesInRange);
     Reg#(LineAddr) rangeEnd <- mkReg(0); //Points to one CLine after end of range
     Reg#(LineAddr) nextToAsk <- mkReg(0);
     method Action reportAccess(Addr addr, HitOrMiss hitMiss);
@@ -199,12 +204,11 @@ typedef struct {
     LineAddr nextToAsk;
 } StreamEntry deriving (Bits);
 
-module mkMultiWindowPrefetcher(Prefetcher)
+module mkMultiWindowPrefetcher#(Parameter#(numWindows) _, Parameter#(cacheLinesInRange) __)(Prefetcher)
 provisos(
-    NumAlias#(numWindows, 4),
     Alias#(windowIdxT, Bit#(TLog#(numWindows)))
 );
-    Integer cacheLinesInRange = 2;
+    Integer cacheLinesInRange = valueOf(cacheLinesInRange);
     Vector#(numWindows, Reg#(StreamEntry)) streams 
         <- replicateM(mkReg(StreamEntry {rangeEnd: '0, nextToAsk: '0}));
     Vector#(numWindows, Reg#(windowIdxT)) shiftReg <- genWithM(compose(mkReg, fromInteger));
@@ -235,7 +239,6 @@ provisos(
         //Finds the first window that contains addr
         let cl = getLineAddr(addr);
         function Bool pred(StreamEntry se);
-            //TODO < gives 100 cycles less??????
             return (se.rangeEnd - fromInteger(cacheLinesInRange) - 1 <= cl 
                 && cl < se.rangeEnd);
         endfunction
@@ -293,12 +296,11 @@ provisos(
 
 endmodule
 
-module mkMultiWindowCrossCachePrefetcher(Prefetcher)
+module mkMultiWindowCrossCachePrefetcher#(Parameter#(numWindows) _, Parameter#(cacheLinesInRange) __)(Prefetcher)
 provisos(
-    NumAlias#(numWindows, 4),
     Alias#(windowIdxT, Bit#(TLog#(numWindows)))
 );
-    Integer cacheLinesInRange = 2;
+    Integer cacheLinesInRange = valueOf(cacheLinesInRange);
     Vector#(numWindows, Reg#(StreamEntry)) streams 
         <- replicateM(mkReg(StreamEntry {rangeEnd: '0, nextToAsk: '0}));
     Vector#(numWindows, Reg#(windowIdxT)) shiftReg <- genWithM(compose(mkReg, fromInteger));
@@ -329,7 +331,6 @@ provisos(
         //Finds the first window that contains addr
         let cl = getLineAddr(addr);
         function Bool pred(StreamEntry se);
-            //TODO < gives 100 cycles less??????
             return (se.rangeEnd - fromInteger(cacheLinesInRange) - 1 <= cl 
                 && cl < se.rangeEnd);
         endfunction
@@ -388,81 +389,20 @@ typedef struct {
     LineAddr target;
 } WideTargetEntry#(numeric type tagBits) deriving (Bits, Eq, FShow);
 
+
 interface TargetTable#(numeric type narrowTableSize, numeric type wideTableSize);
-    method Action set(LineAddr prevAddr, LineAddr currAddr);
-    method ActionValue#(Maybe#(LineAddr)) getAndRemove(LineAddr addr);
+    method Action writeReq(LineAddr prevAddr, LineAddr currAddr);
+    method Action readReq(LineAddr addr);
+    method ActionValue#(Maybe#(LineAddr)) readResp();
 endinterface
 
 module mkTargetTable(TargetTable#(narrowTableSize, wideTableSize)) provisos
 (
     NumAlias#(narrowTableIdxBits, TLog#(narrowTableSize)),
     NumAlias#(wideTableIdxBits, TLog#(wideTableSize)),
-    NumAlias#(narrowTableTagBits, TSub#(32, narrowTableIdxBits)),
-    NumAlias#(wideTableTagBits, TSub#(32, wideTableIdxBits)),
-    NumAlias#(narrowDistanceBits, 10),
-    NumAlias#(narrowMaxDistanceAbs, TExp#(TSub#(narrowDistanceBits, 1))),
-    Alias#(narrowTargetEntryT, NarrowTargetEntry#(narrowTableTagBits, narrowDistanceBits)),
-    Alias#(wideTargetEntryT, WideTargetEntry#(wideTableTagBits)),
-    Add#(a__, TLog#(narrowTableSize), 32),
-    Add#(b__, TLog#(narrowTableSize), 58),
-    Add#(c__, TLog#(wideTableSize), 32),
-    Add#(d__, TLog#(wideTableSize), 58)
-);
-    Vector#(narrowTableSize, Ehr#(2, Maybe#(narrowTargetEntryT))) narrowTable <- replicateM(mkEhr(Invalid));
-    Vector#(wideTableSize, Ehr#(2, Maybe#(wideTargetEntryT))) wideTable <- replicateM(mkEhr(Invalid));
-    method Action set(LineAddr prevAddr, LineAddr currAddr);
-        let distance = currAddr - prevAddr;
-        Bit#(32) prevAddrHash = hash(prevAddr);
-        if (abs(distance) < fromInteger(valueOf(narrowMaxDistanceAbs))) begin
-            //Store in narrow table
-            narrowTargetEntryT entry;
-            entry.tag = prevAddrHash[31:valueOf(narrowTableIdxBits)];
-            entry.distance = truncate(distance);
-            Bit#(narrowTableIdxBits) idx = truncate(prevAddrHash);
-            narrowTable[idx][1] <= tagged Valid entry;
-        end
-        else begin
-            //Store in wide table
-            wideTargetEntryT entry;
-            entry.tag = prevAddrHash[31:valueOf(wideTableIdxBits)];
-            entry.target = currAddr;
-            Bit#(wideTableIdxBits) idx = truncate(prevAddrHash);
-            wideTable[idx][1] <= tagged Valid entry;
-        end
-    endmethod
-    method ActionValue#(Maybe#(LineAddr)) getAndRemove(LineAddr addr);
-        Bit#(narrowTableIdxBits) narrowIdx = truncate(addr);
-        Bit#(wideTableIdxBits) wideIdx = truncate(addr);
-        if (narrowTable[narrowIdx][0] matches tagged Valid .entry 
-            &&& entry.tag == addr[31:valueOf(narrowTableIdxBits)]) begin
-            narrowTable[narrowIdx][0] <= Invalid; 
-            //$display("%t found narrow table entry %h", $time, addr + signExtend(pack(entry.distance)));
-            return Valid(addr + signExtend(pack(entry.distance)));
-        end
-        else if (wideTable[wideIdx][0] matches tagged Valid .entry 
-            &&& entry.tag == addr[31:valueOf(wideTableIdxBits)]) begin
-            wideTable[wideIdx][0] <= Invalid; 
-            //$display("%t found wide table entry %h", $time, entry.target);
-            return Valid(entry.target);
-        end
-        else
-            return Invalid;
-    endmethod
-endmodule
-
-interface TargetTableBRAM#(numeric type narrowTableSize, numeric type wideTableSize);
-    method Action writeReq(LineAddr prevAddr, LineAddr currAddr);
-    method Action readReq(LineAddr addr);
-    method ActionValue#(Maybe#(LineAddr)) readResp(Bool clearEntry);
-endinterface
-
-module mkTargetTableBRAM(TargetTableBRAM#(narrowTableSize, wideTableSize)) provisos
-(
-    NumAlias#(narrowTableIdxBits, TLog#(narrowTableSize)),
-    NumAlias#(wideTableIdxBits, TLog#(wideTableSize)),
     NumAlias#(narrowTableTagBits, TSub#(24, narrowTableIdxBits)),
     NumAlias#(wideTableTagBits, TSub#(24, wideTableIdxBits)),
-    NumAlias#(narrowDistanceBits, 16),
+    NumAlias#(narrowDistanceBits, 4),
     NumAlias#(narrowMaxDistanceAbs, TExp#(TSub#(narrowDistanceBits, 1))),
     Alias#(narrowTargetEntryT, NarrowTargetEntry#(narrowTableTagBits, narrowDistanceBits)),
     Alias#(wideTargetEntryT, WideTargetEntry#(wideTableTagBits)),
@@ -505,7 +445,7 @@ module mkTargetTableBRAM(TargetTableBRAM#(narrowTableSize, wideTableSize)) provi
         readReqLineAddr <= addr;
     endmethod
 
-    method ActionValue#(Maybe#(LineAddr)) readResp(Bool clearEntry);
+    method ActionValue#(Maybe#(LineAddr)) readResp();
         // Returns the read response and if a table had a hit, 
         // sends a write request to clear the entry in that table
         narrowTable.deqRdResp;
@@ -516,17 +456,11 @@ module mkTargetTableBRAM(TargetTableBRAM#(narrowTableSize, wideTableSize)) provi
         Bit#(wideTableIdxBits) wideIdx = truncate(addrHash);
         if (narrowTable.rdResp matches tagged Valid .entry 
             &&& entry.tag == addrHash[23:valueOf(narrowTableIdxBits)]) begin
-            if (clearEntry) begin
-                //narrowTable.wrReq(narrowIdx, Invalid); 
-            end
             $display("%t found narrow table entry %h", $time, addr + signExtend(pack(entry.distance)));
             return Valid(addr + signExtend(pack(entry.distance)));
         end
         else if (wideTable.rdResp matches tagged Valid .entry 
             &&& entry.tag == addrHash[23:valueOf(wideTableIdxBits)]) begin
-            if (clearEntry) begin
-                //wideTable.wrReq(wideIdx, Invalid); 
-            end
             $display("%t found wide table entry %h", $time, entry.target);
             return Valid(entry.target);
         end
@@ -735,9 +669,6 @@ module mkTargetTableDouble(TargetTableDouble#(narrowTableSize, wideTableSize)) p
             //Update the entries for the last miss to point to this one
             writeMissEntry(addr);
             //Save the raw table entries
-            //$display("idx: %x", addrHash);
-            //$display("%t Read resp: nMRU: ", fshow(narrowTableMRU.rdResp), "wMRU: ", fshow(wideTableMRU.rdResp));
-            //$display("%t Read resp: nLRU: ", fshow(narrowTableLRU.rdResp), "wLRU: ", fshow(wideTableLRU.rdResp));
             lastMissWideMRUEntry <= wideTableMRU.rdResp;
             lastMissNarrowMRUEntry <= narrowTableMRU.rdResp;
             lastMissWideLRUEntry <= wideTableLRU.rdResp;
@@ -747,21 +678,18 @@ module mkTargetTableDouble(TargetTableDouble#(narrowTableSize, wideTableSize)) p
         let entryMRU <- checkReadResp(addr, addrHash, narrowTableMRU.rdResp, wideTableMRU.rdResp);
         let entryLRU <- checkReadResp(addr, addrHash, narrowTableLRU.rdResp, wideTableLRU.rdResp);
         Tuple2#(Maybe#(LineAddr), Maybe#(LineAddr)) retval = tuple2(entryMRU, entryLRU);
-        $display("%t read resp for %x returning ", $time, addr, fshow(retval));
+        $display("%t Prefetcher read resp for %x returning ", $time, addr, fshow(retval));
         return retval;
     endmethod
 endmodule
 
-module mkBRAMSingleWindowTargetPrefetcher(Prefetcher) provisos
-(
-    NumAlias#(numLastRequests, 16)
-);
-    Integer cacheLinesInRange = 1;
+module mkSingleWindowTargetPrefetcher#(Parameter#(numLastRequests) _, Parameter#(cacheLinesInRange) __)(Prefetcher);
+    Integer cacheLinesInRange = valueOf(cacheLinesInRange);
     Reg#(LineAddr) rangeEnd <- mkReg(0); //Points to one CLine after end of range
     Reg#(LineAddr) nextToAsk <- mkReg(0);
 
     Reg#(LineAddr) lastChildRequest <- mkReg(0);
-    TargetTableBRAM#(8192, 2048) targetTable <- mkTargetTableBRAM;
+    TargetTable#(8192, 2048) targetTable <- mkTargetTable;
     Fifo#(1, LineAddr) targetTableReadResp <- mkOverflowBypassFifo;
 
     Reg#(Vector#(numLastRequests, Bit#(16))) lastTargetRequests <- mkReg(replicate(0));
@@ -770,7 +698,7 @@ module mkBRAMSingleWindowTargetPrefetcher(Prefetcher) provisos
     endrule
 
     rule getReadResp;
-        let res <- targetTable.readResp(False);
+        let res <- targetTable.readResp();
         if (res matches tagged Valid .cline) begin
             targetTableReadResp.enq(cline);
         end
@@ -800,7 +728,7 @@ module mkBRAMSingleWindowTargetPrefetcher(Prefetcher) provisos
             targetTable.writeReq(lastChildRequest, cl);
         end
 
-        // Send target request if not in last 16 hits.
+        // Send target request if not in last numLastRequests hits.
         if (!elem(hash(cl), lastTargetRequests)) begin 
             targetTable.readReq(cl);
             $display("%t Prefetcher sending target read request for %h", $time, cl);
@@ -828,19 +756,19 @@ module mkBRAMSingleWindowTargetPrefetcher(Prefetcher) provisos
     endmethod
 endmodule
 
-module mkBRAMMultiWindowTargetPrefetcher(Prefetcher)
+
+
+module mkMultiWindowTargetPrefetcher#((Parameter#(numWindows)) _, Parameter#(numLastRequests) __, Parameter#(cacheLinesInRange) ___)(Prefetcher)
 provisos(
-    NumAlias#(numWindows, 4),
-    NumAlias#(numLastRequests, 15),
     Alias#(windowIdxT, Bit#(TLog#(numWindows)))
 );
-    Integer cacheLinesInRange = 2;
+    Integer cacheLinesInRange = valueOf(cacheLinesInRange);
     Vector#(numWindows, Reg#(StreamEntry)) streams 
         <- replicateM(mkReg(StreamEntry {rangeEnd: '0, nextToAsk: '0}));
     Vector#(numWindows, Reg#(windowIdxT)) shiftReg <- genWithM(compose(mkReg, fromInteger));
     Reg#(LineAddr) lastChildRequest <- mkReg(0);
 
-    TargetTableBRAM#(8192, 2048) targetTable <- mkTargetTableBRAM;
+    TargetTable#(8192, 2048) targetTable <- mkTargetTable;
     FIFOF#(LineAddr) targetTableReadResp <- mkBypassFIFOF;
     Reg#(Vector#(numLastRequests, Bit#(32))) lastTargetRequests <- mkReg(replicate(0));
 
@@ -853,7 +781,7 @@ provisos(
     endrule
 
     rule getReadResp;
-        let res <- targetTable.readResp(False);
+        let res <- targetTable.readResp();
         if (res matches tagged Valid .cline) begin
             targetTableReadResp.enq(cline);
         end
@@ -884,7 +812,6 @@ provisos(
     actionvalue
         //Finds the first window that contains cache line
         function Bool pred(StreamEntry se);
-            //TODO < gives 100 cycles less??????
             return (se.rangeEnd - fromInteger(cacheLinesInRange) - 1 <= cl 
                 && cl < se.rangeEnd);
         endfunction
@@ -896,7 +823,6 @@ provisos(
             return Invalid;
         end
     endactionvalue;
-    // test: allocate new window on hit too (mostly for target prefetching)
 
     method Action reportAccess(Addr addr, HitOrMiss hitMiss);
         //Check if any stream line matches request
@@ -963,14 +889,17 @@ provisos(
 
 endmodule
 
-module mkBRAMMarkovPrefetcher(Prefetcher) provisos
+module mkMarkovPrefetcher#(Parameter#(maxChainLength) _, Parameter#(narrowEntries) __, Parameter#(wideEntries) ___)(Prefetcher) provisos
 (
-    NumAlias#(maxChainLength, 2),
-    Alias#(chainLengthT, Bit#(TLog#(TAdd#(maxChainLength,1))))
+    Alias#(chainLengthT, Bit#(TLog#(TAdd#(maxChainLength,1)))),
+    Add#(a__, TLog#(narrowEntries), 32),
+    Add#(b__, TLog#(narrowEntries), 58),
+    Add#(c__, TLog#(wideEntries), 32),
+    Add#(d__, TLog#(wideEntries), 58)
 );
     Reg#(LineAddr) lastLastChildRequest <- mkReg(0);
     Reg#(LineAddr) lastChildRequest <- mkReg(0);
-    TargetTableBRAM#(65536, 4096) targetTable <- mkTargetTableBRAM;
+    TargetTable#(narrowEntries, wideEntries) targetTable <- mkTargetTable;
     FIFOF#(LineAddr) targetTableReadResp <- mkBypassFIFOF;
 
     // Stores how many prefetches we can still do in the current chain
@@ -985,7 +914,7 @@ module mkBRAMMarkovPrefetcher(Prefetcher) provisos
     (* descending_urgency = "getReadResp, sendReadReq" *)
     (* execution_order = "getReadResp, sendReadReq" *)
     rule getReadResp;
-        let res <- targetTable.readResp(False);
+        let res <- targetTable.readResp();
         if (res matches tagged Valid .cline) begin
             targetTableReadResp.enq(cline);
             chainNextToLookup <= cline;
@@ -1018,8 +947,7 @@ module mkBRAMMarkovPrefetcher(Prefetcher) provisos
         end
 
         if (hitMiss == MISS) begin 
-            //Don't start markov chain if its very recent
-            //$display("%t Prefetcher start new chain with %h", $time, addr);
+            $display("%t Prefetcher start new chain with %h", $time, addr);
             chainNextToLookup <= cl;
             chainNumberToPrefetch <= fromInteger(valueOf(maxChainLength));
         end
@@ -1027,16 +955,14 @@ module mkBRAMMarkovPrefetcher(Prefetcher) provisos
 
 endmodule
 
-module mkBRAMMarkovOnHitPrefetcher(Prefetcher) provisos
+module mkMarkovOnHitPrefetcher#(Parameter#(maxChainLength) _, Parameter#(numLastRequestsTracked) __)(Prefetcher) provisos
 (
-    NumAlias#(maxChainLength, 2),
-    NumAlias#(numLastRequests, 32),
     Alias#(chainLengthT, Bit#(TLog#(TAdd#(maxChainLength,1))))
 );
     Reg#(LineAddr) lastLastChildRequest <- mkReg(0);
     Reg#(LineAddr) lastChildRequest <- mkReg(0);
-    Reg#(Vector#(numLastRequests, Bit#(32))) lastAddrRequests <- mkReg(replicate(0));
-    TargetTableBRAM#(2048, 128) targetTable <- mkTargetTableBRAM;
+    Reg#(Vector#(numLastRequestsTracked, Bit#(32))) lastAddrRequests <- mkReg(replicate(0));
+    TargetTable#(2048, 128) targetTable <- mkTargetTable;
     FIFOF#(LineAddr) targetTableReadResp <- mkBypassFIFOF;
 
     // Stores how many prefetches we can still do in the current chain
@@ -1051,7 +977,7 @@ module mkBRAMMarkovOnHitPrefetcher(Prefetcher) provisos
     (* descending_urgency = "getReadResp, sendReadReq" *)
     (* execution_order = "getReadResp, sendReadReq" *)
     rule getReadResp;
-        let res <- targetTable.readResp(False);
+        let res <- targetTable.readResp();
         if (res matches tagged Valid .cline) begin
             targetTableReadResp.enq(cline);
             chainNextToLookup <= cline;
@@ -1094,14 +1020,12 @@ module mkBRAMMarkovOnHitPrefetcher(Prefetcher) provisos
 
 endmodule
 
-module mkMarkovOnHit2Prefetcher(Prefetcher) provisos
+module mkMarkovOnHit2Prefetcher#(Parameter#(maxChainLength) _, Parameter#(numLastRequestsTracked) __)(Prefetcher) provisos
 (
-    NumAlias#(maxChainLength, 1),
-    NumAlias#(numLastRequests, 32),
     Alias#(chainLengthT, Bit#(TLog#(TAdd#(maxChainLength,1))))
 );
     Reg#(LineAddr) lastChildRequest <- mkReg(0);
-    Reg#(Vector#(numLastRequests, Bit#(32))) lastAddrRequests <- mkReg(replicate(0));
+    Reg#(Vector#(numLastRequestsTracked, Bit#(32))) lastAddrRequests <- mkReg(replicate(0));
     TargetTableDouble#(65536, 4096) targetTable <- mkTargetTableDouble;
     Fifo#(8, LineAddr) highPriorityPrefetches <- mkOverflowBypassFifo;
     Fifo#(8, LineAddr) lowPriorityPrefetches <- mkOverflowBypassFifo;
@@ -1113,16 +1037,18 @@ module mkMarkovOnHit2Prefetcher(Prefetcher) provisos
     // but checking for LRU and everything.
 
     rule addPrefetchesToQueues;
+        $display("%t Prefetcher Add prefetch to queue!", $time);
         match { .highPrio, .lowPrio } <- targetTable.readResp();
-        if (highPrio matches tagged Valid .cl)
+        if (highPrio matches tagged Valid .cl) begin
             highPriorityPrefetches.enq(cl);
-        if (lowPrio matches tagged Valid .cl)
+        end
+        if (lowPrio matches tagged Valid .cl) begin
             lowPriorityPrefetches.enq(cl);
+        end
     endrule
 
     method ActionValue#(Addr) getNextPrefetchAddr 
                  if (highPriorityPrefetches.notEmpty || lowPriorityPrefetches.notEmpty);
-                 //if (false);
         Addr retAddr = unpack(0);
         if (highPriorityPrefetches.notEmpty) begin
             retAddr = {highPriorityPrefetches.first, '0};
@@ -1150,9 +1076,9 @@ module mkMarkovOnHit2Prefetcher(Prefetcher) provisos
     endmethod
 
 endmodule
-module mkBlockPrefetcher(Prefetcher) provisos (
-    NumAlias#(numLinesEachWay, 1),
-    Alias#(lineCountT, Bit#(TLog#(TAdd#(numLinesEachWay, 1))))
+module mkBlockPrefetcher#(Parameter#(numLinesEachWay) _)(Prefetcher) provisos (
+    Alias#(lineCountT, Bit#(TLog#(TAdd#(numLinesEachWay, 1)))),
+    Add#(a__, TLog#(TAdd#(numLinesEachWay, 1)), 58)
 );
     Reg#(Bool) nextIsForward <- mkReg(?);
     Reg#(LineAddr) prefetchAround <- mkReg(?);
@@ -1183,12 +1109,6 @@ module mkBlockPrefetcher(Prefetcher) provisos (
     endmethod
 
 endmodule
-
-interface PCPrefetcher;
-    (* always_ready *)
-    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
-    method ActionValue#(Addr) getNextPrefetchAddr();
-endinterface
 
 module mkPCPrefetcherAdapter#(module#(Prefetcher) mkPrefetcher)(PCPrefetcher);
     let p <- mkPrefetcher;
@@ -1232,11 +1152,10 @@ typedef struct {
     Bit#(4) cLinesPrefetched; //Stores how many cache lines have been prefetched for this instruction
 } StrideEntry deriving (Bits, Eq, FShow);
 
-module mkBRAMStridePCPrefetcher(PCPrefetcher)
+module mkStridePCPrefetcher#(Parameter#(strideTableSize) _, Parameter#(cLinesAheadToPrefetch) __)(PCPrefetcher)
 provisos(
-    NumAlias#(strideTableSize, 512),
-    NumAlias#(cLinesAheadToPrefetch, 2), 
-    Alias#(strideTableIndexT, Bit#(TLog#(strideTableSize)))
+    Alias#(strideTableIndexT, Bit#(TLog#(strideTableSize))),
+    Add#(a__, TLog#(strideTableSize), 16)
     );
     RWBramCore#(strideTableIndexT, StrideEntry) strideTable <- mkRWBramCoreForwarded;
     FIFOF#(Tuple3#(Addr, Bit#(16), HitOrMiss)) memAccesses <- mkSizedBypassFIFOF(8);
@@ -1388,7 +1307,7 @@ typedef struct {
 module mkStride2PCPrefetcher(PCPrefetcher)
 provisos(
     NumAlias#(strideTableSize, 512),
-    NumAlias#(cLinesAheadToPrefetch, 2), // TODO fetch more if have repeatedly hit an entry, and if stride big
+    NumAlias#(cLinesAheadToPrefetch, 2), 
     Alias#(strideTableIndexT, Bit#(TLog#(strideTableSize)))
     );
     RWBramCore#(strideTableIndexT, StrideEntry2) strideTable <- mkRWBramCoreForwarded;
@@ -1541,15 +1460,14 @@ typedef struct {
     Bit#(2) confidence;
 } SimpleStrideEntry deriving (Bits, Eq, FShow);
 
-//10 minutes of planning
-//25 minutes of implementation
-//30 minutes of writing tests and fixing bugs
-module mkSimpleStridePCPrefetcher(PCPrefetcher)
+//Reasonable parameter values:
+//strideTableSize = 512
+//cLinesAheadToPrefetch = 2
+//minConfidenceToPrefetch = 2
+module mkSimpleStridePCPrefetcher#(Parameter#(strideTableSize) _, Parameter#(cLinesAheadToPrefetch) __, Parameter#(minConfidenceToPrefetch) ___)(PCPrefetcher)
 provisos(
-    NumAlias#(strideTableSize, 512),
-    NumAlias#(cLinesAheadToPrefetch, 2), 
-    NumAlias#(minConfidenceToPrefetch, 2),
-    Alias#(strideTableIndexT, Bit#(TLog#(strideTableSize)))
+    Alias#(strideTableIndexT, Bit#(TLog#(strideTableSize))),
+    Add#(a__, TLog#(strideTableSize), 16)
     );
     Vector#(strideTableSize, Reg#(SimpleStrideEntry)) strideTable <- replicateM(mkReg(unpack(0)));
 
@@ -1558,11 +1476,10 @@ provisos(
     Ehr#(2, Bit#(3)) prefetchesIssued <- mkEhr(fromInteger(valueOf(cLinesAheadToPrefetch)));
 
     method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
-        $display("%t report access %x %x", $time, addr, pcHash);
+        $display("%t reportAccess %x %x", $time, addr, pcHash);
         strideTableIndexT idx = truncate(pcHash);
         SimpleStrideEntry entry = strideTable[idx];
         Int#(13) calc_stride = unpack(truncate(addr - entry.lastAddr));
-        $display("found stride %x", entry.stride);
         entry.lastAddr = addr;
         if (calc_stride == entry.stride) begin
             if (entry.confidence != 2'd3) begin
@@ -1601,7 +1518,7 @@ provisos(
             (pack(signExtend(strideToUse)) * zeroExtend(prefetchesIssued[0] + 1));
 
         check(reqAddr[63:12] == addrToPrefetch[63:12]);
-        $display("%t getprefetchaddr ret %x", $time, reqAddr);
+        $display("%t getNextPrefetchAddr returning %x", $time, reqAddr);
         return reqAddr;
     endmethod
 
@@ -1619,13 +1536,15 @@ typedef struct {
     Bit#(4) cLinesPrefetched; //Stores how many cache lines have been prefetched for this instruction
 } StrideEntryAdaptive deriving (Bits, Eq, FShow);
 
-module mkBRAMStrideAdaptivePCPrefetcher(PCPrefetcher)
+module mkStrideAdaptivePCPrefetcher#(
+    Parameter#(strideTableSize) _, 
+    Parameter#(cLinesPrefetchMin) __,
+    Parameter#(cLinesSmallStridePrefetchMax) ___,
+    Parameter#(cLinesBigStridePrefetchMax) ____
+    )(PCPrefetcher)
 provisos(
-    NumAlias#(strideTableSize, 64),
-    NumAlias#(cLinesPrefetchMin, 2), 
-    NumAlias#(cLinesSmallStridePrefetchMax, 3), 
-    NumAlias#(cLinesBigStridePrefetchMax, 5), 
-    Alias#(strideTableIndexT, Bit#(TLog#(strideTableSize)))
+    Alias#(strideTableIndexT, Bit#(TLog#(strideTableSize))),
+    Add#(a__, TLog#(strideTableSize), 16)
     );
     RWBramCore#(strideTableIndexT, StrideEntryAdaptive) strideTable <- mkRWBramCoreForwarded;
     FIFOF#(Tuple3#(Addr, Bit#(16), HitOrMiss)) memAccesses <- mkSizedBypassFIFOF(8);
@@ -1855,17 +1774,27 @@ endmodule
 module mkL1IPrefetcher(Prefetcher);
 `ifdef INSTR_PREFETCHER_IN_L1
     `ifdef INSTR_PREFETCHER_NEXT_LINE_ON_ALL
-        let m <-  mkNextLineOnAllPrefetcher;
+        Parameter#(1) lines <- mkParameter;
+        let m <- mkNextLineOnAllPrefetcher(lines);
     `elsif INSTR_PREFETCHER_NEXT_LINE_ON_MISS
-        let m <-  mkNextLineOnMissPrefetcher;
+        Parameter#(1) lines <- mkParameter;
+        let m <-  mkNextLineOnMissPrefetcher(lines);
     `elsif INSTR_PREFETCHER_SINGLE_WINDOW
-        let m <-  mkSingleWindowPrefetcher;
+        Parameter#(3) lines <- mkParameter;
+        let m <-  mkSingleWindowPrefetcher(lines);
     `elsif INSTR_PREFETCHER_SINGLE_WINDOW_TARGET
-        let m <-  mkBRAMSingleWindowTargetPrefetcher;
+        Parameter#(16) numLastRequests <- mkParameter;
+        Parameter#(1) cacheLinesInRange <- mkParameter;
+        let m <-  mkSingleWindowTargetPrefetcher(numLastRequests, cacheLinesInRange);
     `elsif INSTR_PREFETCHER_MULTI_WINDOW
-        let m <-  mkMultiWindowPrefetcher;
+        Parameter#(4) numWindows <- mkParameter;
+        Parameter#(2) lines <- mkParameter;
+        let m <-  mkMultiWindowPrefetcher(numWindows, lines);
     `elsif INSTR_PREFETCHER_MULTI_WINDOW_TARGET
-        let m <-  mkBRAMMultiWindowTargetPrefetcher;
+        Parameter#(4) numWindows <- mkParameter;
+        Parameter#(16) numLastRequests <- mkParameter;
+        Parameter#(16) cacheLinesInRange <- mkParameter;
+        let m <-  mkMultiWindowTargetPrefetcher(numWindows, numLastRequests, cacheLinesInRange);
     `endif
     //let m <- mkAlwaysRequestPrefetcher;
     //let m <- mkPrintPrefetcher;
@@ -1878,17 +1807,27 @@ endmodule
 module mkLLIPrefetcherInL1I(Prefetcher);
 `ifdef INSTR_PREFETCHER_IN_L1LL
     `ifdef INSTR_PREFETCHER_NEXT_LINE_ON_ALL
-        let m <-  mkNextLineOnAllPrefetcher;
+        Parameter#(1) lines <- mkParameter;
+        let m <-  mkNextLineOnAllPrefetcher(lines);
     `elsif INSTR_PREFETCHER_NEXT_LINE_ON_MISS
-        let m <-  mkNextLineOnMissPrefetcher;
+        Parameter#(1) lines <- mkParameter;
+        let m <-  mkNextLineOnMissPrefetcher(lines);
     `elsif INSTR_PREFETCHER_SINGLE_WINDOW
-        let m <-  mkSingleWindowL1LLPrefetcher;
+        Parameter#(3) lines <- mkParameter;
+        let m <-  mkSingleWindowL1LLPrefetcher(lines);
     `elsif INSTR_PREFETCHER_SINGLE_WINDOW_TARGET
-        let m <-  mkBRAMSingleWindowTargetPrefetcher;
+        Parameter#(16) numLastRequests <- mkParameter;
+        Parameter#(1) cacheLinesInRange <- mkParameter;
+        let m <-  mkSingleWindowTargetPrefetcher(numLastRequests, cacheLinesInRange);
     `elsif INSTR_PREFETCHER_MULTI_WINDOW
-        let m <-  mkMultiWindowPrefetcher;
+        Parameter#(4) numWindows <- mkParameter;
+        Parameter#(2) lines <- mkParameter;
+        let m <-  mkMultiWindowPrefetcher(numWindows, lines);
     `elsif INSTR_PREFETCHER_MULTI_WINDOW_TARGET
-        let m <-  mkBRAMMultiWindowTargetPrefetcher;
+        Parameter#(4) numWindows <- mkParameter;
+        Parameter#(16) numLastRequests <- mkParameter;
+        Parameter#(3) cacheLinesInRange <- mkParameter;
+        let m <-  mkMultiWindowTargetPrefetcher(numWindows, numLastRequests, cacheLinesInRange);
     `endif
     //let m <- mkAlwaysRequestPrefetcher;
     //let m <- mkPrintPrefetcher;
@@ -1901,17 +1840,27 @@ endmodule
 module mkLLIPrefetcher(Prefetcher);
 `ifdef INSTR_PREFETCHER_IN_LL
     `ifdef INSTR_PREFETCHER_NEXT_LINE_ON_ALL
-        let m <-  mkNextLineOnAllPrefetcher;
+        Parameter#(1) lines <- mkParameter;
+        let m <-  mkNextLineOnAllPrefetcher(lines);
     `elsif INSTR_PREFETCHER_NEXT_LINE_ON_MISS
-        let m <-  mkNextLineOnMissPrefetcher;
+        Parameter#(1) lines <- mkParameter;
+        let m <-  mkNextLineOnMissPrefetcher(lines);
     `elsif INSTR_PREFETCHER_SINGLE_WINDOW
-        let m <-  mkSingleWindowPrefetcher;
+        Parameter#(3) lines <- mkParameter;
+        let m <-  mkSingleWindowPrefetcher(lines);
     `elsif INSTR_PREFETCHER_SINGLE_WINDOW_TARGET
-        let m <-  mkBRAMSingleWindowTargetPrefetcher;
+        Parameter#(16) numLastRequests <- mkParameter;
+        Parameter#(1) cacheLinesInRange <- mkParameter;
+        let m <-  mkSingleWindowTargetPrefetcher(numLastRequests, cacheLinesInRange);
     `elsif INSTR_PREFETCHER_MULTI_WINDOW
-        let m <-  mkMultiWindowPrefetcher;
+        Parameter#(4) numWindows <- mkParameter;
+        Parameter#(2) lines <- mkParameter;
+        let m <-  mkMultiWindowPrefetcher(numWindows, lines);
     `elsif INSTR_PREFETCHER_MULTI_WINDOW_TARGET
-        let m <-  mkBRAMMultiWindowTargetPrefetcher;
+        Parameter#(4) numWindows <- mkParameter;
+        Parameter#(16) numLastRequests <- mkParameter;
+        Parameter#(3) cacheLinesInRange <- mkParameter;
+        let m <-  mkMultiWindowTargetPrefetcher(numWindows, numLastRequests, cacheLinesInRange);
     `endif
     //let m <- mkAlwaysRequestPrefetcher;
     //let m <- mkPrintPrefetcher;
@@ -1924,18 +1873,34 @@ endmodule
 module mkL1DPrefetcher(PCPrefetcher);
 `ifdef DATA_PREFETCHER_IN_L1
     `ifdef DATA_PREFETCHER_BLOCK
-        let m <- mkPCPrefetcherAdapter(mkBlockPrefetcher);
+        Parameter#(1) numLinesEachWay <- mkParameter;
+        let m <- mkPCPrefetcherAdapter(mkBlockPrefetcher(numLinesEachWay));
     `elsif DATA_PREFETCHER_STRIDE
-        //let m <- mkBRAMStridePCPrefetcher;
+        //let m <- mkStridePCPrefetcher;
         let m <- mkStride2PCPrefetcher;
     `elsif DATA_PREFETCHER_STRIDE_ADAPTIVE
-        let m <- mkBRAMStrideAdaptivePCPrefetcher;
+        Parameter#(512) strideTableSize <- mkParameter;
+        Parameter#(1) cLinesPrefetchMin <- mkParameter;
+        Parameter#(2) cLinesSmallStridePrefetchMax <- mkParameter;
+        Parameter#(4) cLinesBigStridePrefetchMax <- mkParameter;
+        let m <- mkStrideAdaptivePCPrefetcher(
+            strideTableSize, 
+            cLinesPrefetchMin, 
+            cLinesSmallStridePrefetchMax, 
+            cLinesBigStridePrefetchMax);
     `elsif DATA_PREFETCHER_MARKOV
-        let m <- mkPCPrefetcherAdapter(mkBRAMMarkovPrefetcher);
+        Parameter#(2) maxChainLength <- mkParameter;
+        Parameter#(2048) narrowEntries <- mkParameter;
+        Parameter#(128) wideEntries <- mkParameter;
+        let m <- mkPCPrefetcherAdapter(mkMarkovPrefetcher(maxChainLength, narrowEntries, wideEntries));
     `elsif DATA_PREFETCHER_MARKOV_ON_HIT
-        let m <- mkPCPrefetcherAdapter(mkBRAMMarkovOnHitPrefetcher);
+        Parameter#(1) maxChainLength <- mkParameter;
+        Parameter#(32) numLastRequestsTracked <- mkParameter;
+        let m <- mkPCPrefetcherAdapter(mkMarkovOnHitPrefetcher(maxChainLength, numLastRequestsTracked));
     `elsif DATA_PREFETCHER_MARKOV_ON_HIT_2
-        let m <- mkPCPrefetcherAdapter(mkMarkovOnHit2Prefetcher);
+        Parameter#(1) maxChainLength <- mkParameter;
+        Parameter#(32) numLastRequestsTracked <- mkParameter;
+        let m <- mkPCPrefetcherAdapter(mkMarkovOnHit2Prefetcher(maxChainLength, numLastRequestsTracked));
     `endif
     //let m <- mkPCPrefetcherAdapter(mkAlwaysRequestPrefetcher);
 `else 
@@ -1947,17 +1912,33 @@ endmodule
 module mkLLDPrefetcherInL1D(PCPrefetcher);
 `ifdef DATA_PREFETCHER_IN_L1LL
     `ifdef DATA_PREFETCHER_BLOCK
-        let m <- mkPCPrefetcherAdapter(mkBlockPrefetcher);
+        Parameter#(1) numLinesEachWay <- mkParameter;
+        let m <- mkPCPrefetcherAdapter(mkBlockPrefetcher(numLinesEachWay));
     `elsif DATA_PREFETCHER_STRIDE
-        let m <- mkBRAMStridePCPrefetcher;
+        let m <- mkStride2PCPrefetcher;
     `elsif DATA_PREFETCHER_STRIDE_ADAPTIVE
-        let m <- mkBRAMStrideAdaptivePCPrefetcher;
+        Parameter#(512) strideTableSize <- mkParameter;
+        Parameter#(1) cLinesPrefetchMin <- mkParameter;
+        Parameter#(2) cLinesSmallStridePrefetchMax <- mkParameter;
+        Parameter#(4) cLinesBigStridePrefetchMax <- mkParameter;
+        let m <- mkStrideAdaptivePCPrefetcher(
+            strideTableSize, 
+            cLinesPrefetchMin, 
+            cLinesSmallStridePrefetchMax, 
+            cLinesBigStridePrefetchMax);
     `elsif DATA_PREFETCHER_MARKOV
-        let m <- mkPCPrefetcherAdapter(mkBRAMMarkovPrefetcher);
+        Parameter#(2) maxChainLength <- mkParameter;
+        Parameter#(2048) narrowEntries <- mkParameter;
+        Parameter#(128) wideEntries <- mkParameter;
+        let m <- mkPCPrefetcherAdapter(mkMarkovPrefetcher(maxChainLength, narrowEntries, wideEntries));
     `elsif DATA_PREFETCHER_MARKOV_ON_HIT
-        let m <- mkPCPrefetcherAdapter(mkBRAMMarkovOnHitPrefetcher);
+        Parameter#(1) maxChainLength <- mkParameter;
+        Parameter#(32) numLastRequestsTracked <- mkParameter;
+        let m <- mkPCPrefetcherAdapter(mkMarkovOnHitPrefetcher(maxChainLength, numLastRequestsTracked));
     `elsif DATA_PREFETCHER_MARKOV_ON_HIT_2
-        let m <- mkPCPrefetcherAdapter(mkMarkovOnHit2Prefetcher);
+        Parameter#(1) maxChainLength <- mkParameter;
+        Parameter#(32) numLastRequestsTracked <- mkParameter;
+        let m <- mkPCPrefetcherAdapter(mkMarkovOnHit2Prefetcher(maxChainLength, numLastRequestsTracked));
     `endif
     //let m <- mkPCPrefetcherAdapter(mkAlwaysRequestPrefetcher);
 `else 
@@ -1969,17 +1950,25 @@ endmodule
 module mkLLDPrefetcher(Prefetcher);
 `ifdef DATA_PREFETCHER_IN_LL
     `ifdef DATA_PREFETCHER_BLOCK
-        let m <- mkBlockPrefetcher;
+        Parameter#(1) numLinesEachWay <- mkParameter;
+        let m <- mkBlockPrefetcher(numLinesEachWay);
     `elsif DATA_PREFETCHER_STRIDE
         doAssert(False, "Illegal data prefetcher type for LL cache!");
     `elsif DATA_PREFETCHER_STRIDE_ADAPTIVE
         doAssert(False, "Illegal data prefetcher type for LL cache!");
     `elsif DATA_PREFETCHER_MARKOV
-        let m <- mkBRAMMarkovPrefetcher;
+        Parameter#(2) maxChainLength <- mkParameter;
+        Parameter#(2048) narrowEntries <- mkParameter;
+        Parameter#(128) wideEntries <- mkParameter;
+        let m <- mkMarkovPrefetcher(maxChainLength, narrowEntries, wideEntries);
     `elsif DATA_PREFETCHER_MARKOV_ON_HIT
-        let m <- mkBRAMMarkovOnHitPrefetcher;
+        Parameter#(1) maxChainLength <- mkParameter;
+        Parameter#(32) numLastRequestsTracked <- mkParameter;
+        let m <- mkMarkovOnHitPrefetcher(maxChainLength, numLastRequestsTracked);
     `elsif DATA_PREFETCHER_MARKOV_ON_HIT_2
-        let m <- mkMarkovOnHit2Prefetcher;
+        Parameter#(1) maxChainLength <- mkParameter;
+        Parameter#(32) numLastRequestsTracked <- mkParameter;
+        let m <- mkMarkovOnHit2Prefetcher(maxChainLength, numLastRequestsTracked);
     `endif
     //let m <- mkPCPrefetcherAdapter(mkAlwaysRequestPrefetcher);
 `else 
