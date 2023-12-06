@@ -1,0 +1,336 @@
+// Copyright (c) 2023 Karlis Susters 
+//
+// Permission is hereby granted, free of charge, to any person
+// obtaining a copy of this software and associated documentation
+// files (the "Software"), to deal in the Software without
+// restriction, including without limitation the rights to use, copy,
+// modify, merge, publish, distribute, sublicense, and/or sell copies
+// of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be
+// included in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+// NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+// BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+// ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+// CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+import ISA_Decls   :: *;
+import CrossBar::*;
+import GetPut::*;
+import RWBramCore::*;
+import FIFO::*;
+import Fifos::*;
+import FIFOF::*;
+import SpecialFIFOs :: *;
+import Ehr::*;
+import CacheUtils::*;
+import CCTypes::*;
+import Types::*;
+import Vector::*;
+import BuildVector::*;
+import ProcTypes::*;
+
+import Prefetcher_intf::*;
+import InstructionPrefetchers::*;
+import StridePrefetchers::*;
+import MarkovPrefetchers::*;
+
+`define VERBOSE True
+
+module mkDoNothingPrefetcher(Prefetcher);
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss);
+    endmethod
+    method ActionValue#(Addr) getNextPrefetchAddr if (False);
+        return 64'h0;
+    endmethod
+endmodule
+
+module mkAlwaysRequestPrefetcher(Prefetcher);
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss);
+    endmethod
+    method ActionValue#(Addr) getNextPrefetchAddr;
+        return 64'h8000ff00;
+    endmethod
+endmodule
+
+module mkPrintPrefetcher(Prefetcher);
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss);
+        if (hitMiss == HIT) begin
+            if (`VERBOSE) $display("%t PrintPrefetcher report HIT %h", $time, addr);
+        end
+        else begin
+            if (`VERBOSE) $display("%t PrintPrefetcher report MISS %h", $time, addr);
+        end
+    endmethod
+    method ActionValue#(Addr) getNextPrefetchAddr if (False);
+        return 64'h0;
+    endmethod
+endmodule
+
+
+module mkPCPrefetcherAdapter#(module#(Prefetcher) mkPrefetcher)(PCPrefetcher);
+    let p <- mkPrefetcher;
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
+        p.reportAccess(addr, hitMiss);
+    endmethod
+    method ActionValue#(Addr) getNextPrefetchAddr;
+        let x <- p.getNextPrefetchAddr;
+        return x;
+    endmethod
+endmodule
+
+module mkDoNothingPCPrefetcher(PCPrefetcher);
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
+    endmethod
+    method ActionValue#(Addr) getNextPrefetchAddr if (False);
+        return 64'h0000000080000080;
+    endmethod
+endmodule
+
+module mkPrintPCPrefetcher(PCPrefetcher);
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
+        if (hitMiss == HIT)
+            if (`VERBOSE) $display("%t PCPrefetcher report HIT %h", $time, addr);
+        else
+            if (`VERBOSE) $display("%t PCPrefetcher report MISS %h", $time, addr);
+    endmethod
+    method ActionValue#(Addr) getNextPrefetchAddr if (False);
+        return 64'h0000000080000080;
+    endmethod
+endmodule
+
+interface PrefetcherVector#(numeric type size);
+    method ActionValue#(Tuple2#(Addr, Bit#(TLog#(size)))) getNextPrefetchAddr;
+    method Action reportAccess(Bit#(TLog#(size)) idx, Addr addr, HitOrMiss hitMiss);
+endinterface
+
+module mkPrefetcherVector#(module#(Prefetcher) mkPrefetcher)
+(
+    PrefetcherVector#(size)
+) provisos (
+    Alias#(idxT, Bit#(TLog#(size)))
+);
+    Vector#(size, Prefetcher) prefetchers <- replicateM(mkPrefetcher);
+    Fifo#(1, Tuple2#(Addr, idxT)) prefetchRq <- mkBypassFifo;
+
+    function XBarDstInfo#(Bit#(0),Tuple2#(Addr, idxT)) convertPrefetchRq(idxT item, Addr a);
+        return XBarDstInfo { 
+            idx: 0,
+            data: tuple2(a, item)
+        };
+    endfunction
+    function Get#(Addr) reqGet(Prefetcher p) = toGet(p.getNextPrefetchAddr);
+    mkXBar(convertPrefetchRq, map(reqGet, prefetchers), vec(toPut(prefetchRq)));
+
+    method ActionValue#(Tuple2#(Addr, idxT)) getNextPrefetchAddr;
+        prefetchRq.deq;
+        return prefetchRq.first;
+    endmethod
+
+    method Action reportAccess(idxT idx, Addr addr, HitOrMiss hitMiss);
+        prefetchers[idx].reportAccess(addr, hitMiss);
+    endmethod
+endmodule
+
+module mkL1IPrefetcher(Prefetcher);
+`ifdef INSTR_PREFETCHER_IN_L1
+    `ifdef INSTR_PREFETCHER_NEXT_LINE_ON_ALL
+        Parameter#(1) lines <- mkParameter;
+        let m <- mkNextLineOnAllPrefetcher(lines);
+    `elsif INSTR_PREFETCHER_NEXT_LINE_ON_MISS
+        Parameter#(1) lines <- mkParameter;
+        let m <-  mkNextLineOnMissPrefetcher(lines);
+    `elsif INSTR_PREFETCHER_SINGLE_WINDOW
+        Parameter#(3) lines <- mkParameter;
+        let m <-  mkSingleWindowPrefetcher(lines);
+    `elsif INSTR_PREFETCHER_SINGLE_WINDOW_TARGET
+        Parameter#(16) numLastRequests <- mkParameter;
+        Parameter#(1) cacheLinesInRange <- mkParameter;
+        let m <-  mkSingleWindowTargetPrefetcher(numLastRequests, cacheLinesInRange);
+    `elsif INSTR_PREFETCHER_MULTI_WINDOW
+        Parameter#(4) numWindows <- mkParameter;
+        Parameter#(2) lines <- mkParameter;
+        let m <-  mkMultiWindowPrefetcher(numWindows, lines);
+    `elsif INSTR_PREFETCHER_MULTI_WINDOW_TARGET
+        Parameter#(4) numWindows <- mkParameter;
+        Parameter#(16) numLastRequests <- mkParameter;
+        Parameter#(16) cacheLinesInRange <- mkParameter;
+        let m <-  mkMultiWindowTargetPrefetcher(numWindows, numLastRequests, cacheLinesInRange);
+    `endif
+`else
+    let m <- mkDoNothingPrefetcher;
+`endif
+    return m;
+endmodule
+
+module mkLLIPrefetcherInL1I(Prefetcher);
+`ifdef INSTR_PREFETCHER_IN_L1LL
+    `ifdef INSTR_PREFETCHER_NEXT_LINE_ON_ALL
+        Parameter#(1) lines <- mkParameter;
+        let m <-  mkNextLineOnAllPrefetcher(lines);
+    `elsif INSTR_PREFETCHER_NEXT_LINE_ON_MISS
+        Parameter#(1) lines <- mkParameter;
+        let m <-  mkNextLineOnMissPrefetcher(lines);
+    `elsif INSTR_PREFETCHER_SINGLE_WINDOW
+        Parameter#(3) lines <- mkParameter;
+        let m <-  mkSingleWindowL1LLPrefetcher(lines);
+    `elsif INSTR_PREFETCHER_SINGLE_WINDOW_TARGET
+        Parameter#(16) numLastRequests <- mkParameter;
+        Parameter#(1) cacheLinesInRange <- mkParameter;
+        let m <-  mkSingleWindowTargetPrefetcher(numLastRequests, cacheLinesInRange);
+    `elsif INSTR_PREFETCHER_MULTI_WINDOW
+        Parameter#(4) numWindows <- mkParameter;
+        Parameter#(2) lines <- mkParameter;
+        let m <-  mkMultiWindowPrefetcher(numWindows, lines);
+    `elsif INSTR_PREFETCHER_MULTI_WINDOW_TARGET
+        Parameter#(4) numWindows <- mkParameter;
+        Parameter#(16) numLastRequests <- mkParameter;
+        Parameter#(3) cacheLinesInRange <- mkParameter;
+        let m <-  mkMultiWindowTargetPrefetcher(numWindows, numLastRequests, cacheLinesInRange);
+    `endif
+`else
+    let m <- mkDoNothingPrefetcher;
+`endif
+    return m;
+endmodule
+
+module mkLLIPrefetcher(Prefetcher);
+`ifdef INSTR_PREFETCHER_IN_LL
+    `ifdef INSTR_PREFETCHER_NEXT_LINE_ON_ALL
+        Parameter#(1) lines <- mkParameter;
+        let m <-  mkNextLineOnAllPrefetcher(lines);
+    `elsif INSTR_PREFETCHER_NEXT_LINE_ON_MISS
+        Parameter#(1) lines <- mkParameter;
+        let m <-  mkNextLineOnMissPrefetcher(lines);
+    `elsif INSTR_PREFETCHER_SINGLE_WINDOW
+        Parameter#(3) lines <- mkParameter;
+        let m <-  mkSingleWindowPrefetcher(lines);
+    `elsif INSTR_PREFETCHER_SINGLE_WINDOW_TARGET
+        Parameter#(16) numLastRequests <- mkParameter;
+        Parameter#(1) cacheLinesInRange <- mkParameter;
+        let m <-  mkSingleWindowTargetPrefetcher(numLastRequests, cacheLinesInRange);
+    `elsif INSTR_PREFETCHER_MULTI_WINDOW
+        Parameter#(4) numWindows <- mkParameter;
+        Parameter#(2) lines <- mkParameter;
+        let m <-  mkMultiWindowPrefetcher(numWindows, lines);
+    `elsif INSTR_PREFETCHER_MULTI_WINDOW_TARGET
+        Parameter#(4) numWindows <- mkParameter;
+        Parameter#(16) numLastRequests <- mkParameter;
+        Parameter#(3) cacheLinesInRange <- mkParameter;
+        let m <-  mkMultiWindowTargetPrefetcher(numWindows, numLastRequests, cacheLinesInRange);
+    `endif
+`else
+    let m <- mkDoNothingPrefetcher;
+`endif
+    return m;
+endmodule
+
+module mkL1DPrefetcher(PCPrefetcher);
+`ifdef DATA_PREFETCHER_IN_L1
+    `ifdef DATA_PREFETCHER_BLOCK
+        Parameter#(1) numLinesEachWay <- mkParameter;
+        let m <- mkPCPrefetcherAdapter(mkBlockPrefetcher(numLinesEachWay));
+    `elsif DATA_PREFETCHER_STRIDE
+        //let m <- mkStridePCPrefetcher;
+        let m <- mkStride2PCPrefetcher;
+    `elsif DATA_PREFETCHER_STRIDE_ADAPTIVE
+        Parameter#(512) strideTableSize <- mkParameter;
+        Parameter#(1) cLinesPrefetchMin <- mkParameter;
+        Parameter#(2) cLinesSmallStridePrefetchMax <- mkParameter;
+        Parameter#(4) cLinesBigStridePrefetchMax <- mkParameter;
+        let m <- mkStrideAdaptivePCPrefetcher(
+            strideTableSize, 
+            cLinesPrefetchMin, 
+            cLinesSmallStridePrefetchMax, 
+            cLinesBigStridePrefetchMax);
+    `elsif DATA_PREFETCHER_MARKOV
+        Parameter#(2) maxChainLength <- mkParameter;
+        Parameter#(2048) narrowEntries <- mkParameter;
+        Parameter#(128) wideEntries <- mkParameter;
+        let m <- mkPCPrefetcherAdapter(mkMarkovPrefetcher(maxChainLength, narrowEntries, wideEntries));
+    `elsif DATA_PREFETCHER_MARKOV_ON_HIT
+        Parameter#(1) maxChainLength <- mkParameter;
+        Parameter#(32) numLastRequestsTracked <- mkParameter;
+        let m <- mkPCPrefetcherAdapter(mkMarkovOnHitPrefetcher(maxChainLength, numLastRequestsTracked));
+    `elsif DATA_PREFETCHER_MARKOV_ON_HIT_2
+        Parameter#(1) maxChainLength <- mkParameter;
+        Parameter#(32) numLastRequestsTracked <- mkParameter;
+        let m <- mkPCPrefetcherAdapter(mkMarkovOnHit2Prefetcher(maxChainLength, numLastRequestsTracked));
+    `endif
+`else 
+    let m <- mkPCPrefetcherAdapter(mkDoNothingPrefetcher);
+`endif
+    return m;
+endmodule
+
+module mkLLDPrefetcherInL1D(PCPrefetcher);
+`ifdef DATA_PREFETCHER_IN_L1LL
+    `ifdef DATA_PREFETCHER_BLOCK
+        Parameter#(1) numLinesEachWay <- mkParameter;
+        let m <- mkPCPrefetcherAdapter(mkBlockPrefetcher(numLinesEachWay));
+    `elsif DATA_PREFETCHER_STRIDE
+        let m <- mkStride2PCPrefetcher;
+    `elsif DATA_PREFETCHER_STRIDE_ADAPTIVE
+        Parameter#(512) strideTableSize <- mkParameter;
+        Parameter#(1) cLinesPrefetchMin <- mkParameter;
+        Parameter#(2) cLinesSmallStridePrefetchMax <- mkParameter;
+        Parameter#(4) cLinesBigStridePrefetchMax <- mkParameter;
+        let m <- mkStrideAdaptivePCPrefetcher(
+            strideTableSize, 
+            cLinesPrefetchMin, 
+            cLinesSmallStridePrefetchMax, 
+            cLinesBigStridePrefetchMax);
+    `elsif DATA_PREFETCHER_MARKOV
+        Parameter#(2) maxChainLength <- mkParameter;
+        Parameter#(2048) narrowEntries <- mkParameter;
+        Parameter#(128) wideEntries <- mkParameter;
+        let m <- mkPCPrefetcherAdapter(mkMarkovPrefetcher(maxChainLength, narrowEntries, wideEntries));
+    `elsif DATA_PREFETCHER_MARKOV_ON_HIT
+        Parameter#(1) maxChainLength <- mkParameter;
+        Parameter#(32) numLastRequestsTracked <- mkParameter;
+        let m <- mkPCPrefetcherAdapter(mkMarkovOnHitPrefetcher(maxChainLength, numLastRequestsTracked));
+    `elsif DATA_PREFETCHER_MARKOV_ON_HIT_2
+        Parameter#(1) maxChainLength <- mkParameter;
+        Parameter#(32) numLastRequestsTracked <- mkParameter;
+        let m <- mkPCPrefetcherAdapter(mkMarkovOnHit2Prefetcher(maxChainLength, numLastRequestsTracked));
+    `endif
+`else 
+    let m <- mkPCPrefetcherAdapter(mkDoNothingPrefetcher);
+`endif
+    return m;
+endmodule
+
+module mkLLDPrefetcher(Prefetcher);
+`ifdef DATA_PREFETCHER_IN_LL
+    `ifdef DATA_PREFETCHER_BLOCK
+        Parameter#(1) numLinesEachWay <- mkParameter;
+        let m <- mkBlockPrefetcher(numLinesEachWay);
+    `elsif DATA_PREFETCHER_STRIDE
+        doAssert(False, "Illegal data prefetcher type for LL cache!");
+    `elsif DATA_PREFETCHER_STRIDE_ADAPTIVE
+        doAssert(False, "Illegal data prefetcher type for LL cache!");
+    `elsif DATA_PREFETCHER_MARKOV
+        Parameter#(2) maxChainLength <- mkParameter;
+        Parameter#(2048) narrowEntries <- mkParameter;
+        Parameter#(128) wideEntries <- mkParameter;
+        let m <- mkMarkovPrefetcher(maxChainLength, narrowEntries, wideEntries);
+    `elsif DATA_PREFETCHER_MARKOV_ON_HIT
+        Parameter#(1) maxChainLength <- mkParameter;
+        Parameter#(32) numLastRequestsTracked <- mkParameter;
+        let m <- mkMarkovOnHitPrefetcher(maxChainLength, numLastRequestsTracked);
+    `elsif DATA_PREFETCHER_MARKOV_ON_HIT_2
+        Parameter#(1) maxChainLength <- mkParameter;
+        Parameter#(32) numLastRequestsTracked <- mkParameter;
+        let m <- mkMarkovOnHit2Prefetcher(maxChainLength, numLastRequestsTracked);
+    `endif
+`else 
+    let m <- mkDoNothingPrefetcher;
+`endif
+    return m;
+endmodule

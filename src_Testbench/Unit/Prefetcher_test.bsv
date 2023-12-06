@@ -20,7 +20,11 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-import Prefetcher::*;
+import Prefetcher_intf::*;
+import Prefetcher_top::*;
+import MarkovPrefetchers::*;
+import StridePrefetchers::*;
+import InstructionPrefetchers::*;
 import RWBramCore::*;
 import StmtFSM::*;
 import Types::*;
