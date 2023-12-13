@@ -59,6 +59,7 @@ import CacheUtils::*;
 import Performance::*;
 import LatencyTimer::*;
 import RandomReplace::*;
+import Prefetcher_intf::*;
 import Prefetcher_top::*;
 `ifdef PERFORMANCE_MONITORING
 import PerformanceMonitor::*;

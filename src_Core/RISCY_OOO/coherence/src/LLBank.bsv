@@ -53,6 +53,7 @@ import LatencyTimer::*;
 import Cntrs::*;
 import ConfigReg::*;
 import RandomReplace::*;
+import Prefetcher_intf::*;
 import Prefetcher_top::*;
 import ProcTypes::*;
 `ifdef PERFORMANCE_MONITORING
