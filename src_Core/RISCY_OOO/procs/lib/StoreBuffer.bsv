@@ -69,6 +69,8 @@ typedef struct {
     SBByteEn byteEn;
     CLine line;
     Bit#(16) pcHash;
+    Addr boundsOffset;
+    Addr boundsLength;
 } SBEntry deriving(Bits, Eq, FShow);
 
 // result of searching (e.g. load byass)
@@ -80,7 +82,7 @@ typedef struct {
 interface StoreBuffer;
     method Bool isEmpty;
     method Maybe#(SBIndex) getEnqIndex(Addr paddr);
-    method Action enq(SBIndex idx, Addr paddr, MemDataByteEn be, MemTaggedData data, Bit#(16) pcHash);
+    method Action enq(SBIndex idx, Addr paddr, MemDataByteEn be, MemTaggedData data, Bit#(16) pcHash, Addr boundsOffset, Addr boundsWidth);
     method ActionValue#(SBEntry) deq(SBIndex idx);
     method ActionValue#(Tuple2#(SBIndex, SBEntry)) issue;
     method SBSearchRes search(Addr paddr, ByteOrTagEn be); // load bypass/stall or atomic inst stall
@@ -192,7 +194,7 @@ module mkStoreBufferEhr(StoreBuffer);
         end
     endmethod
 
-    method Action enq(SBIndex idx, Addr paddr, MemDataByteEn be, MemTaggedData d, Bit#(16) pcHash) if(inited);
+    method Action enq(SBIndex idx, Addr paddr, MemDataByteEn be, MemTaggedData d, Bit#(16) pcHash, Addr boundsOffset, Addr boundsLength) if(inited);
         // get data offset
         SBBlockMemDataSel sel = getSBBlockMemDataSel(paddr);
         // check whether the entry already exists
@@ -213,7 +215,9 @@ module mkStoreBufferEhr(StoreBuffer);
                 addr: getSBBlockAddr(paddr),
                 byteEn: unpack(pack(byteEn)),
                 line: block,
-                pcHash: pcHash
+                pcHash: pcHash,
+                boundsOffset: boundsOffset,
+                boundsLength: boundsLength
             };
             // this entry must have been sent to issueQ
         end
@@ -231,7 +235,9 @@ module mkStoreBufferEhr(StoreBuffer);
                 addr: getSBBlockAddr(paddr),
                 byteEn: unpack(pack(byteEn)),
                 line: block,
-                pcHash: pcHash
+                pcHash: pcHash,
+                boundsOffset: boundsOffset,
+                boundsLength: boundsLength
             };
             // send this entry to issueQ
             doAssert(issueQ.notFull, "SB issueQ should not be full");
@@ -314,7 +320,7 @@ endmodule
 module mkDummyStoreBuffer(StoreBuffer);
     method Bool isEmpty = True;
     method Maybe#(SBIndex) getEnqIndex(Addr paddr) = Invalid;
-    method Action enq(SBIndex idx, Addr paddr, MemDataByteEn be, MemTaggedData data, Bit#(16) pcHash);
+    method Action enq(SBIndex idx, Addr paddr, MemDataByteEn be, MemTaggedData data, Bit#(16) pcHash, Addr boundsOffset, Addr boundsWidth);
         doAssert(False, "enq should never be called)");
     endmethod
     method ActionValue#(SBEntry) deq(SBIndex idx);

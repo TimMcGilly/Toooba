@@ -1187,7 +1187,7 @@ module mkCore#(CoreId coreId)(Core);
 
      EventsCore core_evts = unpack(pack(coreFix.memExeIfc.events) | pack(hpm_core_events[0]));
      EventsL1I imem_evts = unpack(pack(iMem.events) | pack(iTlb.events));
-     EventsL1D dmem_evts = unpack(pack(dMem.events) | pack(dTlb.events));
+     EventsL1D dmem_evts = unpack(pack(dMem.events) /*| pack(dTlb.events)*/ );
      EventsTGC tgc_evts = events_tgc_reg;
      EventsLL llmem_evts = unpack(pack(events_llc_reg) | pack(l2Tlb.events));
      Maybe#(EventsTransExe) mab_trans_exe = tagged Invalid;

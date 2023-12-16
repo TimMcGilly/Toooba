@@ -223,7 +223,7 @@ module mkL1Bank#(
 `ifdef PERFORMANCE_MONITORING
     Array #(Reg #(EventsL1D)) perf_events <- mkDRegOR (2, unpack (0));
 `endif
-function Action incrReqCnt(MemOp op);
+function Action incrReqCnt(MemOp op, Addr boundsOffset, Addr boundsLength);
 action
 `ifdef PERF_COUNT
     if(doStats) begin
@@ -237,8 +237,13 @@ action
 `ifdef PERFORMANCE_MONITORING
     EventsL1D events = unpack (0);
     case(op)
-        Ld: events.evt_LD = 1;
-        St: events.evt_ST = 1;
+        Ld: begin 
+            events.evt_LD = 1;
+            if (boundsLength > 16) events.evt_TLB = 1;
+            if (boundsLength > 64) events.evt_TLB_MISS = 1;
+            if (boundsLength == ~0) events.evt_TLB_MISS_LAT = 1;
+        end
+        St: begin end//events.evt_ST = 1;
         Lr, Sc, Amo: events.evt_AMO = 1;
     endcase
     perf_events[0] <= events;
@@ -247,7 +252,7 @@ action
 endaction
 endfunction
 
-function Action incrMissCnt(MemOp op, cRqIdxT idx);
+function Action incrMissCnt(MemOp op, cRqIdxT idx, Addr boundsOffset, Addr boundsLength);
 action
     let lat <- latTimer.done(idx);
 `ifdef PERF_COUNT
@@ -272,12 +277,14 @@ action
     EventsL1D events = unpack (0);
     case(op)
         Ld: begin
-            events.evt_LD_MISS_LAT = saturating_truncate(lat);
+            //events.evt_LD_MISS_LAT = saturating_truncate(lat);
+            if (boundsLength > 16) events.evt_LD_MISS_LAT = 1;
+            if (boundsLength > 64) events.evt_ST_MISS = 1;
             events.evt_LD_MISS = 1;
         end
         St: begin
             events.evt_ST_MISS_LAT = saturating_truncate(lat);
-            events.evt_ST_MISS = 1;
+            //events.evt_ST_MISS = 1;
         end
         Lr, Sc, Amo: begin
             events.evt_AMO_MISS_LAT = saturating_truncate(lat);
@@ -328,7 +335,7 @@ endfunction
         }));
         cRqIsPrefetch[n] <= False;
         // performance counter: cRq type
-        incrReqCnt(r.op);
+        incrReqCnt(r.op, r.boundsOffset, r.boundsLength);
        if (verbose)
         $display("%t L1 %m cRqTransfer_new: ", $time,
             fshow(n), " ; ",
@@ -379,7 +386,9 @@ endfunction
             data: ?,
             amoInst: ?,
             loadTags: ?,
-            pcHash: ?
+            pcHash: ?,
+            boundsOffset: ?,
+            boundsLength: ?
         };
         cRqIdxT n <- cRqMshr.cRqTransfer.getEmptyEntryInit(r);
         // send to pipeline
@@ -967,7 +976,7 @@ endfunction
             cRqHit(cOwner, procRq);
             // performance counter: miss cRq
             if (!cRqIsPrefetch[cOwner]) begin
-                incrMissCnt(procRq.op, cOwner);
+                incrMissCnt(procRq.op, cOwner, procRq.boundsOffset, procRq.boundsLength);
             end
         end
         else begin

@@ -161,6 +161,25 @@ typedef struct {
     MemTaggedData shiftedData;
 } WaitStResp deriving(Bits, Eq, FShow);
 
+typedef struct {
+    LdQTag tag;
+    Addr paddr;
+    Bool loadTags;
+    Bit#(16) pcHash;
+    Addr boundsOffset;
+    Addr boundsLength;
+} ReqLdQEntry deriving (Bits, Eq, FShow);
+
+typedef struct {
+    Addr paddr;
+    Bit#(16) pcHash;
+    Addr boundsOffset;
+    Addr boundsLength;
+`ifndef TSO_MM
+    SBIndex sbIdx;
+`endif
+} ReqStQEntry deriving (Bits, Eq, FShow);
+
 //SpecFifo#(2,IncorrectSpec,1,1) incorrectSpec_ff <- mkSpecFifoCF(True);
 // synthesized pipeline fifos
 typedef SpecFifo_SB_deq_enq_C_deq_enq#(1, MemDispatchToRegRead) MemDispToRegFifo;
@@ -347,13 +366,9 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
     Fifo#(1, WaitStResp) waitStRespQ <- mkCFFifo;
 `endif
     // fifo for req mem
-    Fifo#(1, Tuple4#(LdQTag, Addr, Bool, Bit#(16))) reqLdQ <- mkBypassFifo;
+    Fifo#(1, ReqLdQEntry) reqLdQ <- mkBypassFifo;
     Fifo#(1, ProcRq#(DProcReqId)) reqLrScAmoQ <- mkBypassFifo;
-`ifdef TSO_MM
-    Fifo#(1, Tuple2#(Addr, Bit#(16))) reqStQ <- mkBypassFifo;
-`else
-    Fifo#(1, Tuple3#(SBIndex, Addr, Bit#(16))) reqStQ <- mkBypassFifo;
-`endif
+    Fifo#(1, ReqStQEntry) reqStQ <- mkBypassFifo;
     // fifo for load result
     Fifo#(2, Tuple2#(LdQTag, MemResp)) forwardQ <- mkCFFifo;
     Fifo#(2, Tuple2#(LdQTag, MemResp)) memRespLdQ <- mkCFFifo;
@@ -754,9 +769,11 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
         $display("KONATAS\t%0d\t%0d\t0\tMem4", cur_cycle, x.u_id);
         $fflush;
 `endif
+        Addr boundsOffset = getOffset(x.vaddr);
+        Addr boundsLength = saturating_truncate(getLength(x.vaddr));
         // update LSQ
         LSQUpdateAddrResult updRes <- lsq.updateAddr(
-            x.ldstq_tag, cause, x.allowCapLoad && allowCapPTE, paddr, isMMIO, x.shiftedBE
+            x.ldstq_tag, cause, x.allowCapLoad && allowCapPTE, paddr, isMMIO, x.shiftedBE, boundsOffset, boundsLength
         );
 
         // issue non-MMIO Ld which has no exception and is not waiting for
@@ -775,7 +792,9 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
                 tag: ldTag,
                 paddr: paddr,
                 shiftedBE: x.shiftedBE,
-                pcHash: hash(getAddr(pc))
+                pcHash: hash(getAddr(pc)),
+                boundsOffset: boundsOffset,
+                boundsLength: boundsLength
             });
         end
 
@@ -831,7 +850,9 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
 `endif
         end
         else if(issRes == ToCache) begin
-            reqLdQ.enq(tuple4(zeroExtend(info.tag), info.paddr, info.shiftedBE == TagMemAccess, info.pcHash));
+            reqLdQ.enq(ReqLdQEntry {tag: zeroExtend(info.tag), paddr: info.paddr, 
+                loadTags: info.shiftedBE == TagMemAccess, pcHash: info.pcHash,
+                boundsOffset: info.boundsOffset, boundsLength: info.boundsLength});
             // perf: load mem latency
             ldMemLatTimer.start(info.tag);
         end
@@ -1007,7 +1028,9 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
             data: ?,
             amoInst: ?,
             loadTags: False,
-            pcHash: ?
+            pcHash: ?,
+            boundsOffset: ?,
+            boundsLength: ?
         };
         reqLrScAmoQ.enq(req);
         if(verbose) $display("[doDeqLdQ_Lr_issue] ", fshow(lsqDeqLd), "; ", fshow(req));
@@ -1224,7 +1247,8 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
     );
         // send to mem
         Addr addr = lsqDeqSt.paddr;
-        reqStQ.enq(tuple2(addr, lsqDeqSt.pcHash));
+        reqStQ.enq(ReqStQEntry{paddr: addr, pcHash: lsqDeqSt.pcHash, 
+            boundsOffset: lsqDeqSt.boundsOffset, boundsLength: lsqDeqSt.boundsLength});
         // record waiting for store resp
         waitStRespQ.enq(WaitStResp {
             offset: getLineMemDataOffset(addr),
@@ -1248,7 +1272,7 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
     );
         lsq.deqSt;
         // send to SB
-        stb.enq(sbIdx, lsqDeqSt.paddr, lsqDeqSt.shiftedBE, lsqDeqSt.stData, lsqDeqSt.pcHash);
+        stb.enq(sbIdx, lsqDeqSt.paddr, lsqDeqSt.shiftedBE, lsqDeqSt.stData, lsqDeqSt.pcHash, lsqDeqSt.boundsOffset, lsqDeqSt.boundsLength);
         // ROB should have already been set to executed
         if(verbose) $display("[doDeqStQ_St] ", fshow(lsqDeqSt));
         // normal store should not have .rl, so no need to check SB empty
@@ -1258,7 +1282,8 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
     // send store to mem
     rule doIssueSB;
         let {sbIdx, en} <- stb.issue;
-        reqStQ.enq(tuple3(sbIdx, {en.addr, 0}, en.pcHash));
+        reqStQ.enq(ReqStQEntry(sbIdx: sbIdx, paddr: {en.addr, 0}, pcHash: en.pcHash, 
+            boundsOffset: en.boundsOffset, boundsLength: en.boundsLength));
         // perf: store mem latency
         stMemLatTimer.start(sbIdx);
     endrule
@@ -1353,7 +1378,9 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
                 rl: lsqDeqSt.rel
             },
             loadTags: False,
-            pcHash: ?
+            pcHash: ?,
+            boundsOffset: ?,
+            boundsLength: ?
         };
         reqLrScAmoQ.enq(req);
         if(verbose) $display("[doDeqStQ_ScAmo_issue] ", fshow(lsqDeqSt), "; ", fshow(req));
@@ -1567,38 +1594,42 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
 
     // send req to D$
     rule sendLdToMem;
-        let {lsqTag, addr, loadTags, pcHash} <- toGet(reqLdQ).get;
+        ReqLdQEntry rq <- toGet(reqLdQ).get;
         dMem.procReq.req(ProcRq {
-            id: zeroExtend(lsqTag),
-            addr: addr,
-            toState: loadTags ? T : (multicore ? S : E), // in case of single core, just fetch to E
+            id: zeroExtend(rq.tag),
+            addr: rq.paddr,
+            toState: rq.loadTags ? T : (multicore ? S : E), // in case of single core, just fetch to E
             op: Ld,
             byteEn: ?,
             data: ?,
             amoInst: ?,
-            loadTags: loadTags,
-            pcHash: pcHash
+            loadTags: rq.loadTags,
+            pcHash: rq.pcHash,
+            boundsOffset: rq.boundsOffset,
+            boundsLength: rq.boundsLength
         });
     endrule
     (* descending_urgency = "sendLdToMem, sendStToMem" *) // prioritize Ld over St
     rule sendStToMem;
 `ifdef TSO_MM
-        let {addr, pcHash} <- toGet(reqStQ).get;
+        let rq <- toGet(reqStQ).get;
         DProcReqId id = 0;
 `else
-        let {sbIdx, addr, pcHash} <- toGet(reqStQ).get;
-        DProcReqId id = zeroExtend(sbIdx);
+        let rq <- toGet(reqStQ).get;
+        DProcReqId id = zeroExtend(rq.sbIdx);
 `endif
         dMem.procReq.req(ProcRq {
             id: id,
-            addr: addr,
+            addr: rq.paddr,
             toState: M,
             op: St,
             byteEn: ?,
             data: ?,
             amoInst: ?,
             loadTags: False,
-            pcHash: pcHash
+            pcHash: rq.pcHash,
+            boundsOffset: rq.boundsOffset,
+            boundsLength: rq.boundsLength
         });
     endrule
     (* descending_urgency = "sendLrScAmoToMem, sendStToMem" *) // prioritize Lr/Sc/Amo over St
