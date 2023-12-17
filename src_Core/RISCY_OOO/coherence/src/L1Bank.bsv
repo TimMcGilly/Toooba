@@ -239,9 +239,9 @@ action
     case(op)
         Ld: begin 
             events.evt_LD = 1;
-            if (boundsLength > 16) events.evt_TLB = 1;
-            if (boundsLength > 64) events.evt_TLB_MISS = 1;
-            if (boundsLength == ~0) events.evt_TLB_MISS_LAT = 1;
+            if (boundsLength >= 128) events.evt_TLB = 1;
+            if (boundsLength >= 512) events.evt_TLB_MISS = 1;
+            if (boundsLength >= 2048) events.evt_TLB_MISS_LAT = 1;
         end
         St: begin end//events.evt_ST = 1;
         Lr, Sc, Amo: events.evt_AMO = 1;
@@ -278,8 +278,9 @@ action
     case(op)
         Ld: begin
             //events.evt_LD_MISS_LAT = saturating_truncate(lat);
-            if (boundsLength > 16) events.evt_LD_MISS_LAT = 1;
-            if (boundsLength > 64) events.evt_ST_MISS = 1;
+            if (boundsLength >= 128) events.evt_LD_MISS_LAT = 1;
+            if (boundsLength >= 512) events.evt_ST_MISS = 1;
+            if (boundsLength >= 2048) events.evt_ST = 1;
             events.evt_LD_MISS = 1;
         end
         St: begin
@@ -514,7 +515,10 @@ endfunction
             canUpToE: True,
             id: 0,
             child: ?,
-            isPrefetchRq: True
+            isPrefetchRq: True,
+            boundsOffset: ?,
+            boundsLength: ?
+
         };
         rqToPQ.enq(cRqToP);
         if (verbose)
@@ -534,7 +538,9 @@ endfunction
             canUpToE: True,
             id: slot.way,
             child: ?,
-            isPrefetchRq: False
+            isPrefetchRq: False,
+            boundsOffset: req.boundsOffset,
+            boundsLength: req.boundsLength
         };
         rqToPQ.enq(cRqToP);
        if (verbose)

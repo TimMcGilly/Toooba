@@ -262,7 +262,7 @@ module mkLLBank#(
 `ifdef PERFORMANCE_MONITORING
     Array #(Reg #(EventsLL)) perf_events <- mkDRegOR (2, unpack (0));
 `endif
-function Action incrMissCnt(cRqIndexT idx, Bool isDma, Bool isInstructionAccess);
+function Action incrMissCnt(cRqT cRq, cRqIndexT idx, Bool isDma, Bool isInstructionAccess);
 action
     let lat <- latTimer.done(idx);
 `ifdef PERF_COUNT
@@ -283,8 +283,14 @@ action
 `endif
 `ifdef PERFORMANCE_MONITORING
     EventsLL events = unpack (0);
-    events.evt_LD_MISS_LAT = saturating_truncate(lat); // Don't support seperate DMA counts.
-    events.evt_LD_MISS = 1;
+    if ((cRq.toState == S || cRq.toState == E) && !isInstructionAccess && !isDma) begin
+        if (cRq.boundsLength >= 64) events.evt_LD_MISS_LAT = 1; 
+        if (cRq.boundsLength >= 128) events.evt_ST = 1; //saturating_truncate(lat); // Don't support seperate DMA counts.
+        if (cRq.boundsLength >= 512) events.evt_ST_MISS = 1; 
+        if (cRq.boundsLength >= 2048) events.evt_TLB = 1; 
+        if (cRq.boundsLength >= 4096) events.evt_TLB_MISS = 1; 
+        events.evt_LD_MISS = 1;
+    end
     perf_events[1] <= events;
 `endif
 endaction
@@ -400,7 +406,9 @@ endfunction
             canUpToE: r.canUpToE,
             child: r.child,
             byteEn: ?,
-            id: Child (r.id)
+            id: Child (r.id),
+            boundsOffset: r.boundsOffset,
+            boundsLength: r.boundsLength
         };
         // setup new MSHR entry
         cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, Invalid);
@@ -434,7 +442,9 @@ endfunction
             canUpToE: True,
             child: child,
             byteEn: ?,
-            id: Child (?)
+            id: Child (?),
+            boundsOffset: ?,
+            boundsLength: ?
         };
         // setup new MSHR entry
         cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, Invalid);
@@ -467,7 +477,9 @@ endfunction
             canUpToE: True,
             child: child,
             byteEn: ?,
-            id: Child (?)
+            id: Child (?),
+            boundsOffset: ?,
+            boundsLength: ?
         };
         // setup new MSHR entry
         cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, Invalid);
@@ -499,7 +511,9 @@ endfunction
             canUpToE: r.canUpToE,
             child: r.child,
             byteEn: ?,
-            id: Child (r.id)
+            id: Child (r.id),
+            boundsOffset: r.boundsOffset,
+            boundsLength: r.boundsLength
         };
         if(!cRqMshr.transfer.hasEmptyEntry(cRq)) begin
             mshrBlocks.incr(1);
@@ -519,7 +533,9 @@ endfunction
             canUpToE: False, // DMA should not go to E
             child: ?,
             byteEn: r.byteEn,
-            id: Dma (r.id)
+            id: Dma (r.id),
+            boundsOffset: ?,
+            boundsLength: ?
         };
         // setup new MSHR entry and data
         cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, write ? Valid (r.data) : Invalid);
@@ -563,7 +579,9 @@ endfunction
             canUpToE: False,
             child: ?,
             byteEn: r.byteEn,
-            id: Dma (r.id)
+            id: Dma (r.id),
+            boundsOffset: ?,
+            boundsLength: ?
         };
         if(!cRqMshr.transfer.hasEmptyEntry(cRq)) begin
             mshrBlocks.incr(1);
@@ -631,7 +649,7 @@ endfunction
         // performance counter: normal miss lat and cnt
         // Check lowest bit of child ID to determine if this was an ICache access
         if (!cRqIsPrefetch[n]) begin
-            incrMissCnt(n, False, cRq.child[0] == 1);
+            incrMissCnt(cRq, n, False, cRq.child[0] == 1);
         end
     endrule
 
@@ -645,7 +663,7 @@ endfunction
         cRqMshr.mRsDeq.setData(mRs.id.mshrIdx, Valid (mRs.data));
         rsLdToDmaIndexQ_mRsDeq.enq(mRs.id.mshrIdx);
         // performance counter: dma miss lat and cnt
-        incrMissCnt(mRs.id.mshrIdx, True, False);
+        //incrMissCnt(mRs.id.mshrIdx, True, False);
     endrule
 
     // send rd/wr to mem

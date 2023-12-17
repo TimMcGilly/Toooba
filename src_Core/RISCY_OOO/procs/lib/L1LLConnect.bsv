@@ -46,7 +46,9 @@ module mkL1LLConnect#(
                 canUpToE: r.canUpToE,
                 id: r.id,
                 child: child,
-                isPrefetchRq: r.isPrefetchRq
+                isPrefetchRq: r.isPrefetchRq,
+                boundsOffset: r.boundsOffset,
+                boundsLength: r.boundsLength
             }
         };
     endfunction
