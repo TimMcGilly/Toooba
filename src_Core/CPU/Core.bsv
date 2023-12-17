@@ -1190,10 +1190,10 @@ module mkCore#(CoreId coreId)(Core);
      EventsL1D dmem_evts = unpack(pack(dMem.events) /*| pack(dTlb.events)*/ );
      EventsTGC tgc_evts = events_tgc_reg;
      EventsLL llmem_evts = unpack(pack(events_llc_reg) /*| pack(l2Tlb.events)*/);
-     tgc_evts.evt_READ = llmem_evts.evt_ST;
-     tgc_evts.evt_READ_MISS = llmem_evts.evt_ST_MISS;
-     tgc_evts.evt_WRITE = llmem_evts.evt_TLB;
-     tgc_evts.evt_WRITE_MISS = llmem_evts.evt_TLB_MISS;
+     tgc_evts.evt_WRITE = llmem_evts.evt_ST;
+     tgc_evts.evt_WRITE_MISS = llmem_evts.evt_ST_MISS;
+     tgc_evts.evt_READ = llmem_evts.evt_TLB;
+     tgc_evts.evt_READ_MISS = llmem_evts.evt_TLB_MISS;
      Maybe#(EventsTransExe) mab_trans_exe = tagged Invalid;
 
 

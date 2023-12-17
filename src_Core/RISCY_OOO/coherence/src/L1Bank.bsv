@@ -221,7 +221,7 @@ module mkL1Bank#(
     Count#(Data) amoMissLat <- mkCount(0);
 `endif
 `ifdef PERFORMANCE_MONITORING
-    Array #(Reg #(EventsL1D)) perf_events <- mkDRegOR (2, unpack (0));
+    Array #(Reg #(EventsL1D)) perf_events <- mkDRegOR (3, unpack (0));
 `endif
 function Action incrReqCnt(MemOp op, Addr boundsOffset, Addr boundsLength);
 action
@@ -239,9 +239,9 @@ action
     case(op)
         Ld: begin 
             events.evt_LD = 1;
-            if (boundsLength >= 128) events.evt_TLB = 1;
-            if (boundsLength >= 512) events.evt_TLB_MISS = 1;
-            if (boundsLength >= 2048) events.evt_TLB_MISS_LAT = 1;
+            if (boundsLength >= 4096) events.evt_TLB = 1;
+            if (boundsLength >= 8192) events.evt_TLB_MISS = 1;
+            //if (boundsLength >= 16384) events.evt_TLB_MISS_LAT = 1;
         end
         St: begin end//events.evt_ST = 1;
         Lr, Sc, Amo: events.evt_AMO = 1;
@@ -278,9 +278,9 @@ action
     case(op)
         Ld: begin
             //events.evt_LD_MISS_LAT = saturating_truncate(lat);
-            if (boundsLength >= 128) events.evt_LD_MISS_LAT = 1;
-            if (boundsLength >= 512) events.evt_ST_MISS = 1;
-            if (boundsLength >= 2048) events.evt_ST = 1;
+            if (boundsLength >= 4096) events.evt_LD_MISS_LAT = 1;
+            if (boundsLength >= 8192) events.evt_ST_MISS = 1;
+            //if (boundsLength >= 2048) events.evt_ST = 1;
             events.evt_LD_MISS = 1;
         end
         St: begin
@@ -295,6 +295,16 @@ action
     perf_events[1] <= events;
 `endif
     noAction;
+endaction
+endfunction
+
+function Action incrTagCnt(UInt#(8) numTags);
+action
+    if (verbose) $display("%t L1Bank hit num tags: %d", $time, numTags);
+    EventsL1D events = unpack(0);
+    events.evt_ST = pack(numTags);
+    events.evt_TLB_MISS_LAT = 1;
+    perf_events[2] <= events;
 endaction
 endfunction
 
@@ -600,6 +610,8 @@ endfunction
                     if (req.loadTags) begin
                         procResp.respLd(req.id, getTagsAt(curLine));
                     end else begin
+                        if (verbose) $display("%t L1Bank hit tags: ", $time, fshow(curLine.tag));
+                        incrTagCnt(extend(countElem(True, curLine.tag)));
                         procResp.respLd(req.id, getTaggedDataAt(curLine, dataSel));
                     end
                 end
