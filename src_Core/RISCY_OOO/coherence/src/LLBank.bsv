@@ -283,7 +283,7 @@ action
 `endif
 `ifdef PERFORMANCE_MONITORING
     EventsLL events = unpack (0);
-    if ((cRq.toState == S || cRq.toState == E) && !isInstructionAccess && !isDma) begin
+    if (!isInstructionAccess && !isDma) begin
         if (cRq.boundsLength >= 64) events.evt_LD_MISS_LAT = 1; 
         if (cRq.boundsLength >= 128) events.evt_ST = 1; //saturating_truncate(lat); // Don't support seperate DMA counts.
         if (cRq.boundsLength >= 512) events.evt_ST_MISS = 1; 
@@ -763,7 +763,7 @@ endfunction
                 doLdAfterReplace <= True;
 `ifdef PERFORMANCE_MONITORING
                 EventsLL events = unpack (0);
-                events.evt_ST_MISS = 1;
+                //events.evt_ST_MISS = 1;
                 perf_events[0] <= events;
 `endif
                if (verbose)
