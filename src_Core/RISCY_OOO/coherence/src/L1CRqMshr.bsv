@@ -38,6 +38,7 @@ import Vector::*;
 import GetPut::*;
 import RegFile::*;
 import FIFO::*;
+import FIFOF::*;
 import FShow::*;
 import Types::*;
 import CCTypes::*;
@@ -178,6 +179,8 @@ interface L1CRqMshr#(
     // port for security flush
     method Bool emptyForFlush;
 
+    method Bool isFull;
+
     // detect deadlock: only in use when macro CHECK_DEADLOCK is defined
     interface Get#(L1CRqMshrStuck#(reqT)) stuck;
 endinterface
@@ -222,7 +225,7 @@ module mkL1CRqMshrSafe#(
     // successor MSHR index
     RegFile#(cRqIndexT, cRqIndexT) succFile <- mkRegFile(0, fromInteger(valueOf(cRqNum) - 1));
     // empty entry FIFO
-    FIFO#(cRqIndexT) emptyEntryQ <- mkSizedFIFO(valueOf(cRqNum));
+    FIFOF#(cRqIndexT) emptyEntryQ <- mkSizedFIFOF(valueOf(cRqNum));
 
     // empty entry FIFO needs initialization
     Reg#(Bool) inited <- mkReg(False);
@@ -370,6 +373,10 @@ module mkL1CRqMshrSafe#(
         function Bool isEmpty(Integer i) = stateVec[i][flush_port] == Empty;
         Vector#(cRqNum, Integer) idxVec = genVector;
         return all(isEmpty, idxVec);
+    endmethod
+
+    method Bool isFull;
+        return !emptyEntryQ.notEmpty;
     endmethod
 
 `ifdef CHECK_DEADLOCK

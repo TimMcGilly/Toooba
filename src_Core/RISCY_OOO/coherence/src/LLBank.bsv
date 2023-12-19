@@ -284,11 +284,11 @@ action
 `ifdef PERFORMANCE_MONITORING
     EventsLL events = unpack (0);
     if (!isInstructionAccess && !isDma) begin
-        if (cRq.boundsLength >= 64) events.evt_LD_MISS_LAT = 1; 
-        if (cRq.boundsLength >= 128) events.evt_ST = 1; //saturating_truncate(lat); // Don't support seperate DMA counts.
-        if (cRq.boundsLength >= 512) events.evt_ST_MISS = 1; 
-        if (cRq.boundsLength >= 2048) events.evt_TLB = 1; 
-        if (cRq.boundsLength >= 4096) events.evt_TLB_MISS = 1; 
+        if (cRq.boundsLength >= 16384) events.evt_LD_MISS_LAT = 1; 
+        if (cRq.boundsLength >= 65536) events.evt_ST = 1; //saturating_truncate(lat); // Don't support seperate DMA counts.
+        if (cRq.boundsLength >= 131072) events.evt_ST_MISS = 1; 
+        if (cRq.boundsLength >= 524288) events.evt_TLB = 1; 
+        if (cRq.boundsLength >= 1048576) events.evt_TLB_MISS = 1; 
         events.evt_LD_MISS = 1;
     end
     perf_events[1] <= events;

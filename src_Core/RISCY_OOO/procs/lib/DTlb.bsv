@@ -259,7 +259,7 @@ module mkDTlb#(
         if(verbose) $display("[DTLB] flush begin");
 `ifdef PERFORMANCE_MONITORING
         EventsL1D ev = unpack(0);
-        ev.evt_TLB_FLUSH = 1;
+        //ev.evt_TLB_FLUSH = 1;
         perf_events[2] <= ev;
 `endif
     endrule
@@ -371,8 +371,8 @@ module mkDTlb#(
 `endif
 `ifdef PERFORMANCE_MONITORING
         EventsL1D ev = unpack(0);
-        ev.evt_TLB_MISS_LAT = saturating_truncate(lat);
-        ev.evt_TLB_MISS = 1;
+        //ev.evt_TLB_MISS_LAT = saturating_truncate(lat);
+        //ev.evt_TLB_MISS = 1;
         perf_events[0] <= ev;
 `endif
         // conflict with wrong spec
@@ -503,7 +503,10 @@ module mkDTlb#(
                     // translate addr
                     `ifdef PERFORMANCE_MONITORING
                             EventsL1D ev = unpack(0);
-                            if (entry.level == 0) ev.evt_TLB = 1;
+                            ev.evt_TLB = 1;
+                            if (entry.level == 0) ev.evt_TLB_MISS = 1;
+                            if (entry.level == 1) ev.evt_TLB_MISS_LAT = 1;
+                            if (entry.level == 2) ev.evt_TLB_FLUSH = 1;
                             perf_events[1] <= ev;
                     `endif
                     Addr trans_addr = translate(r.addr, entry.ppn, entry.level);

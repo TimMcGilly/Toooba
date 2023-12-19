@@ -239,10 +239,8 @@ action
     case(op)
         Ld: begin 
             events.evt_LD = 1;
-            if (boundsLength >= 32768) events.evt_EVICT = 1;
-            if (boundsLength >= 131072) events.evt_TLB_MISS = 1;
-            if (boundsLength >= 524288) events.evt_AMO = 1;
-            //if (boundsLength >= 16384) events.evt_TLB_MISS_LAT = 1;
+            if (boundsLength >= 524288) events.evt_EVICT = 1;
+            if (boundsLength >= 2097152) events.evt_AMO = 1;
         end
         St: begin end//events.evt_ST = 1;
         Lr, Sc, Amo: begin end//events.evt_AMO = 1;
@@ -279,10 +277,8 @@ action
     case(op)
         Ld: begin
             //events.evt_LD_MISS_LAT = saturating_truncate(lat);
-            if (boundsLength >= 32768) events.evt_LD_MISS_LAT = 1;
-            if (boundsLength >= 131072) events.evt_ST_MISS = 1;
-            if (boundsLength >= 524288) events.evt_TLB_FLUSH = 1;
-            //if (boundsLength >= 2048) events.evt_ST = 1;
+            if (boundsLength >= 524288) events.evt_LD_MISS_LAT = 1;
+            if (boundsLength >= 2097152) events.evt_ST_MISS = 1;
             events.evt_LD_MISS = 1;
         end
         St: begin
@@ -303,15 +299,22 @@ endfunction
 function Action incrTagCnt(UInt#(8) numTags);
 action
     if (verbose) $display("%t L1Bank hit num tags: %d", $time, numTags);
-    EventsL1D events = unpack(0);
-    if (numTags >= 1) events.evt_ST = 1;
-    if (numTags >= 2) events.evt_TLB_MISS_LAT = 1;
-    if (numTags >= 3) events.evt_AMO_MISS = 1;
-    if (numTags >= 4) events.evt_AMO_MISS_LAT = 1;
-    perf_events[2] <= events;
+    //EventsL1D events = unpack(0);
+    //if (numTags >= 1) events.evt_ST = 1;
+    //if (numTags >= 2) events.evt_TLB_MISS_LAT = 1;
+    //if (numTags >= 3) events.evt_AMO_MISS = 1;
+    //if (numTags >= 4) events.evt_AMO_MISS_LAT = 1;
+    //perf_events[2] <= events;
 endaction
 endfunction
 
+    rule checkIfMshrFull;
+        if (cRqMshr.isFull)  begin
+            EventsL1D events = unpack(0);
+            events.evt_ST = 1;
+            perf_events[2] <= events;
+        end
+    endrule
 
     function tagT getTag(Addr a) = truncateLSB(a);
 
