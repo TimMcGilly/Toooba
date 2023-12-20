@@ -582,9 +582,10 @@ module mkPatternTable(PatternTable#(numEntries, inputFifoSize)) provisos
 endmodule
 //TODO add overflow fifos!
 
-interface PrefetchFilter;
+interface PrefetchFilter#(numeric type numEntries, numeric type pfCounterBits, 
+    numeric type queueSize);
     method Action canPrefetchReq(LineAddr addr);
-    method ActionValue#(Bool) canPrefetchResp();
+    method ActionValue#(Tuple2#(Bool, LineAddr)) canPrefetchResp();
     method Action reportAccess(LineAddr addr, HitOrMiss hitMiss); 
     method Prob getCurrAlpha();
 endinterface
@@ -595,8 +596,7 @@ typedef struct {
     Bool valid;
 } FilterEntry#(type tagT) deriving (Bits, FShow);
 
-module mkPrefetchFilter#(Parameter#(numEntries) _, Parameter#(pfCounterBits) __, 
-    Parameter#(queueSize) ___)(PrefetchFilter) provisos
+module mkPrefetchFilter(PrefetchFilter#(numEntries, pfCounterBits, queueSize)) provisos
     (
     NumAlias#(idxBits, TLog#(numEntries)),
     Alias#(tableIdxT, Bit#(idxBits)),
@@ -613,7 +613,7 @@ module mkPrefetchFilter#(Parameter#(numEntries) _, Parameter#(pfCounterBits) __,
     Reg#(countT) pfUseful <- mkReg(0);
     Reg#(Prob) currAlpha <- mkReg(7'b1111111);
 
-    Fifo#(1, Tuple2#(tagT, tableIdxT)) pfReqFifo_afterRead <- mkPipelineFifo;
+    Fifo#(1, LineAddr) pfReqFifo_afterRead <- mkPipelineFifo;
     Fifo#(queueSize, LineAddr) pfReqFifo <- mkOverflowBypassFifo;
 
     Fifo#(1, Tuple3#(tagT, tableIdxT, HitOrMiss)) reportFifo_afterRead <- mkPipelineFifo;
@@ -633,7 +633,7 @@ module mkPrefetchFilter#(Parameter#(numEntries) _, Parameter#(pfCounterBits) __,
         let addr = pfReqFifo.first;
         tableIdxT idx = truncate(addr);
         tagT tag = addr[valueOf(idxBits)+6-1:valueOf(idxBits)];
-        pfReqFifo_afterRead.enq(tuple2(tag, idx));
+        pfReqFifo_afterRead.enq(addr);
         filterTable.rdReq(idx);
     endrule
 
@@ -685,14 +685,16 @@ module mkPrefetchFilter#(Parameter#(numEntries) _, Parameter#(pfCounterBits) __,
         pfReqFifo.enq(addr);
     endmethod
 
-    method ActionValue#(Bool) canPrefetchResp;
+    method ActionValue#(Tuple2#(Bool, LineAddr)) canPrefetchResp;
         filterEntryT entry = filterTable.rdResp;
         filterTable.deqRdResp;
         pfReqFifo_afterRead.deq;
-        let {tag, idx} = pfReqFifo_afterRead.first;
+        let addr = pfReqFifo_afterRead.first;
+        tableIdxT idx = truncate(addr);
+        tagT tag = addr[valueOf(idxBits)+6-1:valueOf(idxBits)];
         if (entry.valid && entry.tag == tag) begin 
             $display("%t PrefetchFilter:canPrefetchResp returning False", $time);
-            return False; //Do not prefetch
+            return tuple2(False, addr); //Do not prefetch
         end
         else begin
             entry.valid = True;
@@ -708,7 +710,7 @@ module mkPrefetchFilter#(Parameter#(numEntries) _, Parameter#(pfCounterBits) __,
                 pfTotal <= pfTotal + 1;
             $display("%t PrefetchFilter:canPrefetchResp returning True, adding to filter, previous pfUseful/pfTotal: %d/%d", $time, pfUseful, pfTotal);
             filterTable.wrReq(idx, entry);
-            return True;
+            return tuple2(True, addr);
         end
     endmethod
 
@@ -727,7 +729,7 @@ endmodule
 
 
 module mkSignaturePathPrefetcher#(String divTableFile, Parameter#(stSets) _, 
-        Parameter#(stWays) __, Parameter#(ptEntries) ___, Prob prefetchThreshold)(Prefetcher) 
+        Parameter#(stWays) __, Parameter#(ptEntries) ___, Prob prefetchThreshold, Bool useFilter)(Prefetcher) 
 provisos(
 Add#(a__, TLog#(ptEntries), 12),
 Add#(b__, TLog#(stSets), 58),
@@ -738,6 +740,8 @@ Add#(1, d__, stWays)
     PrefetchCalculator#(8, 8) calculator <- mkPrefetchCalculator(prefetchThreshold, divTableFile);
     SignatureTable#(4, stSets, stWays) st <- mkSignatureTable;
     PatternTable#(ptEntries, 4) pt <- mkPatternTable;
+    PrefetchFilter#(1024, 5, 8) filter <- mkPrefetchFilter;
+    Fifo#(8, LineAddr) addrToPrefetch <- mkOverflowBypassFifo;
 
     rule ptlFromSt;
         let ptl <- st.getPTLookupEntry;
@@ -758,14 +762,28 @@ Add#(1, d__, stWays)
         let {ptl, pte} <- pt.getPTEntry;
         calculator.submitCandidates(ptl.addr, ptl.sig, alpha, ptl.currCumProb, pte.sigCount, pte.deltaCounts);
     endrule
+    
+    rule pfAddrFromCalcToFilter;
+        let lineAddr <- calculator.getNextPrefetchAddr;
+        filter.canPrefetchReq(lineAddr);
+    endrule
+
+    rule getAddrToPrefetch;
+        let {canPrefetch, addr} <- filter.canPrefetchResp;
+        if (canPrefetch || !useFilter) begin
+            addrToPrefetch.enq(addr);
+        end
+    endrule
 
     method Action reportAccess(Addr addr, HitOrMiss hitMiss);
         $display("%t Prefetcher:reportAccess %x", $time, addr);
         st.reportAccess(truncateLSB(addr));
+        filter.reportAccess(truncateLSB(addr), hitMiss);
     endmethod
 
     method ActionValue#(Addr) getNextPrefetchAddr();
-        let lineAddr <- calculator.getNextPrefetchAddr;
+        let lineAddr = addrToPrefetch.first;
+        addrToPrefetch.deq;
         $display("%t Prefetcher:getNextPrefetchAddr %x", $time, Addr'{lineAddr, '0});
         return {lineAddr, '0};
     endmethod

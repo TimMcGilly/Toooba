@@ -544,9 +544,10 @@ module mkSignaturePathPrefetcherTest1(Empty);
     Parameter#(4) stWays <- mkParameter;
     Parameter#(512) ptEntries <- mkParameter;
     Prob prefetchThreshold = 7'b1000000;
+    Bool useFilter = False;
     Prefetcher d <- mkSignaturePathPrefetcher(
         "./../../src_Testbench/Signature_path_prefetcher/div_table.memhex",
-        stSets, stWays, ptEntries, prefetchThreshold);
+        stSets, stWays, ptEntries, prefetchThreshold, useFilter);
     mkAutoFSM(
         seq
             action
@@ -647,10 +648,11 @@ module mkSignaturePathPrefetcherTest2(Empty);
     Parameter#(4) stWays <- mkParameter;
     Parameter#(512) ptEntries <- mkParameter;
     Prob prefetchThreshold = 7'b1000000;
+    Bool useFilter = True;
     Prefetcher d <- mkSignaturePathPrefetcher(
         "./../../src_Testbench/Signature_path_prefetcher/div_table.memhex",
-        stSets, stWays, ptEntries, prefetchThreshold);
-    //Test delta = 0
+        stSets, stWays, ptEntries, prefetchThreshold, useFilter);
+    //Test delta = 0 and the filter
     mkAutoFSM(
         seq
             action
@@ -669,8 +671,26 @@ module mkSignaturePathPrefetcherTest2(Empty);
                 d.reportAccess('h8180, MISS);
             endaction
             action endaction
-            action endaction
-            action endaction
+            action
+                d.reportAccess('h8200, MISS);
+            endaction
+            action
+                d.reportAccess('h8280, MISS);
+            endaction
+            action
+                d.reportAccess('h8300, MISS);
+            endaction
+            action
+                d.reportAccess('h8380, MISS);
+            endaction
+            action 
+                let addr <- d.getNextPrefetchAddr;
+                doAssert(addr == 'h8400, "fail");
+            endaction
+            action 
+                let addr <- d.getNextPrefetchAddr;
+                doAssert(addr == 'h8480, "fail");
+            endaction
             action
                 $display("Test finished!");
             endaction
@@ -683,9 +703,10 @@ module mkSignaturePathPrefetcherTest3(Empty);
     Parameter#(4) stWays <- mkParameter;
     Parameter#(4096) ptEntries <- mkParameter;
     Prob prefetchThreshold = 7'b0101000;
+    Bool useFilter = False;
     Prefetcher d <- mkSignaturePathPrefetcher(
         "./../../src_Testbench/Signature_path_prefetcher/div_table.memhex",
-        stSets, stWays, ptEntries, prefetchThreshold);
+        stSets, stWays, ptEntries, prefetchThreshold, useFilter);
     //Test prefetching multiple deltas
     mkAutoFSM(
         seq
@@ -796,11 +817,7 @@ module mkSignaturePathPrefetcherTest3(Empty);
 endmodule
 
 module mkPrefetchFilterTest(Empty);
-    Parameter#(8) queueSize <- mkParameter;
-    Parameter#(4) pfCounterBits <- mkParameter;
-    Parameter#(1024) numEntries <- mkParameter;
-    PrefetchFilter d <- mkPrefetchFilter(
-        numEntries, pfCounterBits, queueSize);
+    PrefetchFilter#(1024, 4, 8) d <- mkPrefetchFilter;
     mkAutoFSM(
         seq
             action
@@ -819,7 +836,7 @@ module mkPrefetchFilterTest(Empty);
                 d.canPrefetchReq('h8080);
             endaction
             action 
-                let b <- d.canPrefetchResp;
+                let {b, addr} <- d.canPrefetchResp;
                 doAssert(!b, "test fail");
             endaction
             action endaction
@@ -827,7 +844,7 @@ module mkPrefetchFilterTest(Empty);
                 d.canPrefetchReq('h9080);
             endaction
             action 
-                let b <- d.canPrefetchResp;
+                let {b, addr} <- d.canPrefetchResp;
                 doAssert(b, "test fail");
             endaction
             action endaction
@@ -835,14 +852,14 @@ module mkPrefetchFilterTest(Empty);
                 d.canPrefetchReq('h8000008080);
             endaction
             action 
-                let b <- d.canPrefetchResp;
+                let {b, addr} <- d.canPrefetchResp;
                 doAssert(b, "test fail");
             endaction
             action
                 d.canPrefetchReq('h8090);
             endaction
             action 
-                let b <- d.canPrefetchResp;
+                let {b, addr} <- d.canPrefetchResp;
                 doAssert(b, "test fail");
             endaction
             action
@@ -859,11 +876,7 @@ module mkPrefetchFilterTest(Empty);
 endmodule
 
 module mkPrefetchFilterTest2(Empty);
-    Parameter#(8) queueSize <- mkParameter;
-    Parameter#(3) pfCounterBits <- mkParameter;
-    Parameter#(1024) numEntries <- mkParameter;
-    PrefetchFilter d <- mkPrefetchFilter(
-        numEntries, pfCounterBits, queueSize);
+    PrefetchFilter#(1024, 3, 8) d <- mkPrefetchFilter;
     mkAutoFSM(
         seq
             action
@@ -880,21 +893,21 @@ module mkPrefetchFilterTest2(Empty);
                 d.canPrefetchReq('h8000);
             endaction
             action 
-                let b <- d.canPrefetchResp;
+                let {b, addr} <- d.canPrefetchResp;
                 doAssert(b, "test fail");
             endaction
             action
                 d.canPrefetchReq('h8040);
             endaction
             action 
-                let b <- d.canPrefetchResp;
+                let {b, addr} <- d.canPrefetchResp;
                 doAssert(b, "test fail");
             endaction
             action
                 d.canPrefetchReq('h8080);
             endaction
             action 
-                let b <- d.canPrefetchResp;
+                let {b, addr} <- d.canPrefetchResp;
                 doAssert(b, "test fail");
             endaction
             action
@@ -911,22 +924,22 @@ module mkPrefetchFilterTest2(Empty);
             endaction
             action
                 d.canPrefetchReq('h8100);
-                let b <- d.canPrefetchResp;
+                let {b, addr} <- d.canPrefetchResp;
                 doAssert(b, "test fail");
             endaction
             action
                 d.canPrefetchReq('h8140);
-                let b <- d.canPrefetchResp;
+                let {b, addr} <- d.canPrefetchResp;
                 doAssert(b, "test fail");
             endaction
             action
                 d.canPrefetchReq('h8180);
-                let b <- d.canPrefetchResp;
+                let {b, addr} <- d.canPrefetchResp;
                 doAssert(b, "test fail");
             endaction
             action
                 d.canPrefetchReq('h81c0);
-                let b <- d.canPrefetchResp;
+                let {b, addr} <- d.canPrefetchResp;
                 doAssert(b, "test fail");
             endaction
             action
@@ -935,11 +948,11 @@ module mkPrefetchFilterTest2(Empty);
             endaction
             action
                 d.canPrefetchReq('h8200);
-                let b <- d.canPrefetchResp;
+                let {b, addr} <- d.canPrefetchResp;
                 doAssert(b, "test fail");
             endaction
             action 
-                let b <- d.canPrefetchResp;
+                let {b, addr} <- d.canPrefetchResp;
                 doAssert(b, "test fail");
             endaction
             action
@@ -972,16 +985,16 @@ module mkPrefetchFilterTest2(Empty);
             endaction
             action
                 d.canPrefetchReq('h8280);
-                let b <- d.canPrefetchResp;
+                let {b, addr} <- d.canPrefetchResp;
                 doAssert(b, "test fail");
             endaction
             action
                 d.canPrefetchReq('h82c0);
-                let b <- d.canPrefetchResp;
+                let {b, addr} <- d.canPrefetchResp;
                 doAssert(b, "test fail");
             endaction
             action
-                let b <- d.canPrefetchResp;
+                let {b, addr} <- d.canPrefetchResp;
                 doAssert(b, "test fail");
             endaction
             action
