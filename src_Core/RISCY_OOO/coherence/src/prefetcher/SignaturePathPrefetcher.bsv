@@ -444,7 +444,6 @@ module mkSignatureTable(SignatureTable#(outputQueueSize, tableSets, tableWays)) 
         pageAddressT pa = truncateLSB(addr);
         pageOffsetT po = truncate(addr);
         tableIndexT idx = truncate(pa);
-        tableTagT tag = truncateLSB(pa);
         //if (verbose) $display("%t signatureTable:reportAccess %x, sending rdReq with idx:%x", $time, addr, idx);
         st.rdReq(idx);
     endmethod
@@ -581,8 +580,151 @@ module mkPatternTable(PatternTable#(numEntries, inputFifoSize)) provisos
         ptuFifo.enq(ptu);
     endmethod
 endmodule
-
 //TODO add overflow fifos!
+
+interface PrefetchFilter;
+    method Action canPrefetchReq(LineAddr addr);
+    method ActionValue#(Bool) canPrefetchResp();
+    method Action reportAccess(LineAddr addr, HitOrMiss hitMiss); 
+    method Prob getCurrAlpha();
+endinterface
+
+typedef struct {
+    tagT tag;
+    Bool useful;
+    Bool valid;
+} FilterEntry#(type tagT) deriving (Bits, FShow);
+
+module mkPrefetchFilter#(Parameter#(numEntries) _, Parameter#(pfCounterBits) __, 
+    Parameter#(queueSize) ___)(PrefetchFilter) provisos
+    (
+    NumAlias#(idxBits, TLog#(numEntries)),
+    Alias#(tableIdxT, Bit#(idxBits)),
+    Alias#(tagT, Bit#(6)),
+    Alias#(filterEntryT, FilterEntry#(tagT)),
+    Alias#(countT, Bit#(pfCounterBits)),
+    NumAlias#(maxCounterValue, TSub#(TExp#(pfCounterBits), 1)),
+    Add#(a__, TLog#(numEntries), 58),
+    Add#(pfCounterBits, b__, 7)
+    );
+
+    RWBramCore#(tableIdxT, filterEntryT) filterTable <- mkRWBramCoreForwarded;
+    Reg#(countT) pfTotal <- mkReg(0);
+    Reg#(countT) pfUseful <- mkReg(0);
+    Reg#(Prob) currAlpha <- mkReg(7'b1111111);
+
+    Fifo#(1, Tuple2#(tagT, tableIdxT)) pfReqFifo_afterRead <- mkPipelineFifo;
+    Fifo#(queueSize, LineAddr) pfReqFifo <- mkOverflowBypassFifo;
+
+    Fifo#(1, Tuple3#(tagT, tableIdxT, HitOrMiss)) reportFifo_afterRead <- mkPipelineFifo;
+    Fifo#(queueSize, Tuple2#(LineAddr, HitOrMiss)) reportFifo <- mkOverflowBypassFifo;
+
+    function Prob getNewAlpha();
+        //Assume pfTotal is maxCounterValue + 1
+        //Do pfUseful / pfTotal. Essentially we interpret pfUseful as a fixed point fraction, and 
+        //just extend it to width of a Prob (7 bits).
+        Prob fraction = {pfUseful, 0};
+        return fraction;
+
+    endfunction
+
+    rule canPrefetchRd;
+        pfReqFifo.deq;
+        let addr = pfReqFifo.first;
+        tableIdxT idx = truncate(addr);
+        tagT tag = addr[valueOf(idxBits)+6-1:valueOf(idxBits)];
+        pfReqFifo_afterRead.enq(tuple2(tag, idx));
+        filterTable.rdReq(idx);
+    endrule
+
+    rule reportAccessRd;
+        reportFifo.deq;
+        let {addr, hm} = reportFifo.first;
+        tableIdxT idx = truncate(addr);
+        tagT tag = addr[valueOf(idxBits)+6-1:valueOf(idxBits)];
+        reportFifo_afterRead.enq(tuple3(tag, idx, hm));
+        filterTable.rdReq(idx);
+    endrule
+
+    rule reportAccessProcess;
+        filterEntryT entry = filterTable.rdResp;
+        filterTable.deqRdResp;
+        let {tag, idx, hm} = reportFifo_afterRead.first;
+        reportFifo_afterRead.deq;
+        if (entry.valid && !entry.useful && hm == HIT && entry.tag == tag)  begin
+            //This condition is just to keep the counters 'canonical'. If we allow pfUseful
+            //to exceed pfTotal, we can't update alpha when pfUseful hits counterMaxVal.
+            if (pfUseful < pfTotal) begin 
+                if (pfUseful == fromInteger(valueOf(maxCounterValue))) begin
+                    pfUseful <= (pfUseful >> 1) + 1;
+                    pfTotal <= pfTotal >> 1;
+                end
+                else begin
+                    pfUseful <= pfUseful + 1; 
+                end
+            end
+            $display("%t PrefetchFilter:reportAccessProcess found a useful prefetch, previous pfUseful/pfTotal = %d/%d", $time, pfUseful, pfTotal);
+            entry.useful = True;
+        end
+        else begin 
+            // Insert the demand request into the filter, so we dont prefetch it later
+            // set useful to True so we don't count it as a useful prefetch later
+            // Even if the tag is a mismatch, and there is a potential prefetch here still waiting to be used, 
+            // we have to evict it, and effectively mark it as not useful. Otherwise, prefetches might hang around for 
+            // too long in the filter and eventually all get marked as useful by an accidental 
+            // tag match from a different address
+            $display("%t PrefetchFilter:reportAccessProcess adding demand request into filter", $time);
+            entry.valid = True;
+            entry.useful = True; 
+            entry.tag = tag;
+        end
+        filterTable.wrReq(idx, entry);
+    endrule
+    
+    method Action canPrefetchReq(LineAddr addr);
+        pfReqFifo.enq(addr);
+    endmethod
+
+    method ActionValue#(Bool) canPrefetchResp;
+        filterEntryT entry = filterTable.rdResp;
+        filterTable.deqRdResp;
+        pfReqFifo_afterRead.deq;
+        let {tag, idx} = pfReqFifo_afterRead.first;
+        if (entry.valid && entry.tag == tag) begin 
+            $display("%t PrefetchFilter:canPrefetchResp returning False", $time);
+            return False; //Do not prefetch
+        end
+        else begin
+            entry.valid = True;
+            entry.useful = False;
+            entry.tag = tag;
+            if (pfTotal == fromInteger(valueOf(maxCounterValue))) begin
+                pfTotal <= (pfTotal >> 1) + 1; //Assume we'll issue the prefetch
+                pfUseful <= pfUseful >> 1;
+                currAlpha <= getNewAlpha();
+                $display("%t PrefetchFilter:canPrefetchResp updating alpha to %b", $time, getNewAlpha());
+            end
+            else 
+                pfTotal <= pfTotal + 1;
+            $display("%t PrefetchFilter:canPrefetchResp returning True, adding to filter, previous pfUseful/pfTotal: %d/%d", $time, pfUseful, pfTotal);
+            filterTable.wrReq(idx, entry);
+            return True;
+        end
+    endmethod
+
+    method Action reportAccess(LineAddr addr, HitOrMiss hitMiss); 
+        //If no entry, insert entry with valid = 1, useful = 1
+        //If find tag matching entry with valid = 1, useful = 1, do nothing
+        //If find tag matching entry with valid = 1, useful = 0, increment pfUseful
+        $display("%t PrefetchFilter:reportAccess %x", $time, addr, fshow(hitMiss));
+        reportFifo.enq(tuple2(addr, hitMiss));
+    endmethod
+
+    method Prob getCurrAlpha;
+        return currAlpha;
+    endmethod
+endmodule
+
 
 module mkSignaturePathPrefetcher#(String divTableFile, Parameter#(stSets) _, 
         Parameter#(stWays) __, Parameter#(ptEntries) ___, Prob prefetchThreshold)(Prefetcher) 

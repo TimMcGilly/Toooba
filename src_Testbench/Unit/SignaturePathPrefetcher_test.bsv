@@ -794,3 +794,205 @@ module mkSignaturePathPrefetcherTest3(Empty);
         endseq
     );
 endmodule
+
+module mkPrefetchFilterTest(Empty);
+    Parameter#(8) queueSize <- mkParameter;
+    Parameter#(4) pfCounterBits <- mkParameter;
+    Parameter#(1024) numEntries <- mkParameter;
+    PrefetchFilter d <- mkPrefetchFilter(
+        numEntries, pfCounterBits, queueSize);
+    mkAutoFSM(
+        seq
+            action
+                d.reportAccess('h8000, HIT);
+            endaction
+            action endaction
+            action endaction
+            action endaction
+            action
+                d.reportAccess('h8080, MISS);
+            endaction
+            action endaction
+            action endaction
+            action endaction
+            action
+                d.canPrefetchReq('h8080);
+            endaction
+            action 
+                let b <- d.canPrefetchResp;
+                doAssert(!b, "test fail");
+            endaction
+            action endaction
+            action
+                d.canPrefetchReq('h9080);
+            endaction
+            action 
+                let b <- d.canPrefetchResp;
+                doAssert(b, "test fail");
+            endaction
+            action endaction
+            action
+                d.canPrefetchReq('h8000008080);
+            endaction
+            action 
+                let b <- d.canPrefetchResp;
+                doAssert(b, "test fail");
+            endaction
+            action
+                d.canPrefetchReq('h8090);
+            endaction
+            action 
+                let b <- d.canPrefetchResp;
+                doAssert(b, "test fail");
+            endaction
+            action
+                d.reportAccess('h8000008080, HIT);
+            endaction
+            action
+                d.reportAccess('h8090, HIT);
+            endaction
+            action
+                $display("Test finished!");
+            endaction
+        endseq
+    );
+endmodule
+
+module mkPrefetchFilterTest2(Empty);
+    Parameter#(8) queueSize <- mkParameter;
+    Parameter#(3) pfCounterBits <- mkParameter;
+    Parameter#(1024) numEntries <- mkParameter;
+    PrefetchFilter d <- mkPrefetchFilter(
+        numEntries, pfCounterBits, queueSize);
+    mkAutoFSM(
+        seq
+            action
+                d.reportAccess('h9000, HIT);
+            endaction
+            action endaction
+            action endaction
+            action
+                d.reportAccess('h9080, MISS);
+            endaction
+            action endaction
+            action endaction
+            action
+                d.canPrefetchReq('h8000);
+            endaction
+            action 
+                let b <- d.canPrefetchResp;
+                doAssert(b, "test fail");
+            endaction
+            action
+                d.canPrefetchReq('h8040);
+            endaction
+            action 
+                let b <- d.canPrefetchResp;
+                doAssert(b, "test fail");
+            endaction
+            action
+                d.canPrefetchReq('h8080);
+            endaction
+            action 
+                let b <- d.canPrefetchResp;
+                doAssert(b, "test fail");
+            endaction
+            action
+                d.reportAccess('h8000, HIT);
+            endaction
+            action
+                d.reportAccess('h8040, HIT);
+            endaction
+            action
+                d.reportAccess('h8080, HIT);
+            endaction
+            action
+                d.canPrefetchReq('h80c0);
+            endaction
+            action
+                d.canPrefetchReq('h8100);
+                let b <- d.canPrefetchResp;
+                doAssert(b, "test fail");
+            endaction
+            action
+                d.canPrefetchReq('h8140);
+                let b <- d.canPrefetchResp;
+                doAssert(b, "test fail");
+            endaction
+            action
+                d.canPrefetchReq('h8180);
+                let b <- d.canPrefetchResp;
+                doAssert(b, "test fail");
+            endaction
+            action
+                d.canPrefetchReq('h81c0);
+                let b <- d.canPrefetchResp;
+                doAssert(b, "test fail");
+            endaction
+            action
+                let alpha = d.getCurrAlpha;
+                doAssert(alpha == 7'b1111111, "fail"); //default value
+            endaction
+            action
+                d.canPrefetchReq('h8200);
+                let b <- d.canPrefetchResp;
+                doAssert(b, "test fail");
+            endaction
+            action 
+                let b <- d.canPrefetchResp;
+                doAssert(b, "test fail");
+            endaction
+            action
+                let alpha = d.getCurrAlpha;
+                $display("Alpha %b", alpha);
+                doAssert(alpha == 7'b0110000, "fail"); 
+            endaction
+
+            //Second part -- now only increment pfUseful
+            action
+                d.reportAccess('h80c0, HIT);
+            endaction
+            action
+                d.reportAccess('h8100, HIT);
+            endaction
+            action
+                d.reportAccess('h8140, HIT);
+            endaction
+            action
+                d.reportAccess('h8180, HIT);
+            endaction
+            action
+                d.reportAccess('h81c0, HIT);
+            endaction
+            action
+                d.reportAccess('h8200, HIT);
+            endaction
+            action
+                d.canPrefetchReq('h8240);
+            endaction
+            action
+                d.canPrefetchReq('h8280);
+                let b <- d.canPrefetchResp;
+                doAssert(b, "test fail");
+            endaction
+            action
+                d.canPrefetchReq('h82c0);
+                let b <- d.canPrefetchResp;
+                doAssert(b, "test fail");
+            endaction
+            action
+                let b <- d.canPrefetchResp;
+                doAssert(b, "test fail");
+            endaction
+            action
+                let alpha = d.getCurrAlpha;
+                $display("Alpha %b", alpha);
+                doAssert(alpha == 7'b1010000, "fail"); 
+            endaction
+
+            action
+                $display("Test finished!");
+            endaction
+        endseq
+    );
+endmodule
