@@ -147,6 +147,7 @@ module mkPrefetchCalculator#(Prob threshold, String divTableFile)
     Vector#(4, Reg#(Bool)) stage4IssuedPrefetch <- replicateM(mkReg(False));
 
     Bool verbose = True;
+    Bool extraVerbose = False;
 
     rule stage2;
         Stage1Out s = stage1Out.first;
@@ -166,10 +167,10 @@ module mkPrefetchCalculator#(Prob threshold, String divTableFile)
         candidates[1] = multProb(div1.getDiv2Res, s.alphaXCumProb);
         candidates[2] = multProb(div2.getDiv1Res, s.alphaXCumProb);
         candidates[3] = multProb(div2.getDiv2Res, s.alphaXCumProb);
-        if (verbose) probWrite("pfCalculator:stage2 candidates[0] ", candidates[0]);
-        if (verbose) probWrite("pfCalculator:stage2 candidates[1] ", candidates[1]);
-        if (verbose) probWrite("pfCalculator:stage2 candidates[2] ", candidates[2]);
-        if (verbose) probWrite("pfCalculator:stage2 candidates[3] ", candidates[3]);
+        if (extraVerbose) probWrite("pfCalculator:stage2 candidates[0] ", candidates[0]);
+        if (extraVerbose) probWrite("pfCalculator:stage2 candidates[1] ", candidates[1]);
+        if (extraVerbose) probWrite("pfCalculator:stage2 candidates[2] ", candidates[2]);
+        if (extraVerbose) probWrite("pfCalculator:stage2 candidates[3] ", candidates[3]);
         Stage2Out s2 = Stage2Out {
             candidates:candidates, 
             deltas:s.deltas, 
@@ -212,25 +213,25 @@ module mkPrefetchCalculator#(Prob threshold, String divTableFile)
         Stage3Out s = stage3Out.first;
         if (s.canPrefetch[0] && !stage4IssuedPrefetch[0]) begin
             LineAddr nextAddr = addDelta(s.currAddr, s.deltas[0]);
-            if (verbose) $display("%t pfCalculator:stage4 pfQueue.enq %h (entry 0)", $time, nextAddr);
+            if (verbose) $display("%t pfCalculator:stage4 pfQueue.enq %h (entry 0) with confidence 0.%b", $time, Addr'{nextAddr, 0}, s.candidates[0]);
             pfQueue.enq(nextAddr);
             stage4IssuedPrefetch[0] <= True;
         end
         else if (s.canPrefetch[1] && stage4IssuedPrefetch[1] == False) begin
             LineAddr nextAddr = addDelta(s.currAddr, s.deltas[1]);
-            if (verbose) $display("%t pfCalculator:stage4 pfQueue.enq %h (entry 1)", $time, nextAddr);
+            if (verbose) $display("%t pfCalculator:stage4 pfQueue.enq %h (entry 1) with confidence 0.%b", $time, Addr'{nextAddr, 0}, s.candidates[1]);
             pfQueue.enq(nextAddr);
             stage4IssuedPrefetch[1] <= True;
         end
         else if (s.canPrefetch[2] && stage4IssuedPrefetch[2] == False) begin
             LineAddr nextAddr = addDelta(s.currAddr, s.deltas[2]);
-            if (verbose) $display("%t pfCalculator:stage4 pfQueue.enq %h (entry 2)", $time, nextAddr);
+            if (verbose) $display("%t pfCalculator:stage4 pfQueue.enq %h (entry 2) with confidence 0.%b", $time, Addr'{nextAddr, 0}, s.candidates[2]);
             pfQueue.enq(nextAddr);
             stage4IssuedPrefetch[2] <= True;
         end
         else if (s.canPrefetch[3] && stage4IssuedPrefetch[3] == False) begin
             LineAddr nextAddr = addDelta(s.currAddr, s.deltas[3]);
-            if (verbose) $display("%t pfCalculator:stage4 pfQueue.enq %h (entry 3)", $time, nextAddr);
+            if (verbose) $display("%t pfCalculator:stage4 pfQueue.enq %h (entry 3) with confidence 0.%b", $time, Addr'{nextAddr, 0}, s.candidates[3]);
             pfQueue.enq(nextAddr);
             stage4IssuedPrefetch[3] <= True;
         end
@@ -246,7 +247,7 @@ module mkPrefetchCalculator#(Prob threshold, String divTableFile)
             };
             if (stage4IssuedPrefetch[0] || stage4IssuedPrefetch[1] || 
                 stage4IssuedPrefetch[2] || stage4IssuedPrefetch[3]) begin
-                if (verbose) $display("%t pfCalculator:stage4 lookupQueue.enq", $time, fshow(ptl));
+                if (verbose) $display("%t pfCalculator:stage4 lookupQueue.enq addr %x ", $time, Addr'{ptl.addr, 0}, fshow(ptl));
                 lookupQueue.enq(ptl);
             end
             writeVReg(stage4IssuedPrefetch, replicate(False));
@@ -337,6 +338,7 @@ module mkSignatureTable(SignatureTable#(outputQueueSize, tableSets, tableWays)) 
     RWBramCore#(tableIndexT, Vector#(tableWays, stEntryT)) st <- mkRWBramCoreForwarded();
 
     Bool verbose = True;
+    Bool extraVerbose = False;
 
     function Maybe#(UInt#(tableWayBits)) getTagMatchWay (Vector#(tableWays, stEntryT) entries, tableTagT tag);
         function Bool isMatch (stEntryT entry);
@@ -384,11 +386,10 @@ module mkSignatureTable(SignatureTable#(outputQueueSize, tableSets, tableWays)) 
         pageAddressT pa = truncateLSB(addr);
         pageOffsetT po = truncate(addr);
         tableIndexT idx = truncate(pa);
-        //tableTagT tag = truncateLSB(pa);
         tableTagT tag = pa[(valueOf(tableIndexBits)+valueOf(tagBits)-1):valueOf(tableIndexBits)];
 
         Vector#(tableWays, stEntryT) entries = st.rdResp;
-        //if (verbose) $display("%t signatureTable:initial entries ", $time, fshow(entries));
+        if (extraVerbose) $display("%t signatureTable:initial entries ", $time, fshow(entries));
         UInt#(tableWayBits) entryWay;
         let x = getTagMatchWay(entries, tag);
         stEntryT entry;
@@ -396,20 +397,20 @@ module mkSignatureTable(SignatureTable#(outputQueueSize, tableSets, tableWays)) 
             entryWay = way;
             entry = entries[way];
             Delta delta = calculateDelta(po, entry.lastOffset);
-            if (verbose) $display("%t signatureTable:processStRead addr:%x found matching way %d, entry: ", 
+            if (extraVerbose) $display("%t signatureTable:processStRead addr:%x found matching way %d, entry: ", 
                     $time, addr, way, fshow(entry));
             if (delta != 0) begin
                 PTUpdateEntry ptu;
                 ptu.oldSig = entry.signature;
                 ptu.observedDelta = delta;
-                if (verbose) $display("%t signatureTable:processStRead create PTU: ", $time, fshow(ptu));
+                if (extraVerbose) $display("%t signatureTable:processStRead create PTU: ", $time, fshow(ptu));
                 ptuQueue.enq(ptu);
 
                 PTLookupEntry ptl;
                 ptl.sig = updateSig(entry.signature, delta);
                 ptl.addr = addrForRdReq.first;
                 ptl.currCumProb = 7'b1111111;
-                if (verbose) $display("%t signatureTable:processStRead create PTL: ", $time, fshow(ptl));
+                if (extraVerbose) $display("%t signatureTable:processStRead create PTL: ", $time, fshow(ptl));
                 ptlQueue.enq(ptl);
 
                 entry.lastOffset = po;
@@ -419,7 +420,7 @@ module mkSignatureTable(SignatureTable#(outputQueueSize, tableSets, tableWays)) 
         end
         else begin
             entryWay = getReplaceWay(entries);
-            if (verbose) $display("%t signatureTable:processStRead addr:%x replacing way %d ", $time, addr, entryWay);
+            if (extraVerbose) $display("%t signatureTable:processStRead addr:%x replacing way %d ", $time, addr, entryWay);
             entry.valid = True;
             entry.tag = tag;
             entry.lastOffset = po;
@@ -435,7 +436,7 @@ module mkSignatureTable(SignatureTable#(outputQueueSize, tableSets, tableWays)) 
         endfunction
         let newEntries = map(updateOtherLRUs, entries);
         newEntries[entryWay] = entry;
-        if (verbose) $display("%t signatureTable:processStRead newEntries (after LRU update) ", $time, fshow(newEntries));
+        if (extraVerbose) $display("%t signatureTable:processStRead newEntries (after LRU update) ", $time, fshow(newEntries));
         st.wrReq(idx, newEntries);
     endrule
 
@@ -449,12 +450,12 @@ module mkSignatureTable(SignatureTable#(outputQueueSize, tableSets, tableWays)) 
     endmethod
 
     method ActionValue#(PTLookupEntry) getPTLookupEntry;
-        //if (verbose) $display("%t signatureTable:getPTLookupEntry returning", $time, fshow(ptlQueue.first));
+        if (extraVerbose) $display("%t signatureTable:getPTLookupEntry returning", $time, fshow(ptlQueue.first));
         ptlQueue.deq;
         return ptlQueue.first;
     endmethod
     method ActionValue#(PTUpdateEntry) getPTUpdateEntry;
-        //if (verbose) $display("%t signatureTable:getPTUpdateEntry returning", $time, fshow(ptuQueue.first));
+        if (extraVerbose) $display("%t signatureTable:getPTUpdateEntry returning", $time, fshow(ptuQueue.first));
         ptuQueue.deq;
         return ptuQueue.first;
     endmethod
@@ -489,6 +490,7 @@ module mkPatternTable(PatternTable#(numEntries, inputFifoSize)) provisos
     RWBramCore#(tableIndexT, PTEntry) pt <- mkRWBramCoreForwarded();
     
     Bool verbose = True;
+    Bool extraVerbose = False;
     
     function Maybe#(UInt#(2)) getDeltaMatchingIdx (Vector#(4, DeltaEntry) entries, Delta delta);
         function Bool isMatch (DeltaEntry entry);
@@ -509,7 +511,7 @@ module mkPatternTable(PatternTable#(numEntries, inputFifoSize)) provisos
         pt.deqRdResp;
         PTUpdateEntry ptu = ptuFifo_afterRead.first;
         PTEntry pte = pt.rdResp;
-        if (verbose) $display("%t patternTable:processPTUpdate found entry", $time, fshow(pte));
+        if (extraVerbose) $display("%t patternTable:processPTUpdate found entry", $time, fshow(pte));
         if (!pte.initialized) begin
             pte.sigCount = 0;
             pte.deltaCounts = unpack(0);
@@ -545,7 +547,7 @@ module mkPatternTable(PatternTable#(numEntries, inputFifoSize)) provisos
     rule doPTReadForLookup; 
         ptlFifo.deq;
         tableIndexT idx = truncate(ptlFifo.first.sig);
-        if (verbose) $display("%t patternTable:doPTReadForLookup idx %h", $time, idx);
+        if (extraVerbose) $display("%t patternTable:doPTReadForLookup idx %h", $time, idx);
         ptlFifo_afterRead.enq(ptlFifo.first);
         pt.rdReq(idx);
     endrule
@@ -554,19 +556,19 @@ module mkPatternTable(PatternTable#(numEntries, inputFifoSize)) provisos
     rule doPTReadForUpdate;
         ptuFifo.deq;
         tableIndexT idx = truncate(ptuFifo.first.oldSig);
-        if (verbose) $display("%t patternTable:doPTReadForUpdate idx %h", $time, idx);
+        if (extraVerbose) $display("%t patternTable:doPTReadForUpdate idx %h", $time, idx);
         ptuFifo_afterRead.enq(ptuFifo.first);
         pt.rdReq(idx);
     endrule
 
     rule discardUninitializedPTE if (!pt.rdResp.initialized);
-        $display("%t discardUninitializedPTE ", $time, fshow(ptlFifo_afterRead.first), fshow(pt.rdResp));
+        if (extraVerbose) $display("%t patternTable:discardUninitializedPTE ", $time, fshow(ptlFifo_afterRead.first), fshow(pt.rdResp));
         ptlFifo_afterRead.deq;
         pt.deqRdResp;
     endrule
 
     method ActionValue#(Tuple2#(PTLookupEntry, PTEntry)) getPTEntry() if (pt.rdResp.initialized);
-        $display("%t getPTEntry ", $time, fshow(ptlFifo_afterRead.first), fshow(pt.rdResp));
+        if (verbose) $display("%t patternTable:getPTEntry ", $time, fshow(ptlFifo_afterRead.first), fshow(pt.rdResp));
         ptlFifo_afterRead.deq;
         pt.deqRdResp;
         return tuple2(ptlFifo_afterRead.first, pt.rdResp);
@@ -619,6 +621,9 @@ module mkPrefetchFilter(PrefetchFilter#(numEntries, pfCounterBits, queueSize)) p
     Fifo#(1, Tuple3#(tagT, tableIdxT, HitOrMiss)) reportFifo_afterRead <- mkPipelineFifo;
     Fifo#(queueSize, Tuple2#(LineAddr, HitOrMiss)) reportFifo <- mkOverflowBypassFifo;
 
+    Bool verbose = True;
+    Bool extraVerbose = False;
+
     function Prob getNewAlpha();
         //Assume pfTotal is maxCounterValue + 1
         //Do pfUseful / pfTotal. Essentially we interpret pfUseful as a fixed point fraction, and 
@@ -663,7 +668,8 @@ module mkPrefetchFilter(PrefetchFilter#(numEntries, pfCounterBits, queueSize)) p
                     pfUseful <= pfUseful + 1; 
                 end
             end
-            $display("%t PrefetchFilter:reportAccessProcess found a useful prefetch, previous pfUseful/pfTotal = %d/%d", $time, pfUseful, pfTotal);
+            if (extraVerbose) $display(
+                "%t PrefetchFilter:reportAccessProcess found a useful prefetch, previous pfUseful/pfTotal = %d/%d", $time, pfUseful, pfTotal);
             entry.useful = True;
         end
         else begin 
@@ -673,7 +679,8 @@ module mkPrefetchFilter(PrefetchFilter#(numEntries, pfCounterBits, queueSize)) p
             // we have to evict it, and effectively mark it as not useful. Otherwise, prefetches might hang around for 
             // too long in the filter and eventually all get marked as useful by an accidental 
             // tag match from a different address
-            $display("%t PrefetchFilter:reportAccessProcess adding demand request into filter", $time);
+            if (extraVerbose) $display(
+                "%t PrefetchFilter:reportAccessProcess adding demand request into filter", $time);
             entry.valid = True;
             entry.useful = True; 
             entry.tag = tag;
@@ -693,7 +700,7 @@ module mkPrefetchFilter(PrefetchFilter#(numEntries, pfCounterBits, queueSize)) p
         tableIdxT idx = truncate(addr);
         tagT tag = addr[valueOf(idxBits)+6-1:valueOf(idxBits)];
         if (entry.valid && entry.tag == tag) begin 
-            $display("%t PrefetchFilter:canPrefetchResp returning False", $time);
+            if (extraVerbose) $display("%t PrefetchFilter:canPrefetchResp returning False", $time);
             return tuple2(False, addr); //Do not prefetch
         end
         else begin
@@ -704,11 +711,11 @@ module mkPrefetchFilter(PrefetchFilter#(numEntries, pfCounterBits, queueSize)) p
                 pfTotal <= (pfTotal >> 1) + 1; //Assume we'll issue the prefetch
                 pfUseful <= pfUseful >> 1;
                 currAlpha <= getNewAlpha();
-                $display("%t PrefetchFilter:canPrefetchResp updating alpha to %b", $time, getNewAlpha());
+                if (verbose) $display("%t PrefetchFilter:canPrefetchResp updating alpha to %b", $time, getNewAlpha());
             end
             else 
                 pfTotal <= pfTotal + 1;
-            $display("%t PrefetchFilter:canPrefetchResp returning True, adding to filter, previous pfUseful/pfTotal: %d/%d", $time, pfUseful, pfTotal);
+            if (extraVerbose) $display("%t PrefetchFilter:canPrefetchResp returning True, adding to filter, previous pfUseful/pfTotal: %d/%d", $time, pfUseful, pfTotal);
             filterTable.wrReq(idx, entry);
             return tuple2(True, addr);
         end
@@ -718,7 +725,7 @@ module mkPrefetchFilter(PrefetchFilter#(numEntries, pfCounterBits, queueSize)) p
         //If no entry, insert entry with valid = 1, useful = 1
         //If find tag matching entry with valid = 1, useful = 1, do nothing
         //If find tag matching entry with valid = 1, useful = 0, increment pfUseful
-        $display("%t PrefetchFilter:reportAccess %x", $time, addr, fshow(hitMiss));
+        if (extraVerbose) $display("%t PrefetchFilter:reportAccess %x", $time, addr, fshow(hitMiss));
         reportFifo.enq(tuple2(addr, hitMiss));
     endmethod
 
@@ -742,6 +749,8 @@ Add#(1, d__, stWays)
     PatternTable#(ptEntries, 4) pt <- mkPatternTable;
     PrefetchFilter#(1024, 5, 8) filter <- mkPrefetchFilter;
     Fifo#(8, LineAddr) addrToPrefetch <- mkOverflowBypassFifo;
+
+    Bool verbose = True;
 
     rule ptlFromSt;
         let ptl <- st.getPTLookupEntry;
@@ -776,7 +785,7 @@ Add#(1, d__, stWays)
     endrule
 
     method Action reportAccess(Addr addr, HitOrMiss hitMiss);
-        $display("%t Prefetcher:reportAccess %x", $time, addr);
+        if (verbose) $display("%t Prefetcher:reportAccess %x", $time, addr);
         st.reportAccess(truncateLSB(addr));
         filter.reportAccess(truncateLSB(addr), hitMiss);
     endmethod
@@ -784,7 +793,7 @@ Add#(1, d__, stWays)
     method ActionValue#(Addr) getNextPrefetchAddr();
         let lineAddr = addrToPrefetch.first;
         addrToPrefetch.deq;
-        $display("%t Prefetcher:getNextPrefetchAddr %x", $time, Addr'{lineAddr, '0});
+        if (verbose) $display("%t Prefetcher:getNextPrefetchAddr %x", $time, Addr'{lineAddr, '0});
         return {lineAddr, '0};
     endmethod
 endmodule
