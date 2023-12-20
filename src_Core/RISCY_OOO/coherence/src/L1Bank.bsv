@@ -239,8 +239,8 @@ action
     case(op)
         Ld: begin 
             events.evt_LD = 1;
-            if (boundsLength >= 524288) events.evt_EVICT = 1;
-            if (boundsLength >= 2097152) events.evt_AMO = 1;
+            if (boundsLength >= 524288*2) events.evt_EVICT = 1;
+            if (boundsLength >= 2097152*4) events.evt_AMO = 1;
         end
         St: begin end//events.evt_ST = 1;
         Lr, Sc, Amo: begin end//events.evt_AMO = 1;
@@ -277,8 +277,8 @@ action
     case(op)
         Ld: begin
             //events.evt_LD_MISS_LAT = saturating_truncate(lat);
-            if (boundsLength >= 524288) events.evt_LD_MISS_LAT = 1;
-            if (boundsLength >= 2097152) events.evt_ST_MISS = 1;
+            if (boundsLength >= 524288*2) events.evt_LD_MISS_LAT = 1;
+            if (boundsLength >= 2097152*4) events.evt_ST_MISS = 1;
             events.evt_LD_MISS = 1;
         end
         St: begin

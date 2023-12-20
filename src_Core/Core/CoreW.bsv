@@ -245,11 +245,11 @@ module mkCoreW_reset #(Reset porReset)
    rule report_tagController_events;
       EventsCacheCore cache_core_evts = tagController.events;
       EventsTGC evts = unpack(0);
-      evts.evt_WRITE = zeroExtend(pack(cache_core_evts.evt_WRITE));
-      evts.evt_WRITE_MISS = zeroExtend(pack(cache_core_evts.evt_WRITE_MISS));
-      evts.evt_READ = zeroExtend(pack(cache_core_evts.evt_READ));
-      evts.evt_READ_MISS = zeroExtend(pack(cache_core_evts.evt_READ_MISS));
-      evts.evt_EVICT = zeroExtend(pack(cache_core_evts.evt_EVICT));
+      //evts.evt_WRITE = zeroExtend(pack(cache_core_evts.evt_WRITE));
+      //evts.evt_WRITE_MISS = zeroExtend(pack(cache_core_evts.evt_WRITE_MISS));
+      //evts.evt_READ = zeroExtend(pack(cache_core_evts.evt_READ));
+      //evts.evt_READ_MISS = zeroExtend(pack(cache_core_evts.evt_READ_MISS));
+      //evts.evt_EVICT = zeroExtend(pack(cache_core_evts.evt_EVICT));
 `ifdef USECAP
       evts.evt_SET_TAG_WRITE = zeroExtend(pack(cache_core_evts.evt_SET_TAG_WRITE));
       evts.evt_SET_TAG_READ = zeroExtend(pack(cache_core_evts.evt_SET_TAG_READ));
