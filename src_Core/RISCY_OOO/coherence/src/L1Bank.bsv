@@ -239,10 +239,10 @@ action
     case(op)
         Ld: begin 
             events.evt_LD = 1;
-            if (boundsLength >= 524288*2) events.evt_EVICT = 1;
-            if (boundsLength >= 2097152*4) events.evt_AMO = 1;
         end
-        St: begin end//events.evt_ST = 1;
+        St: begin 
+            events.evt_ST = 1;
+        end
         Lr, Sc, Amo: begin end//events.evt_AMO = 1;
     endcase
     perf_events[0] <= events;
@@ -276,14 +276,12 @@ action
     EventsL1D events = unpack (0);
     case(op)
         Ld: begin
-            //events.evt_LD_MISS_LAT = saturating_truncate(lat);
-            if (boundsLength >= 524288*2) events.evt_LD_MISS_LAT = 1;
-            if (boundsLength >= 2097152*4) events.evt_ST_MISS = 1;
+            events.evt_LD_MISS_LAT = saturating_truncate(lat);
             events.evt_LD_MISS = 1;
         end
         St: begin
-            //events.evt_ST_MISS_LAT = saturating_truncate(lat);
-            //events.evt_ST_MISS = 1;
+            events.evt_ST_MISS_LAT = saturating_truncate(lat);
+            events.evt_ST_MISS = 1;
         end
         Lr, Sc, Amo: begin
             //events.evt_AMO_MISS_LAT = saturating_truncate(lat);
@@ -298,7 +296,7 @@ endfunction
 
 function Action incrTagCnt(UInt#(8) numTags);
 action
-    if (verbose) $display("%t L1Bank hit num tags: %d", $time, numTags);
+    //if (verbose) $display("%t L1Bank hit num tags: %d", $time, numTags);
     //EventsL1D events = unpack(0);
     //if (numTags >= 1) events.evt_ST = 1;
     //if (numTags >= 2) events.evt_TLB_MISS_LAT = 1;
@@ -308,6 +306,7 @@ action
 endaction
 endfunction
 
+    /*
     rule checkIfMshrFull;
         if (cRqMshr.isFull)  begin
             EventsL1D events = unpack(0);
@@ -315,6 +314,7 @@ endfunction
             perf_events[2] <= events;
         end
     endrule
+    */
 
     function tagT getTag(Addr a) = truncateLSB(a);
 

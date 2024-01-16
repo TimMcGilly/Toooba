@@ -259,7 +259,7 @@ module mkDTlb#(
         if(verbose) $display("[DTLB] flush begin");
 `ifdef PERFORMANCE_MONITORING
         EventsL1D ev = unpack(0);
-        //ev.evt_TLB_FLUSH = 1;
+        ev.evt_TLB_FLUSH = 1;
         perf_events[2] <= ev;
 `endif
     endrule
@@ -371,8 +371,8 @@ module mkDTlb#(
 `endif
 `ifdef PERFORMANCE_MONITORING
         EventsL1D ev = unpack(0);
-        //ev.evt_TLB_MISS_LAT = saturating_truncate(lat);
-        //ev.evt_TLB_MISS = 1;
+        ev.evt_TLB_MISS_LAT = saturating_truncate(lat);
+        ev.evt_TLB_MISS = 1;
         perf_events[0] <= ev;
 `endif
         // conflict with wrong spec
@@ -501,6 +501,7 @@ module mkDTlb#(
                     // update TLB replacement info
                     tlb.updateRepByHit(trans_result.index);
                     // translate addr
+                    /*
                     `ifdef PERFORMANCE_MONITORING
                             EventsL1D ev = unpack(0);
                             ev.evt_TLB = 1;
@@ -509,6 +510,7 @@ module mkDTlb#(
                             if (entry.level == 2) ev.evt_TLB_FLUSH = 1;
                             perf_events[1] <= ev;
                     `endif
+                    */
                     Addr trans_addr = translate(r.addr, entry.ppn, entry.level);
                     pendWait[idx] <= None;
                     pendResp[idx] <= tuple3(trans_addr, Invalid, permCheck.allowCap);
@@ -579,11 +581,11 @@ module mkDTlb#(
             accessCnt.incr(1);
         end
 `endif
-// `ifdef PERFORMANCE_MONITORING
-//         EventsL1D ev = unpack(0);
-//         ev.evt_TLB = 1;
-//         perf_events[1] <= ev;
-// `endif
+ `ifdef PERFORMANCE_MONITORING
+         EventsL1D ev = unpack(0);
+         ev.evt_TLB = 1;
+         perf_events[1] <= ev;
+ `endif
         // conflict with wrong spec
         wrongSpec_procReq_conflict.wset(?);
     endmethod

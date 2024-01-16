@@ -1186,26 +1186,10 @@ module mkCore#(CoreId coreId)(Core);
      endrule
 
      EventsCore core_evts = unpack(pack(coreFix.memExeIfc.events) | pack(hpm_core_events[0]));
-     EventsL1I imem_evts = unpack(0);  /* = unpack(pack(iMem.events) | pack(iTlb.events));*/
-     EventsL1D dmem_evts = unpack(pack(dMem.events) | pack(dTlb.events) );
-     EventsTGC tgc_evts = unpack(0); /*= events_tgc_reg;*/
-     EventsLL llmem_evts = unpack(pack(events_llc_reg) /*| pack(l2Tlb.events)*/);
-     tgc_evts.evt_WRITE = 0;
-     tgc_evts.evt_WRITE_MISS = dmem_evts.evt_TLB_FLUSH;
-     tgc_evts.evt_READ = dmem_evts.evt_TLB;
-     tgc_evts.evt_READ_MISS = dmem_evts.evt_TLB_MISS;
-     tgc_evts.evt_EVICT = dmem_evts.evt_TLB_MISS_LAT;
-
-     core_evts.evt_REDIRECT = llmem_evts.evt_ST;
-     core_evts.evt_BRANCH = llmem_evts.evt_ST_MISS;
-     core_evts.evt_JAL = llmem_evts.evt_TLB;
-     core_evts.evt_JALR = llmem_evts.evt_TLB_MISS;
-     core_evts.evt_TRAP = dmem_evts.evt_EVICT;
-
-     imem_evts.evt_LD = dmem_evts.evt_AMO_MISS;
-     imem_evts.evt_LD_MISS = dmem_evts.evt_AMO_MISS_LAT;
-     imem_evts.evt_LD_MISS_LAT = dmem_evts.evt_AMO;
-     imem_evts.evt_TLB_MISS_LAT = dmem_evts.evt_TLB_FLUSH;
+     EventsL1I imem_evts = unpack(pack(iMem.events) | pack(iTlb.events));
+     EventsL1D dmem_evts = unpack(pack(dMem.events) | pack(dTlb.events));
+     EventsTGC tgc_evts = events_tgc_reg;
+     EventsLL llmem_evts = unpack(pack(events_llc_reg) | pack(l2Tlb.events));
      Maybe#(EventsTransExe) mab_trans_exe = tagged Invalid;
 
 
