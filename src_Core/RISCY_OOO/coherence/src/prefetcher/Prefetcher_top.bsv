@@ -238,7 +238,9 @@ module mkL1DPrefetcher(PCPrefetcher);
         let m <- mkPCPrefetcherAdapter(mkBlockPrefetcher(numLinesEachWay));
     `elsif DATA_PREFETCHER_STRIDE
         //let m <- mkStridePCPrefetcher;
-        let m <- mkStride2PCPrefetcher;
+        Parameter#(512) strideTableSize <- mkParameter;
+        Parameter#(1) cLinesAheadToPrefetch <- mkParameter;
+        let m <- mkStride2PCPrefetcher(strideTableSize, cLinesAheadToPrefetch);
     `elsif DATA_PREFETCHER_STRIDE_ADAPTIVE
         Parameter#(512) strideTableSize <- mkParameter;
         Parameter#(1) cLinesPrefetchMin <- mkParameter;
@@ -275,7 +277,9 @@ module mkLLDPrefetcherInL1D(PCPrefetcher);
         Parameter#(1) numLinesEachWay <- mkParameter;
         let m <- mkPCPrefetcherAdapter(mkBlockPrefetcher(numLinesEachWay));
     `elsif DATA_PREFETCHER_STRIDE
-        let m <- mkStride2PCPrefetcher;
+        Parameter#(512) strideTableSize <- mkParameter;
+        Parameter#(1) cLinesAheadToPrefetch <- mkParameter;
+        let m <- mkStride2PCPrefetcher(strideTableSize, cLinesAheadToPrefetch);
     `elsif DATA_PREFETCHER_STRIDE_ADAPTIVE
         Parameter#(512) strideTableSize <- mkParameter;
         Parameter#(1) cLinesPrefetchMin <- mkParameter;

@@ -233,11 +233,10 @@ typedef struct {
     StrideState2 state;
 } StrideEntry2 deriving (Bits, Eq, FShow);
 
-module mkStride2PCPrefetcher(PCPrefetcher)
+module mkStride2PCPrefetcher#(Parameter#(strideTableSize) _, Parameter#(cLinesAheadToPrefetch) __)(PCPrefetcher)
 provisos(
-    NumAlias#(strideTableSize, 512),
-    NumAlias#(cLinesAheadToPrefetch, 2), 
-    Alias#(strideTableIndexT, Bit#(TLog#(strideTableSize)))
+    Alias#(strideTableIndexT, Bit#(TLog#(strideTableSize))),
+    Add#(a__, TLog#(strideTableSize), 16)
     );
     RWBramCore#(strideTableIndexT, StrideEntry2) strideTable <- mkRWBramCoreForwarded;
     FIFOF#(Tuple3#(Addr, Bit#(16), HitOrMiss)) memAccesses <- mkSizedBypassFIFOF(8);
@@ -270,7 +269,7 @@ provisos(
         strideTable.deqRdResp;
         StrideEntry2 seNext = se;
         Int#(12) observedStride = unpack(addr[11:0] - se.lastAddr);
-        if (`VERBOSE) $writeh("%t Stride Prefetcher updateStrideEntry ", $time,
+        if (`VERBOSE) $display("%t Stride Prefetcher updateStrideEntry ", $time,
             fshow(hitMiss), " ", addr,
             ". Entry ", index, " state is ", fshow(se.state), "\n");
         if (se.state == INIT && observedStride != 0) begin
