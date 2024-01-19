@@ -1190,6 +1190,10 @@ module mkCore#(CoreId coreId)(Core);
      EventsL1D dmem_evts = unpack(pack(dMem.events) | pack(dTlb.events));
      EventsTGC tgc_evts = events_tgc_reg;
      EventsLL llmem_evts = unpack(pack(events_llc_reg) | pack(l2Tlb.events));
+
+     core_evts.evt_JAL = dmem_evts.evt_AMO_MISS;
+     core_evts.evt_JALR = dmem_evts.evt_AMO_MISS_LAT;
+     core_evts.evt_TRAP = llmem_evts.evt_LD;
      Maybe#(EventsTransExe) mab_trans_exe = tagged Invalid;
 
 

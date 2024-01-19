@@ -221,7 +221,7 @@ module mkL1Bank#(
     Count#(Data) amoMissLat <- mkCount(0);
 `endif
 `ifdef PERFORMANCE_MONITORING
-    Array #(Reg #(EventsL1D)) perf_events <- mkDRegOR (3, unpack (0));
+    Array #(Reg #(EventsL1D)) perf_events <- mkDRegOR (4, unpack (0));
 `endif
 function Action incrReqCnt(MemOp op, Addr boundsOffset, Addr boundsLength);
 action
@@ -306,15 +306,15 @@ action
 endaction
 endfunction
 
-    /*
+    
     rule checkIfMshrFull;
         if (cRqMshr.isFull)  begin
             EventsL1D events = unpack(0);
-            events.evt_ST = 1;
+            events.evt_AMO_MISS = 1;
             perf_events[2] <= events;
         end
     endrule
-    */
+    
 
     function tagT getTag(Addr a) = truncateLSB(a);
 
@@ -394,6 +394,9 @@ endfunction
     (* descending_urgency = "pRsTransfer, cRqTransfer_retry, cRqTransfer_new, createPrefetchRq" *)
     (* descending_urgency = "pRqTransfer, cRqTransfer_retry, cRqTransfer_new, createPrefetchRq" *)
     rule createPrefetchRq(flushDone);
+        EventsL1D events = unpack (0);
+        events.evt_AMO_MISS_LAT = 1;
+        perf_events[3] <= events;
         Addr addr <- prefetcher.getNextPrefetchAddr;
         procRqT r = ProcRq {
             id: ?, //Or maybe do 0 here

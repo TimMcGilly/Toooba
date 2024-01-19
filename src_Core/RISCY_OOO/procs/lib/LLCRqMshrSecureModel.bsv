@@ -349,6 +349,10 @@ module mkLLCRqMshrSecureModel#(
         endmethod
     endinterface
 
+    method Bool isFull;
+        return !emptyEntryQ[0].notEmpty;
+    endmethod
+
 `ifdef CHECK_DEADLOCK
     interface stuck = toGet(stuckQ);
 `else

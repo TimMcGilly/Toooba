@@ -260,7 +260,7 @@ module mkLLBank#(
     Count#(Data) dmaStReqCnt <- mkCount(0);
 `endif
 `ifdef PERFORMANCE_MONITORING
-    Array #(Reg #(EventsLL)) perf_events <- mkDRegOR (2, unpack (0));
+    Array #(Reg #(EventsLL)) perf_events <- mkDRegOR (3, unpack (0));
 `endif
 function Action incrMissCnt(cRqT cRq, cRqIndexT idx, Bool isDma, Bool isInstructionAccess);
 action
@@ -289,6 +289,14 @@ action
 `endif
 endaction
 endfunction
+
+    rule checkIfMshrFull;
+        if (cRqMshr.isFull)  begin
+            EventsLL events = unpack(0);
+            events.evt_LD = 1;
+            perf_events[2] <= events;
+        end
+    endrule
 
 
     function tagT getTag(Addr a) = truncateLSB(a);

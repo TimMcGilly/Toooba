@@ -188,6 +188,7 @@ interface LLCRqMshr#(
     interface LLCRqMshr_sendRsToDmaC#(cRqNum, reqT) sendRsToDmaC;
     interface LLCRqMshr_sendRqToC#(cRqNum, wayT, tagT, dirPendT, reqT) sendRqToC;
     interface LLCRqMshr_pipelineResp#(cRqNum, wayT, tagT, dirPendT, reqT) pipelineResp;
+    method Bool isFull;
     // detect deadlock: only in use when macro CHECK_DEADLOCK is defined
     interface Get#(LLCRqMshrStuck#(dirPendT, reqT)) stuck;
 endinterface
@@ -454,6 +455,10 @@ module mkLLCRqMshr#(
             return searchIndex(isEndOfChain, idxVec);
         endmethod
     endinterface
+
+    method Bool isFull;
+        return !emptyEntryQ.notEmpty;
+    endmethod
 
 `ifdef CHECK_DEADLOCK
     interface stuck = toGet(stuckQ);
