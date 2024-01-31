@@ -90,7 +90,10 @@ module mkAllInCapPrefetcher#(Parameter#(maxCapSizeToPrefetch) _)(PCPrefetcher) p
 
 `ifdef PERFORMANCE_MONITORING
     method EventsPrefetcher events;
-        return unpack(0);
+        return EventsPrefetcher { evt_0: 1,
+                     evt_1: 2,
+                     evt_2: 3,
+                     evt_3: 4};
     endmethod
 `endif
 
