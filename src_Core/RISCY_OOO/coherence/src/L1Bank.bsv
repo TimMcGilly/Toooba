@@ -241,7 +241,7 @@ action
             events.evt_LD = 1;
         end
         St: begin 
-            events.evt_ST = 1;
+            //events.evt_ST = 1;
         end
         Lr, Sc, Amo: begin end//events.evt_AMO = 1;
     endcase
@@ -280,7 +280,7 @@ action
             events.evt_LD_MISS = 1;
         end
         St: begin
-            events.evt_ST_MISS_LAT = saturating_truncate(lat);
+            //events.evt_ST_MISS_LAT = saturating_truncate(lat);
             events.evt_ST_MISS = 1;
         end
         Lr, Sc, Amo: begin
@@ -306,13 +306,16 @@ action
 endaction
 endfunction
 
-    
-    rule checkIfMshrFull;
+    rule transferRegularEvents;
+        EventsL1D events = unpack(0);
         if (cRqMshr.isFull)  begin
-            EventsL1D events = unpack(0);
             events.evt_AMO_MISS = 1;
-            perf_events[2] <= events;
         end
+        events.evt_ST = prefetcher.events.evt_0;
+        events.evt_ST_MISS_LAT = prefetcher.events.evt_1;
+        events.evt_AMO = prefetcher.events.evt_2;
+        events.evt_EVICT = prefetcher.events.evt_3;
+        perf_events[2] <= events;
     endrule
     
 
@@ -394,9 +397,6 @@ endfunction
     (* descending_urgency = "pRsTransfer, cRqTransfer_retry, cRqTransfer_new, createPrefetchRq" *)
     (* descending_urgency = "pRqTransfer, cRqTransfer_retry, cRqTransfer_new, createPrefetchRq" *)
     rule createPrefetchRq(flushDone);
-        EventsL1D events = unpack (0);
-        events.evt_AMO_MISS_LAT = 1;
-        perf_events[3] <= events;
         Addr addr <- prefetcher.getNextPrefetchAddr;
         procRqT r = ProcRq {
             id: ?, //Or maybe do 0 here
@@ -1005,6 +1005,12 @@ endfunction
             // performance counter: miss cRq
             if (!cRqIsPrefetch[cOwner]) begin
                 incrMissCnt(procRq.op, cOwner, procRq.boundsOffset, procRq.boundsLength);
+                $display("%t L1 incrMissCnt", $time);
+            end
+            else begin
+                EventsL1D events = unpack (0);
+                events.evt_AMO_MISS_LAT = 1;
+                perf_events[3] <= events;
             end
         end
         else begin

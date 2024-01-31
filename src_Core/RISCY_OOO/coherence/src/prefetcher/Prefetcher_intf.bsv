@@ -28,14 +28,29 @@ typedef enum {
     HIT = 1'b0, MISS = 1'b1
 } HitOrMiss deriving (Bits, Eq, FShow);
 
+typedef struct {
+	Bit#(Report_Width) evt_0;
+	Bit#(Report_Width) evt_1;
+	Bit#(Report_Width) evt_2;
+	Bit#(Report_Width) evt_3;
+} EventsPrefetcher deriving (Bits, FShow);
+
 interface Prefetcher;
     (* always_ready *)
     method Action reportAccess(Addr addr, HitOrMiss hitMiss);
     method ActionValue#(Addr) getNextPrefetchAddr();
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events();
+`endif
 endinterface
 
 interface PCPrefetcher;
     (* always_ready *)
     method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
     method ActionValue#(Addr) getNextPrefetchAddr();
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events();
+`endif
+endinterface
+
 endinterface

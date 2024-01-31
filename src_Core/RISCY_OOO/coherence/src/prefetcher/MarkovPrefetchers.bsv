@@ -411,6 +411,12 @@ module mkSingleWindowTargetPrefetcher#(Parameter#(numLastRequests) _, Parameter#
         end
         return retAddr; 
     endmethod
+
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
 endmodule
 
 
@@ -548,6 +554,12 @@ provisos(
         return retAddr; 
     endmethod
 
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
+
 endmodule
 
 module mkMarkovPrefetcher#(Parameter#(maxChainLength) _, Parameter#(narrowEntries) __, Parameter#(wideEntries) ___)(Prefetcher) provisos
@@ -614,6 +626,12 @@ module mkMarkovPrefetcher#(Parameter#(maxChainLength) _, Parameter#(narrowEntrie
         end
     endmethod
 
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
+
 endmodule
 
 module mkMarkovOnHitPrefetcher#(Parameter#(maxChainLength) _, Parameter#(numLastRequestsTracked) __)(Prefetcher) provisos
@@ -679,6 +697,12 @@ module mkMarkovOnHitPrefetcher#(Parameter#(maxChainLength) _, Parameter#(numLast
         end
     endmethod
 
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
+
 endmodule
 
 module mkMarkovOnHit2Prefetcher#(Parameter#(maxChainLength) _, Parameter#(numLastRequestsTracked) __)(Prefetcher) provisos
@@ -735,4 +759,10 @@ module mkMarkovOnHit2Prefetcher#(Parameter#(maxChainLength) _, Parameter#(numLas
             lastAddrRequests <= shiftInAt0(lastAddrRequests, hash(cl));
         end
     endmethod
+
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
 endmodule

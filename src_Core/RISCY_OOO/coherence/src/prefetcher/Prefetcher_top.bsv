@@ -49,6 +49,11 @@ module mkDoNothingPrefetcher(Prefetcher);
     method ActionValue#(Addr) getNextPrefetchAddr if (False);
         return 64'h0;
     endmethod
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
 endmodule
 
 module mkAlwaysRequestPrefetcher(Prefetcher);
@@ -57,6 +62,11 @@ module mkAlwaysRequestPrefetcher(Prefetcher);
     method ActionValue#(Addr) getNextPrefetchAddr;
         return 64'h8000ff00;
     endmethod
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
 endmodule
 
 module mkPrintPrefetcher(Prefetcher);
@@ -71,6 +81,11 @@ module mkPrintPrefetcher(Prefetcher);
     method ActionValue#(Addr) getNextPrefetchAddr if (False);
         return 64'h0;
     endmethod
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
 endmodule
 
 
@@ -83,6 +98,11 @@ module mkPCPrefetcherAdapter#(module#(Prefetcher) mkPrefetcher)(PCPrefetcher);
         let x <- p.getNextPrefetchAddr;
         return x;
     endmethod
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return p.events;
+    endmethod
+`endif
 endmodule
 
 module mkDoNothingPCPrefetcher(PCPrefetcher);
@@ -91,6 +111,11 @@ module mkDoNothingPCPrefetcher(PCPrefetcher);
     method ActionValue#(Addr) getNextPrefetchAddr if (False);
         return 64'h0000000080000080;
     endmethod
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
 endmodule
 
 module mkPrintPCPrefetcher(PCPrefetcher);
@@ -103,11 +128,19 @@ module mkPrintPCPrefetcher(PCPrefetcher);
     method ActionValue#(Addr) getNextPrefetchAddr if (False);
         return 64'h0000000080000080;
     endmethod
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
 endmodule
 
 interface PrefetcherVector#(numeric type size);
     method ActionValue#(Tuple2#(Addr, Bit#(TLog#(size)))) getNextPrefetchAddr;
     method Action reportAccess(Bit#(TLog#(size)) idx, Addr addr, HitOrMiss hitMiss);
+`ifdef PERFORMANCE_MONITORING //Currently configured to return events from the 0th prefetcher
+    method EventsPrefetcher events();
+`endif
 endinterface
 
 module mkPrefetcherVector#(module#(Prefetcher) mkPrefetcher)
@@ -136,6 +169,13 @@ module mkPrefetcherVector#(module#(Prefetcher) mkPrefetcher)
     method Action reportAccess(idxT idx, Addr addr, HitOrMiss hitMiss);
         prefetchers[idx].reportAccess(addr, hitMiss);
     endmethod
+
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+    //IMPORTANT design to get events only from Core 0
+        return prefetchers[0].events;
+    endmethod
+`endif
 endmodule
 
 module mkL1IPrefetcher(Prefetcher);

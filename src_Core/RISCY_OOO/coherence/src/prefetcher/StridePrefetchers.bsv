@@ -68,6 +68,12 @@ module mkBlockPrefetcher#(Parameter#(numLinesEachWay) _)(Prefetcher) provisos (
         end
     endmethod
 
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
+
 endmodule
 
 typedef enum {
@@ -219,6 +225,12 @@ provisos(
         addrToPrefetch.deq;
         return addrToPrefetch.first;
     endmethod
+
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
 
 endmodule
 
@@ -380,6 +392,12 @@ provisos(
         return addrToPrefetch.first;
     endmethod
 
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
+
 endmodule
 
 typedef struct {
@@ -449,6 +467,12 @@ provisos(
         if (`VERBOSE) $display("%t getNextPrefetchAddr returning %x", $time, reqAddr);
         return reqAddr;
     endmethod
+
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
 
 endmodule
 
@@ -662,5 +686,11 @@ provisos(
         addrToPrefetch.deq;
         return addrToPrefetch.first;
     endmethod
+
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
 
 endmodule

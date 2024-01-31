@@ -63,6 +63,12 @@ module mkNextLineOnMissPrefetcher#(Parameter#(nextLinesOnMiss) _)(Prefetcher)
         if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr requesting %h", $time, addrToRequest);
         return addrToRequest;
     endmethod
+
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
 endmodule
 
 module mkNextLineOnAllPrefetcher#(Parameter#(nextLinesOnAccess) _)(Prefetcher)
@@ -93,6 +99,12 @@ module mkNextLineOnAllPrefetcher#(Parameter#(nextLinesOnAccess) _)(Prefetcher)
         if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr requesting %h", $time, addrToRequest);
         return addrToRequest;
     endmethod
+
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
 endmodule
 
 
@@ -123,6 +135,12 @@ module mkSingleWindowPrefetcher#(Parameter#(cacheLinesInRange) _)(Prefetcher);
         if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr requesting %h", $time, retAddr);
         return retAddr; 
     endmethod
+
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
 endmodule
 
 module mkSingleWindowL1LLPrefetcher#(Parameter#(cacheLinesInRange) _)(Prefetcher);
@@ -151,6 +169,12 @@ module mkSingleWindowL1LLPrefetcher#(Parameter#(cacheLinesInRange) _)(Prefetcher
         if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr requesting %h", $time, retAddr);
         return retAddr; 
     endmethod
+
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
 endmodule
 
 
@@ -249,6 +273,12 @@ provisos(
         return retAddr; 
     endmethod
 
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
+
 endmodule
 
 module mkMultiWindowCrossCachePrefetcher#(Parameter#(numWindows) _, Parameter#(cacheLinesInRange) __)(Prefetcher)
@@ -331,5 +361,11 @@ provisos(
         if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr requesting %h from window idx %h", $time, retAddr, shiftReg[0]);
         return retAddr; 
     endmethod
+
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
 
 endmodule
