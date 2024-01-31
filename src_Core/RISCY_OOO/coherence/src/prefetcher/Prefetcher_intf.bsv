@@ -46,11 +46,9 @@ endinterface
 
 interface PCPrefetcher;
     (* always_ready *)
-    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength);
     method ActionValue#(Addr) getNextPrefetchAddr();
 `ifdef PERFORMANCE_MONITORING
     method EventsPrefetcher events();
 `endif
-endinterface
-
 endinterface

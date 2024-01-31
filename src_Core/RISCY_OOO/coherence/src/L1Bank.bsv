@@ -679,8 +679,8 @@ endfunction
                 line: newLine // write new data into cache
             }, True); // hit, so update rep info
             if (!cRqIsPrefetch[n]) begin
-                prefetcher.reportAccess(req.addr, req.pcHash, HIT);
-                llcPrefetcher.reportAccess(req.addr, req.pcHash, HIT);
+                prefetcher.reportAccess(req.addr, req.pcHash, HIT, req.boundsOffset, req.boundsLength);
+                llcPrefetcher.reportAccess(req.addr, req.pcHash, HIT, req.boundsOffset, req.boundsLength);
             end
            if (verbose)
             $display("%t L1 %m pipelineResp: Hit func: update ram: ", $time,
@@ -833,8 +833,8 @@ endfunction
                 line: ram.line
             }, False);
             if (!cRqIsPrefetch[n]) begin
-                prefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS);
-                llcPrefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS);
+                prefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength);
+                llcPrefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength);
             end
         endaction
         endfunction
@@ -862,8 +862,8 @@ endfunction
             });
             cRqMshr.pipelineResp.setData(n, ram.info.cs == M ? Valid (ram.line) : Invalid);
             if (!cRqIsPrefetch[n]) begin
-                prefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS);
-                llcPrefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS);
+                prefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength);
+                llcPrefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength);
             end
             // send replacement resp to parent
             rsToPIndexQ.enq(CRq (n));
