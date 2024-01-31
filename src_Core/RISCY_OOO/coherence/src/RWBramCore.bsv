@@ -45,6 +45,17 @@ interface RWBramCore#(type addrT, type dataT);
     method Action deqRdResp;
 endinterface
 
+interface RBramCore#(type addrT, type dataT);
+    method Action rd1Req(addrT a);
+    method Action rd2Req(addrT a);
+    method dataT rd1Resp;
+    method dataT rd2Resp;
+    method Bool rd1RespValid;
+    method Bool rd2RespValid;
+    method Action deqRd1Resp;
+    method Action deqRd2Resp;
+endinterface
+
 module mkRWBramCore(RWBramCore#(addrT, dataT)) provisos(
     Bits#(addrT, addrSz), Bits#(dataT, dataSz)
 );
@@ -73,6 +84,48 @@ module mkRWBramCore(RWBramCore#(addrT, dataT)) provisos(
 
     method Action deqRdResp;
         rdReqQ.deq;
+    endmethod
+endmodule
+
+module mkRBramCore#(String fileName, Bool binary)(RBramCore#(addrT, dataT)) provisos(
+    Bits#(addrT, addrSz), Bits#(dataT, dataSz)
+);
+    BRAM_DUAL_PORT#(addrT, dataT) bram <- mkBRAMCore2Load(valueOf(TExp#(addrSz)), False, fileName, binary);
+    BRAM_PORT#(addrT, dataT) rd1Port = bram.a;
+    BRAM_PORT#(addrT, dataT) rd2Port = bram.b;
+    // 1 elem pipeline fifo to add guard for read req/resp
+    // must be 1 elem to make sure rdResp is not corrupted
+    // BRAMCore should not change output if no req is made
+    Fifo#(1, void) rd1ReqQ <- mkPipelineFifo;
+    Fifo#(1, void) rd2ReqQ <- mkPipelineFifo;
+
+    method Action rd1Req(addrT a);
+        rd1ReqQ.enq(?);
+        rd1Port.put(False, a, ?);
+    endmethod
+
+    method Action rd2Req(addrT a);
+        rd2ReqQ.enq(?);
+        rd2Port.put(False, a, ?);
+    endmethod
+
+    method dataT rd1Resp if(rd1ReqQ.notEmpty);
+        return rd1Port.read;
+    endmethod
+
+    method dataT rd2Resp if(rd2ReqQ.notEmpty);
+        return rd2Port.read;
+    endmethod
+
+    method rd1RespValid = rd1ReqQ.notEmpty;
+    method rd2RespValid = rd2ReqQ.notEmpty;
+
+    method Action deqRd1Resp;
+        rd1ReqQ.deq;
+    endmethod
+
+    method Action deqRd2Resp;
+        rd2ReqQ.deq;
     endmethod
 endmodule
 
