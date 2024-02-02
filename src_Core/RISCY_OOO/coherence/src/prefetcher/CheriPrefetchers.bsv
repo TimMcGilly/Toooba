@@ -34,6 +34,7 @@ import SpecialFIFOs :: *;
 import Ehr::*;
 import GetPut::*;
 import RWBramCore::*;
+import SpecialRegs::*;
 
 `define VERBOSE True
 
@@ -124,9 +125,7 @@ provisos(
     FIFO#(Tuple3#(StrideEntry, Addr, Bit#(8))) strideEntryForPrefetch <- mkBypassFIFO();
     Reg#(Maybe#(Bit#(4))) cLinesPrefetchedLatest <- mkReg(?);
     PulseWire holdReadReq <- mkPulseWire;
-    PulseWire hashIsSmall <- mkPulseWire;
-    PulseWire sendingPrefetch <- mkPulseWire;
-    PulseWire sendingPrefetchSmallStride <- mkPulseWire;
+    Array #(Reg #(EventsPrefetcher)) perf_events <- mkDRegOR (3, unpack (0));
 
     rule sendReadReq if (!holdReadReq);
         match {.addr, .boundsHash, .hitMiss} = memAccesses.first;
@@ -236,10 +235,12 @@ provisos(
             //can prefetch
 
             addrToPrefetch.enq(reqAddr);
-            sendingPrefetch.send();
+            EventsPrefetcher evt = unpack(0);
+            evt.evt_2 = 1;
             if (se.stride < 'd64) begin
-                sendingPrefetchSmallStride.send();
+                evt.evt_3 = 1;
             end
+            perf_events[0] <= evt;
             // We will still be processing this StrideEntry next cycle, 
             // so hold off any potential read requests until we do a writeback
             holdReadReq.send();
@@ -257,19 +258,22 @@ provisos(
     endrule
 
     rule printEvt; 
+        /*
         let evt = EventsPrefetcher {
             evt_0: (!memAccesses.notFull) ? 1 : 0,
             evt_1: (!addrToPrefetch.notFull) ? 1 : 0,
-            evt_2: (sendingPrefetch) ? 1 : 0,
-            evt_3: sendingPrefetchSmallStride ? 1 : 0
+            evt_2: hashIsSmall ? 1 : 0,
+            evt_3: 1
         };
         $display ("%t Prefetcher returning events ", $time, fshow(evt));
+        */
+        
     endrule
 
     method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
         Bit#(8) boundsHash = hash(boundsVirtBase ^ boundsLength);
-        if (boundsHash == 0)
-            hashIsSmall.send();
+        //if (boundsHash == 0)
+            //hashIsSmall.send();
         if (`VERBOSE) $display("%t Prefetcher reportAccess %h %h, hash: %h", $time, boundsLength, boundsVirtBase, boundsHash);
         memAccesses.enq(tuple3 (addr, boundsHash, hitMiss));
     endmethod
@@ -284,8 +288,8 @@ provisos(
         let evt = EventsPrefetcher {
             evt_0: (!memAccesses.notFull) ? 1 : 0,
             evt_1: (!addrToPrefetch.notFull) ? 1 : 0,
-            evt_2: sendingPrefetch ? 1 : 0,
-            evt_3: sendingPrefetchSmallStride ? 1 : 0
+            evt_2: perf_events[0].evt_2,
+            evt_3: perf_events[0].evt_3
         };
         return evt;
     endmethod
