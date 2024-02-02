@@ -46,6 +46,7 @@ module mkAllInCapPrefetcher#(Parameter#(maxCapSizeToPrefetch) _)(CheriPCPrefetch
     Reg#(LineAddr) prefetchNext <- mkReg(0);
     Reg#(LineAddr) prefetchEnd <- mkReg(0); //inclusive
     Reg#(LineAddr) originalMiss <- mkReg(0);
+    Array #(Reg #(EventsPrefetcher)) perf_events <- mkDRegOR (1, unpack (0));
 
     rule skipOriginalMiss if (prefetchNext == originalMiss);
         prefetchNext <= prefetchNext + 1;
@@ -53,22 +54,28 @@ module mkAllInCapPrefetcher#(Parameter#(maxCapSizeToPrefetch) _)(CheriPCPrefetch
     method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
         if (hitMiss == MISS && boundsLength != 0) begin
+            EventsPrefetcher evt = unpack(0);
+            evt.evt_0 = 1;
             LineAddr cLinesInBounds = truncateLSB(boundsLength) + 1;
             Addr boundsBase = addr-boundsOffset;
             Addr boundsTop = addr+(boundsLength-boundsOffset-1);
             if (`VERBOSE) $display("%t Prefetcher report MISS %h (bottom: %h, top: %h)", 
                 $time, addr, boundsBase, boundsTop);
             if (boundsLength <= fromInteger(valueof(maxCapSizeToPrefetch))) begin
+                evt.evt_1 = 1;
+                evt.evt_2 = truncate(boundsLength);
                 pageAddressT basePage = truncateLSB(boundsBase);
                 pageAddressT addrPage = truncateLSB(addr);
                 pageAddressT topPage = truncateLSB(boundsTop);
                 if (basePage != addrPage) begin
                     //If base is in a different page, fetch from bottom of this page.
                     boundsBase = Addr'{addrPage, 0};
+                    evt.evt_3 = 1;
                 end
                 if (topPage != addrPage) begin
                     //If base is in a different page, fetch until the top of this page.
                     boundsTop = Addr'{addrPage, 12'hfff};
+                    evt.evt_3 = 1;
                 end
                 prefetchNext <= getLineAddr(boundsBase);
                 prefetchEnd <= getLineAddr(boundsTop);
@@ -76,6 +83,7 @@ module mkAllInCapPrefetcher#(Parameter#(maxCapSizeToPrefetch) _)(CheriPCPrefetch
                 if (`VERBOSE) $display("%t Prefetcher MISS bounds length %d, so set up prefetches from %h to %h", 
                     $time, boundsLength, boundsBase, boundsTop);
             end
+            perf_events[0] <= evt;
         end
         else 
             if (`VERBOSE) $display("%t Prefetcher report HIT %h", $time, addr);
@@ -91,10 +99,7 @@ module mkAllInCapPrefetcher#(Parameter#(maxCapSizeToPrefetch) _)(CheriPCPrefetch
 
 `ifdef PERFORMANCE_MONITORING
     method EventsPrefetcher events;
-        return EventsPrefetcher { evt_0: 1,
-                     evt_1: 2,
-                     evt_2: 3,
-                     evt_3: 4};
+        return perf_events[0];
     endmethod
 `endif
 
