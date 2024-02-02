@@ -945,8 +945,9 @@ module mkOverflowBypassFifoTest(Empty);
 endmodule
 
 module mkStride2PCPrefetcherTest(Empty);
-    //paremeter - 2 ahead
-    let p <- mkStride2PCPrefetcher;
+    Parameter#(512) strideTableSize <- mkParameter;
+    Parameter#(2) cLinesAheadToPrefetch <- mkParameter;
+    let p <- mkStride2PCPrefetcher(strideTableSize, cLinesAheadToPrefetch);
     mkAutoFSM(
         seq
             // ----- Send misses and stuff to one window -----

@@ -208,6 +208,7 @@ typedef struct {
     Bit#(16) pcHash; // hash of instruction pc sending the request
     Addr boundsOffset; //From capability sending the memory request. Used in prefetching.
     Addr boundsLength; //From capability sending the memory request. Used in prefetching.
+    Addr boundsVirtBase; //From capability sending the memory request. Used in prefetching.
 } ProcRq#(type idT) deriving(Bits, Eq, FShow);
 
 interface L1ProcReq#(type idT);
@@ -259,6 +260,7 @@ typedef struct {
     Bool isPrefetchRq;
     Addr boundsOffset;
     Addr boundsLength;
+    Addr boundsVirtBase;
 } CRqMsg#(type idT, type childT) deriving(Bits, Eq, FShow);
 
 typedef struct {
@@ -320,6 +322,7 @@ typedef struct {
     //For prefetching, coming from crq
     Addr boundsOffset;
     Addr boundsLength;
+    Addr boundsVirtBase;
 } LLRq#(type cRqIdT, type dmaRqIdT, type childT) deriving(Bits, Eq, FShow);
 
 // memory msg

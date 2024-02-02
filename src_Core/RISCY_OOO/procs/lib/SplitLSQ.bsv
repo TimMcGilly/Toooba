@@ -298,6 +298,7 @@ typedef struct {
     Bit#(16) pcHash;
     Addr boundsOffset;
     Addr boundsLength;
+    Addr boundsVirtBase;
 } LSQIssueLdInfo deriving(Bits, Eq, FShow);
 
 typedef struct {
@@ -348,6 +349,7 @@ typedef struct {
     Bit#(16)          pcHash;
     Addr              boundsOffset;
     Addr              boundsLength;
+    Addr              boundsVirtBase;
 } StQDeqEntry deriving (Bits, Eq, FShow);
 
 interface SplitLSQ;
@@ -380,7 +382,7 @@ interface SplitLSQ;
     method ActionValue#(LSQUpdateAddrResult) updateAddr(
         LdStQTag lsqTag, Maybe#(Trap) fault,
         // below are only meaningful wen fault is Invalid
-        Bool allowCap, Addr paddr, Bool isMMIO, ByteOrTagEn shiftedBE, Addr boundsOffset, Addr boundsLength
+        Bool allowCap, Addr paddr, Bool isMMIO, ByteOrTagEn shiftedBE, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase
     );
     // Issue a load, and remove dependence on this load issue.
     method ActionValue#(LSQIssueLdResult) issueLd(
@@ -672,6 +674,7 @@ module mkSplitLSQ(SplitLSQ);
     Vector#(LdQSize, Reg#(Bit#(16)))                ld_pcHash          <- replicateM(mkConfigRegU);
     Vector#(LdQSize, Reg#(Addr))                    ld_boundsOffset    <- replicateM(mkConfigRegU);
     Vector#(LdQSize, Reg#(Addr))                    ld_boundsLength    <- replicateM(mkConfigRegU);
+    Vector#(LdQSize, Reg#(Addr))                    ld_boundsVirtBase  <- replicateM(mkConfigRegU);
     Vector#(LdQSize, Reg#(Bool))                    ld_waitForOlderSt  <- replicateM(mkConfigRegU);
     Vector#(LdQSize, Ehr#(2, Addr))                 ld_paddr           <- replicateM(mkEhr(?));
     Vector#(LdQSize, Ehr#(2, Bool))                 ld_isMMIO          <- replicateM(mkEhr(?));
@@ -860,6 +863,7 @@ module mkSplitLSQ(SplitLSQ);
     Vector#(StQSize, Reg#(Bit#(16)))                st_pcHash    <- replicateM(mkRegU);
     Vector#(StQSize, Reg#(Addr))                    st_boundsOffset <- replicateM(mkConfigRegU);
     Vector#(StQSize, Reg#(Addr))                    st_boundsLength <- replicateM(mkConfigRegU);
+    Vector#(StQSize, Reg#(Addr))                    st_boundsVirtBase <- replicateM(mkConfigRegU);
     Vector#(StQSize, Ehr#(2, Addr))                 st_paddr     <- replicateM(mkEhr(?));
     Vector#(StQSize, Ehr#(2, Bool))                 st_isMMIO    <- replicateM(mkEhr(?));
     Vector#(StQSize, Ehr#(2, MemDataByteEn))        st_shiftedBE <- replicateM(mkEhr(?));
@@ -1130,7 +1134,8 @@ module mkSplitLSQ(SplitLSQ);
                 shiftedBE: ld_shiftedBE_findIss[tag],
                 pcHash: ld_pcHash[tag],
                 boundsOffset: ld_boundsOffset[tag],
-                boundsLength: ld_boundsLength[tag]
+                boundsLength: ld_boundsLength[tag],
+                boundsVirtBase: ld_boundsVirtBase[tag]
             };
             issueLdInfo.wset(info);
             if(verbose) begin
@@ -1449,6 +1454,7 @@ module mkSplitLSQ(SplitLSQ);
         ld_pcHash[ld_enqP] <= pcHash;
         ld_boundsLength[ld_enqP] <= 0;
         ld_boundsOffset[ld_enqP] <= 0;
+        ld_boundsVirtBase[ld_enqP] <= 0;
         ld_waitForOlderSt[ld_enqP] <= stlPred.pred(pcHash);
         ld_readFrom_enq[ld_enqP] <= Invalid;
         ld_depLdQDeq_enq[ld_enqP] <= Invalid;
@@ -1505,6 +1511,7 @@ module mkSplitLSQ(SplitLSQ);
         st_pcHash[st_enqP] <= pcHash;
         st_boundsLength[st_enqP] <= 0;
         st_boundsOffset[st_enqP] <= 0;
+        st_boundsVirtBase[st_enqP] <= 0;
         st_allowCapAmoLd_enq[st_enqP] <= False;
         st_computed_enq[st_enqP] <= False;
         st_verified_enq[st_enqP] <= False;
@@ -1523,7 +1530,7 @@ module mkSplitLSQ(SplitLSQ);
 
     method ActionValue#(LSQUpdateAddrResult) updateAddr(
         LdStQTag lsqTag, Maybe#(Trap) fault,
-        Bool allowCap, Addr pa, Bool mmio, ByteOrTagEn shift_be, Addr boundsOffset, Addr boundsLength
+        Bool allowCap, Addr pa, Bool mmio, ByteOrTagEn shift_be, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase
     ) if (!wrongSpec_conflict);
         // index vec for vector functions
         Vector#(LdQSize, LdQTag) idxVec = genWith(fromInteger);
@@ -1570,6 +1577,7 @@ module mkSplitLSQ(SplitLSQ);
             ld_shiftedBE_updAddr[tag] <= shift_be;
             ld_boundsOffset[tag] <= boundsOffset;
             ld_boundsLength[tag] <= boundsLength;
+            ld_boundsVirtBase[tag] <= boundsVirtBase;
 
             delayIssue = isValid(ld_olderSt_updAddr[tag]) && ld_waitForOlderSt[tag];
 
@@ -1603,6 +1611,7 @@ module mkSplitLSQ(SplitLSQ);
             st_shiftedBE_updAddr[tag] <= shift_be.DataMemAccess;
             st_boundsOffset[tag] <= boundsOffset;
             st_boundsLength[tag] <= boundsLength;
+            st_boundsVirtBase[tag] <= boundsVirtBase;
 
             // A store always try to kill younger loads
             doKill = True;
@@ -2114,7 +2123,8 @@ module mkSplitLSQ(SplitLSQ);
             fault: st_fault_deqSt[deqP],
             pcHash: st_pcHash[deqP],
             boundsOffset: st_boundsOffset[deqP],
-            boundsLength: st_boundsLength[deqP]
+            boundsLength: st_boundsLength[deqP],
+            boundsVirtBase: st_boundsVirtBase[deqP]
         };
     endmethod
 

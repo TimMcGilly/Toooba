@@ -30,11 +30,11 @@ import Fifos::*;
 
 module mkAllInCapPrefetcherTest(Empty);
     Parameter#(256) maxCapSizeToPrefetch <- mkParameter;
-    PCPrefetcher t <- mkAllInCapPrefetcher(maxCapSizeToPrefetch);
+    CheriPCPrefetcher t <- mkAllInCapPrefetcher(maxCapSizeToPrefetch);
     mkAutoFSM(
         seq
             action
-                t.reportAccess('h8000, 'h0, MISS, 'd64, 'd200);  //Covers 4 cache lines, at bottom of page
+                t.reportAccess('h8000, 'h0, MISS, 'd64, 'd200, 'd0);  //Covers 4 cache lines, at bottom of page
             endaction
             action
                 let x <- t.getNextPrefetchAddr;
@@ -46,7 +46,7 @@ module mkAllInCapPrefetcherTest(Empty);
             endaction
 
             action
-                t.reportAccess('h7fc0, 'h0, MISS, 'd64, 'd200);  //Covers 4 cache lines, at top of page
+                t.reportAccess('h7fc0, 'h0, MISS, 'd64, 'd200, 'd0);  //Covers 4 cache lines, at top of page
             endaction
             action
                 let x <- t.getNextPrefetchAddr;
@@ -54,11 +54,11 @@ module mkAllInCapPrefetcherTest(Empty);
             endaction
 
             action
-                t.reportAccess('h7fc0, 'h0, MISS, 'd64, 'd512);  //Cap that's too big
+                t.reportAccess('h7fc0, 'h0, MISS, 'd64, 'd512, 'd0);  //Cap that's too big
             endaction
 
             action
-                t.reportAccess('h8040, 'h0, MISS, 'd64, 'd192);  //In middle of cap
+                t.reportAccess('h8040, 'h0, MISS, 'd64, 'd192, 'd0);  //In middle of cap
             endaction
 
             action
@@ -68,6 +68,62 @@ module mkAllInCapPrefetcherTest(Empty);
             action
                 let x <- t.getNextPrefetchAddr;
                 doAssert(x == 'h8080, "test fail!");
+            endaction
+        endseq
+    );
+endmodule
+
+module mkCheriStridePrefetcherTest(Empty);
+    Parameter#(256) strideTableSize <- mkParameter;
+    Parameter#(2) cLinesAheadToPrefetch <- mkParameter;
+    CheriPCPrefetcher t <- mkCheriStridePrefetcher(strideTableSize, cLinesAheadToPrefetch);
+    mkAutoFSM(
+        seq
+            action
+                t.reportAccess('h8000, 'h0, MISS, 'd0, 'd0, 'd0);  
+            endaction
+            action
+                t.reportAccess('h8010, 'h0, HIT, 'd0, 'd0, 'd0);  
+            endaction
+            action
+                t.reportAccess('h8020, 'h0, HIT, 'd0, 'd0, 'd0);  
+            endaction
+            action
+                t.reportAccess('h8030, 'h0, HIT, 'd0, 'd0, 'd0);  
+            endaction
+            action
+                let x <- t.getNextPrefetchAddr;
+                doAssert(x == 'h8060, "test fail!");
+            endaction
+            action
+                let x <- t.getNextPrefetchAddr;
+                doAssert(x == 'h80a0, "test fail!");
+            endaction
+
+            action
+                t.reportAccess('h9000, 'h0, MISS, 'd0, 'd0, 'd1);  
+            endaction
+            action
+                t.reportAccess('h9f00, 'h0, HIT, 'd0, 'd0, 'd1);  
+            endaction
+            action
+                t.reportAccess('h9e00, 'h0, HIT, 'd0, 'd0, 'd1);  
+            endaction
+            action
+                let x <- t.getNextPrefetchAddr;
+                doAssert(x == 'h9d00, "test fail!");
+            endaction
+            action
+                let x <- t.getNextPrefetchAddr;
+                doAssert(x == 'h9c00, "test fail!");
+            endaction
+
+            action
+                t.reportAccess('h8040, 'h0, HIT, 'd0, 'd0, 'd0);  
+            endaction
+            action
+                let x <- t.getNextPrefetchAddr;
+                doAssert(x == 'h80c0, "test fail!");
             endaction
         endseq
     );

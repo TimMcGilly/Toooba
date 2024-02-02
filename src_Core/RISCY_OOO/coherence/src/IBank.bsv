@@ -434,7 +434,8 @@ module mkIBank#(
             child: ?,
             isPrefetchRq: True,
             boundsOffset: 0,
-            boundsLength: 0
+            boundsLength: 0,
+            boundsVirtBase: 0
         };
         rqToPQ.enq(cRqToP);
         if (verbose)
@@ -457,7 +458,8 @@ module mkIBank#(
             child: ?,
             isPrefetchRq: False,
             boundsOffset: 0,
-            boundsLength: 0
+            boundsLength: 0,
+            boundsVirtBase: 0
         };
         rqToPQ.enq(cRqToP);
        if (verbose)

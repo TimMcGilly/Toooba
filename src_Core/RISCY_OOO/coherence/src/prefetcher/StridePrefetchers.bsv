@@ -217,7 +217,7 @@ provisos(
         end
     endrule
 
-    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength);
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
         memAccesses.enq(tuple3 (addr, pcHash, hitMiss));
     endmethod
 
@@ -356,7 +356,7 @@ provisos(
         if (abs(strideToUse) < cLineSize) begin
             strideToUse = (strideToUse < 0) ? -cLineSize : cLineSize; 
         end
-        Bit#(16) jumpDist = pack(strideToUse) * zeroExtend(cLinesPrefetched+1+8);
+        Bit#(16) jumpDist = pack(strideToUse) * zeroExtend(cLinesPrefetched+1);
         let reqAddr = addr + signExtend(jumpDist);
 
         if (se.state == STEADY && 
@@ -383,7 +383,7 @@ provisos(
         end
     endrule
 
-    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength);
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
         memAccesses.enq(tuple3 (addr, pcHash, hitMiss));
     endmethod
 
@@ -421,7 +421,7 @@ provisos(
     Reg#(Int#(13)) strideToPrefetch <- mkReg(0);
     Ehr#(2, Bit#(3)) prefetchesIssued <- mkEhr(fromInteger(valueOf(cLinesAheadToPrefetch)));
 
-    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength);
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
         if (`VERBOSE) $display("%t reportAccess %x %x", $time, addr, pcHash);
         strideTableIndexT idx = truncate(pcHash);
         SimpleStrideEntry entry = strideTable[idx];
@@ -678,7 +678,7 @@ provisos(
         end
     endrule
 
-    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength);
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
         memAccesses.enq(tuple3 (addr, pcHash, hitMiss));
     endmethod
 

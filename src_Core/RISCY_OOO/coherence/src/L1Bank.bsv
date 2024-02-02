@@ -159,7 +159,7 @@ module mkL1Bank#(
     Add#(TAdd#(tagSz, indexSz), TAdd#(lgBankNum, LgLineSzBytes), AddrSz)
 );
 
-    Bool verbose = False;
+    Bool verbose = True;
 
     L1CRqMshr#(cRqNum, wayT, tagT, procRqT) cRqMshr <- mkL1CRqMshrLocal;
 
@@ -409,7 +409,8 @@ endfunction
             loadTags: ?,
             pcHash: ?,
             boundsOffset: ?,
-            boundsLength: ?
+            boundsLength: ?,
+            boundsVirtBase: ?
         };
         cRqIdxT n <- cRqMshr.cRqTransfer.getEmptyEntryInit(r);
         // send to pipeline
@@ -537,7 +538,8 @@ endfunction
             child: ?,
             isPrefetchRq: True,
             boundsOffset: ?,
-            boundsLength: ?
+            boundsLength: ?,
+            boundsVirtBase: ?
 
         };
         rqToPQ.enq(cRqToP);
@@ -560,7 +562,8 @@ endfunction
             child: ?,
             isPrefetchRq: False,
             boundsOffset: req.boundsOffset,
-            boundsLength: req.boundsLength
+            boundsLength: req.boundsLength,
+            boundsVirtBase: req.boundsVirtBase
         };
         rqToPQ.enq(cRqToP);
        if (verbose)
@@ -679,8 +682,8 @@ endfunction
                 line: newLine // write new data into cache
             }, True); // hit, so update rep info
             if (!cRqIsPrefetch[n]) begin
-                prefetcher.reportAccess(req.addr, req.pcHash, HIT, req.boundsOffset, req.boundsLength);
-                llcPrefetcher.reportAccess(req.addr, req.pcHash, HIT, req.boundsOffset, req.boundsLength);
+                prefetcher.reportAccess(req.addr, req.pcHash, HIT, req.boundsOffset, req.boundsLength, req.boundsVirtBase);
+                llcPrefetcher.reportAccess(req.addr, req.pcHash, HIT, req.boundsOffset, req.boundsLength, req.boundsVirtBase);
             end
            if (verbose)
             $display("%t L1 %m pipelineResp: Hit func: update ram: ", $time,
@@ -833,8 +836,8 @@ endfunction
                 line: ram.line
             }, False);
             if (!cRqIsPrefetch[n]) begin
-                prefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength);
-                llcPrefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength);
+                prefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength, procRq.boundsVirtBase);
+                llcPrefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength, procRq.boundsVirtBase);
             end
         endaction
         endfunction
@@ -862,8 +865,8 @@ endfunction
             });
             cRqMshr.pipelineResp.setData(n, ram.info.cs == M ? Valid (ram.line) : Invalid);
             if (!cRqIsPrefetch[n]) begin
-                prefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength);
-                llcPrefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength);
+                prefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength, procRq.boundsVirtBase);
+                llcPrefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength, procRq.boundsVirtBase);
             end
             // send replacement resp to parent
             rsToPIndexQ.enq(CRq (n));

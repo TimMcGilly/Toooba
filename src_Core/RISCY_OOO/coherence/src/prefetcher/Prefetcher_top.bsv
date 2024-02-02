@@ -93,7 +93,7 @@ endmodule
 
 module mkPCPrefetcherAdapter#(module#(Prefetcher) mkPrefetcher)(PCPrefetcher);
     let p <- mkPrefetcher;
-    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength);
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
         p.reportAccess(addr, hitMiss);
     endmethod
     method ActionValue#(Addr) getNextPrefetchAddr;
@@ -107,8 +107,25 @@ module mkPCPrefetcherAdapter#(module#(Prefetcher) mkPrefetcher)(PCPrefetcher);
 `endif
 endmodule
 
+module mkCheriPCPrefetcherAdapter#(module#(PCPrefetcher) mkPrefetcher)(CheriPCPrefetcher);
+    let p <- mkPrefetcher;
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
+        p.reportAccess(addr, pcHash, hitMiss);
+    endmethod
+    method ActionValue#(Addr) getNextPrefetchAddr;
+        let x <- p.getNextPrefetchAddr;
+        return x;
+    endmethod
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return p.events;
+    endmethod
+`endif
+endmodule
+
 module mkDoNothingPCPrefetcher(PCPrefetcher);
-    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength);
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
     endmethod
     method ActionValue#(Addr) getNextPrefetchAddr if (False);
         return 64'h0000000080000080;
@@ -121,7 +138,7 @@ module mkDoNothingPCPrefetcher(PCPrefetcher);
 endmodule
 
 module mkPrintPCPrefetcher(PCPrefetcher);
-    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength);
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
         if (hitMiss == HIT)
             if (`VERBOSE) $display("%t PCPrefetcher report HIT %h", $time, addr);
         else
@@ -273,85 +290,113 @@ module mkLLIPrefetcher(Prefetcher);
     return m;
 endmodule
 
-module mkL1DPrefetcher(PCPrefetcher);
+module mkL1DPrefetcher(CheriPCPrefetcher);
 `ifdef DATA_PREFETCHER_IN_L1
     `ifdef DATA_PREFETCHER_BLOCK
         Parameter#(1) numLinesEachWay <- mkParameter;
-        let m <- mkPCPrefetcherAdapter(mkBlockPrefetcher(numLinesEachWay));
+        let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkBlockPrefetcher(numLinesEachWay)));
     `elsif DATA_PREFETCHER_STRIDE
         //let m <- mkStridePCPrefetcher;
         Parameter#(512) strideTableSize <- mkParameter;
         Parameter#(1) cLinesAheadToPrefetch <- mkParameter;
-        let m <- mkStride2PCPrefetcher(strideTableSize, cLinesAheadToPrefetch);
+        let m <- mkCheriPCPrefetcherAdapter(mkStride2PCPrefetcher(strideTableSize, cLinesAheadToPrefetch));
     `elsif DATA_PREFETCHER_STRIDE_ADAPTIVE
         Parameter#(512) strideTableSize <- mkParameter;
         Parameter#(1) cLinesPrefetchMin <- mkParameter;
         Parameter#(2) cLinesSmallStridePrefetchMax <- mkParameter;
         Parameter#(4) cLinesBigStridePrefetchMax <- mkParameter;
-        let m <- mkStrideAdaptivePCPrefetcher(
+        let m <- mkCheriPCPrefetcherAdapter(mkStrideAdaptivePCPrefetcher(
             strideTableSize, 
             cLinesPrefetchMin, 
             cLinesSmallStridePrefetchMax, 
-            cLinesBigStridePrefetchMax);
+            cLinesBigStridePrefetchMax));
     `elsif DATA_PREFETCHER_MARKOV
         Parameter#(2) maxChainLength <- mkParameter;
         Parameter#(2048) narrowEntries <- mkParameter;
         Parameter#(128) wideEntries <- mkParameter;
-        let m <- mkPCPrefetcherAdapter(mkMarkovPrefetcher(maxChainLength, narrowEntries, wideEntries));
+        let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkMarkovPrefetcher(maxChainLength, narrowEntries, wideEntries)));
     `elsif DATA_PREFETCHER_MARKOV_ON_HIT
         Parameter#(1) maxChainLength <- mkParameter;
         Parameter#(32) numLastRequestsTracked <- mkParameter;
-        let m <- mkPCPrefetcherAdapter(mkMarkovOnHitPrefetcher(maxChainLength, numLastRequestsTracked));
+        let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkMarkovOnHitPrefetcher(maxChainLength, numLastRequestsTracked)));
     `elsif DATA_PREFETCHER_MARKOV_ON_HIT_2
         Parameter#(1) maxChainLength <- mkParameter;
         Parameter#(32) numLastRequestsTracked <- mkParameter;
-        let m <- mkPCPrefetcherAdapter(mkMarkovOnHit2Prefetcher(maxChainLength, numLastRequestsTracked));
+        let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkMarkovOnHit2Prefetcher(maxChainLength, numLastRequestsTracked)));
     `elsif DATA_PREFETCHER_ALL_IN_CAP
         Parameter#(256) maxCapSizeToPrefetch <- mkParameter;
+        let m <- mkAllInCapPrefetcher(maxCapSizeToPrefetch);
+    `elsif DATA_PREFETCHER_CHERI_STRIDE
+        Parameter#(256) strideTableSize <- mkParameter;
+        Parameter#(1) cLinesAheadToPrefetch <- mkParameter;
+        let m <- mkCheriStridePrefetcher(strideTableSize, cLinesAheadToPrefetch);
+    `elsif DATA_PREFETCHER_SPP
+        Parameter#(64) stSets <- mkParameter;
+        Parameter#(4) stWays <- mkParameter;
+        Parameter#(512) ptEntries <- mkParameter;
+        Prob prefetchThreshold = 7'b0100000;
+        Bool useFilter = True;
+        let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkSignaturePathPrefetcher(
+            "./../../src_Testbench/Signature_path_prefetcher/div_table.memhex",
+            stSets, stWays, ptEntries, prefetchThreshold, useFilter)));
     `endif
 `else 
-    let m <- mkPCPrefetcherAdapter(mkDoNothingPrefetcher);
+    let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));
 `endif
     return m;
 endmodule
 
-module mkLLDPrefetcherInL1D(PCPrefetcher);
+module mkLLDPrefetcherInL1D(CheriPCPrefetcher);
 `ifdef DATA_PREFETCHER_IN_L1LL
     `ifdef DATA_PREFETCHER_BLOCK
         Parameter#(1) numLinesEachWay <- mkParameter;
-        let m <- mkPCPrefetcherAdapter(mkBlockPrefetcher(numLinesEachWay));
+        let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkBlockPrefetcher(numLinesEachWay)));
     `elsif DATA_PREFETCHER_STRIDE
         Parameter#(512) strideTableSize <- mkParameter;
         Parameter#(1) cLinesAheadToPrefetch <- mkParameter;
-        let m <- mkStride2PCPrefetcher(strideTableSize, cLinesAheadToPrefetch);
+        let m <- mkCheriPCPrefetcherAdapter(mkStride2PCPrefetcher(strideTableSize, cLinesAheadToPrefetch));
     `elsif DATA_PREFETCHER_STRIDE_ADAPTIVE
         Parameter#(512) strideTableSize <- mkParameter;
         Parameter#(1) cLinesPrefetchMin <- mkParameter;
         Parameter#(2) cLinesSmallStridePrefetchMax <- mkParameter;
         Parameter#(4) cLinesBigStridePrefetchMax <- mkParameter;
-        let m <- mkStrideAdaptivePCPrefetcher(
+        let m <- mkCheriPCPrefetcherAdapter(mkStrideAdaptivePCPrefetcher(
             strideTableSize, 
             cLinesPrefetchMin, 
             cLinesSmallStridePrefetchMax, 
-            cLinesBigStridePrefetchMax);
+            cLinesBigStridePrefetchMax));
     `elsif DATA_PREFETCHER_MARKOV
         Parameter#(2) maxChainLength <- mkParameter;
         Parameter#(2048) narrowEntries <- mkParameter;
         Parameter#(128) wideEntries <- mkParameter;
-        let m <- mkPCPrefetcherAdapter(mkMarkovPrefetcher(maxChainLength, narrowEntries, wideEntries));
+        let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkMarkovPrefetcher(maxChainLength, narrowEntries, wideEntries)));
     `elsif DATA_PREFETCHER_MARKOV_ON_HIT
         Parameter#(1) maxChainLength <- mkParameter;
         Parameter#(32) numLastRequestsTracked <- mkParameter;
-        let m <- mkPCPrefetcherAdapter(mkMarkovOnHitPrefetcher(maxChainLength, numLastRequestsTracked));
+        let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkMarkovOnHitPrefetcher(maxChainLength, numLastRequestsTracked)));
     `elsif DATA_PREFETCHER_MARKOV_ON_HIT_2
         Parameter#(1) maxChainLength <- mkParameter;
         Parameter#(32) numLastRequestsTracked <- mkParameter;
-        let m <- mkPCPrefetcherAdapter(mkMarkovOnHit2Prefetcher(maxChainLength, numLastRequestsTracked));
+        let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkMarkovOnHit2Prefetcher(maxChainLength, numLastRequestsTracked)));
     `elsif DATA_PREFETCHER_ALL_IN_CAP
         Parameter#(256) maxCapSizeToPrefetch <- mkParameter;
+        let m <- mkAllInCapPrefetcher(maxCapSizeToPrefetch);
+    `elsif DATA_PREFETCHER_CHERI_STRIDE
+        Parameter#(256) strideTableSize <- mkParameter;
+        Parameter#(1) cLinesAheadToPrefetch <- mkParameter;
+        let m <- mkCheriStridePrefetcher(strideTableSize, cLinesAheadToPrefetch);
+    `elsif DATA_PREFETCHER_SPP
+        Parameter#(64) stSets <- mkParameter;
+        Parameter#(4) stWays <- mkParameter;
+        Parameter#(512) ptEntries <- mkParameter;
+        Prob prefetchThreshold = 7'b0100000;
+        Bool useFilter = True;
+        let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkSignaturePathPrefetcher(
+            "./../../src_Testbench/Signature_path_prefetcher/div_table.memhex",
+            stSets, stWays, ptEntries, prefetchThreshold, useFilter)));
     `endif
 `else 
-    let m <- mkPCPrefetcherAdapter(mkDoNothingPrefetcher);
+    let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));
 `endif
     return m;
 endmodule
@@ -380,6 +425,15 @@ module mkLLDPrefetcher(Prefetcher);
         let m <- mkMarkovOnHit2Prefetcher(maxChainLength, numLastRequestsTracked);
     `elsif DATA_PREFETCHER_ALL_IN_CAP
         doAssert(False, "Illegal data prefetcher type for LL cache!");
+    `elsif DATA_PREFETCHER_SPP
+        Parameter#(64) stSets <- mkParameter;
+        Parameter#(4) stWays <- mkParameter;
+        Parameter#(512) ptEntries <- mkParameter;
+        Prob prefetchThreshold = 7'b0100000;
+        Bool useFilter = True;
+        let m <- mkSignaturePathPrefetcher(
+            "./../../src_Testbench/Signature_path_prefetcher/div_table.memhex",
+            stSets, stWays, ptEntries, prefetchThreshold, useFilter);
     `endif
 `else 
     let m <- mkDoNothingPrefetcher;

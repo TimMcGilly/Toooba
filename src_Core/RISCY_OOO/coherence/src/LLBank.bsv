@@ -412,7 +412,8 @@ endfunction
             byteEn: ?,
             id: Child (r.id),
             boundsOffset: r.boundsOffset,
-            boundsLength: r.boundsLength
+            boundsLength: r.boundsLength,
+            boundsVirtBase: r.boundsVirtBase
         };
         // setup new MSHR entry
         cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, Invalid);
@@ -448,7 +449,8 @@ endfunction
             byteEn: ?,
             id: Child (?),
             boundsOffset: ?,
-            boundsLength: ?
+            boundsLength: ?,
+            boundsVirtBase: ?
         };
         // setup new MSHR entry
         cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, Invalid);
@@ -483,7 +485,8 @@ endfunction
             byteEn: ?,
             id: Child (?),
             boundsOffset: ?,
-            boundsLength: ?
+            boundsLength: ?,
+            boundsVirtBase: ?
         };
         // setup new MSHR entry
         cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, Invalid);
@@ -517,7 +520,8 @@ endfunction
             byteEn: ?,
             id: Child (r.id),
             boundsOffset: r.boundsOffset,
-            boundsLength: r.boundsLength
+            boundsLength: r.boundsLength,
+            boundsVirtBase: r.boundsVirtBase
         };
         if(!cRqMshr.transfer.hasEmptyEntry(cRq)) begin
             mshrBlocks.incr(1);
@@ -539,7 +543,8 @@ endfunction
             byteEn: r.byteEn,
             id: Dma (r.id),
             boundsOffset: ?,
-            boundsLength: ?
+            boundsLength: ?,
+            boundsVirtBase: ?
         };
         // setup new MSHR entry and data
         cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, write ? Valid (r.data) : Invalid);
@@ -585,7 +590,8 @@ endfunction
             byteEn: r.byteEn,
             id: Dma (r.id),
             boundsOffset: ?,
-            boundsLength: ?
+            boundsLength: ?,
+            boundsVirtBase: ?
         };
         if(!cRqMshr.transfer.hasEmptyEntry(cRq)) begin
             mshrBlocks.incr(1);
