@@ -282,7 +282,7 @@ action
     end
 `endif
 `ifdef PERFORMANCE_MONITORING
-    if (cRq.child == 0) begin //Only track misses from L1D of Core 0
+    if (cRq.child == 2) begin //Only track misses from L1D of Core 1
         EventsLL events = unpack (0);
         events.evt_LD_MISS_LAT = saturating_truncate(lat);
         events.evt_LD_MISS = 1;

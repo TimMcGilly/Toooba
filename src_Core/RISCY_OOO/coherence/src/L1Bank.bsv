@@ -221,7 +221,7 @@ module mkL1Bank#(
     Count#(Data) amoMissLat <- mkCount(0);
 `endif
 `ifdef PERFORMANCE_MONITORING
-    Array #(Reg #(EventsL1D)) perf_events <- mkDRegOR (4, unpack (0));
+    Array #(Reg #(EventsL1D)) perf_events <- mkDRegOR (5, unpack (0));
 `endif
 function Action incrReqCnt(MemOp op, Addr boundsOffset, Addr boundsLength);
 action
@@ -838,6 +838,9 @@ endfunction
             if (!cRqIsPrefetch[n]) begin
                 prefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength, procRq.boundsVirtBase);
                 llcPrefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength, procRq.boundsVirtBase);
+                EventsL1D events = unpack(0);
+                events.evt_TLB = 1;
+                perf_events[4] <= events;
             end
         endaction
         endfunction

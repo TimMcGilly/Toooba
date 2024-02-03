@@ -276,7 +276,7 @@ provisos(
     endrule
 
     method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
-        Bit#(8) boundsHash = hash(boundsVirtBase ^ boundsLength);
+        Bit#(8) boundsHash = hash(boundsVirtBase ^ boundsLength) ^ pcHash[7:0] ^ pcHash[15:8];
         //if (boundsHash == 0)
             //hashIsSmall.send();
         if (`VERBOSE) $display("%t Prefetcher reportAccess %h %h, hash: %h", $time, boundsLength, boundsVirtBase, boundsHash);

@@ -583,7 +583,7 @@ module mkDTlb#(
 `endif
  `ifdef PERFORMANCE_MONITORING
          EventsL1D ev = unpack(0);
-         ev.evt_TLB = 1;
+         //ev.evt_TLB = 1;
          perf_events[1] <= ev;
  `endif
         // conflict with wrong spec
