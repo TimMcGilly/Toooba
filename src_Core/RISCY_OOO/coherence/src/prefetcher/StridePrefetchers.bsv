@@ -33,6 +33,7 @@ import SpecialFIFOs :: *;
 import Ehr::*;
 import GetPut::*;
 import RWBramCore::*;
+import SpecialRegs::*;
 
 `define VERBOSE False
 
