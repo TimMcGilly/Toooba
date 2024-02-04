@@ -258,6 +258,7 @@ provisos(
     FIFO#(Tuple3#(StrideEntry2, Addr, Bit#(16))) strideEntryForPrefetch <- mkBypassFIFO();
     Reg#(Maybe#(Bit#(4))) cLinesPrefetchedLatest <- mkReg(?);
     PulseWire holdReadReq <- mkPulseWire;
+    Array #(Reg #(EventsPrefetcher)) perf_events <- mkDRegOR (3, unpack (0));
 
     rule sendReadReq if (!holdReadReq);
         match {.addr, .pcHash, .hitMiss} = memAccesses.first;
@@ -367,6 +368,12 @@ provisos(
             //can prefetch
 
             addrToPrefetch.enq(reqAddr);
+            EventsPrefetcher evt = unpack(0);
+            evt.evt_2 = 1;
+            if (se.stride < 'd64) begin
+                evt.evt_3 = 1;
+            end
+            perf_events[0] <= evt;
             // We will still be processing this StrideEntry next cycle, 
             // so hold off any potential read requests until we do a writeback
             holdReadReq.send();
@@ -394,7 +401,13 @@ provisos(
 
 `ifdef PERFORMANCE_MONITORING
     method EventsPrefetcher events;
-        return unpack(0);
+        let evt = EventsPrefetcher {
+            evt_0: (!memAccesses.notFull) ? 1 : 0,
+            evt_1: (!addrToPrefetch.notFull) ? 1 : 0,
+            evt_2: perf_events[0].evt_2,
+            evt_3: perf_events[0].evt_3
+        };
+        return evt;
     endmethod
 `endif
 
