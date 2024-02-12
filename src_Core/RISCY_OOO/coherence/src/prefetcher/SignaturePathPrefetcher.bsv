@@ -45,7 +45,6 @@ endinterface
 
 module mkDivider#(String divTableFile)(Divider);
     RBramCore#(Bit#(8), Bit#(7)) divide_table <- 
-        //mkRBramCore("./../../../../../src_Testbench/Division_table/div_table.memhex", True);
         mkRBramCore(divTableFile, True);
 
     method Action doDiv1(Bit#(4) a, Bit#(4) b);
@@ -95,6 +94,7 @@ typedef struct {
     Vector#(4, Delta) deltas;
     LineAddr currAddr;
     Sig sig;
+    Bit#(8) depth;
 } Stage1Out deriving (Bits, FShow);
 
 typedef struct {
@@ -102,6 +102,7 @@ typedef struct {
     Vector#(4, Delta) deltas;
     LineAddr currAddr;
     Sig sig;
+    Bit#(8) depth;
 } Stage2Out deriving (Bits, FShow);
 
 typedef struct {
@@ -110,6 +111,7 @@ typedef struct {
     Vector#(4, Delta) deltas;
     LineAddr currAddr;
     Sig sig;
+    Bit#(8) depth;
 } Stage3Out deriving (Bits, FShow);
 
 typedef struct {
@@ -121,13 +123,14 @@ typedef struct {
     Sig sig;
     LineAddr addr;
     Prob currCumProb;
+    Bit#(8) depth;
 } PTLookupEntry deriving (Bits, FShow, Eq);
 
 function Sig updateSig (Sig sig, Delta delta)  =
     (sig << 3) ^ extend(delta);
 
 interface PrefetchCalculator#(numeric type pfQueueSize, numeric type lookupQueueSize);
-    method Action submitCandidates(LineAddr currAddr, Sig sig, Prob alpha, Prob currCumProb, Count sigCount, Vector#(4, DeltaEntry) deltaCounts);
+    method Action submitCandidates(LineAddr currAddr, Sig sig, Prob alpha, Prob currCumProb, Count sigCount, Vector#(4, DeltaEntry) deltaCounts, Bit#(8) depth);
     method ActionValue#(PTLookupEntry) getPTLookupEntry;
     method ActionValue#(LineAddr) getNextPrefetchAddr;
 endinterface
@@ -139,8 +142,8 @@ module mkPrefetchCalculator#(Prob threshold, String divTableFile)
     FIFO#(Stage1Out) stage1Out <- mkFIFO;
     FIFO#(Stage2Out) stage2Out <- mkFIFO;
     FIFO#(Stage3Out) stage3Out <- mkBypassFIFO;
-    FIFOF#(LineAddr) pfQueue <- mkSizedBypassFIFOF(valueof(pfQueueSize));
-    FIFOF#(PTLookupEntry) lookupQueue <- mkSizedBypassFIFOF(valueof(lookupQueueSize));
+    Fifo#(pfQueueSize, LineAddr) pfQueue <- mkOverflowBypassFifo;
+    Fifo#(lookupQueueSize, PTLookupEntry) lookupQueue <- mkOverflowBypassFifo;
     //Each divider supports two concurrent divisions. Implemented with BRAM
     Divider div1 <- mkDivider(divTableFile);
     Divider div2 <- mkDivider(divTableFile);
@@ -175,7 +178,8 @@ module mkPrefetchCalculator#(Prob threshold, String divTableFile)
             candidates:candidates, 
             deltas:s.deltas, 
             currAddr:s.currAddr,
-            sig:s.sig};
+            sig:s.sig,
+            depth:s.depth};
         //if (verbose) $display("%t pfCalculator:", $time, fshow(s2));
         stage2Out.enq(s2);
     endrule
@@ -193,7 +197,8 @@ module mkPrefetchCalculator#(Prob threshold, String divTableFile)
             deltas:s.deltas, 
             currAddr:s.currAddr, 
             canPrefetch:canPrefetch,
-            sig:s.sig};
+            sig:s.sig,
+            depth:s.depth};
         //if (verbose) $display("%t pfCalculator:", $time, fshow(s3));
         stage3Out.enq(s3);
     endrule
@@ -243,7 +248,8 @@ module mkPrefetchCalculator#(Prob threshold, String divTableFile)
             PTLookupEntry ptl = PTLookupEntry {
                 addr: addDelta(s.currAddr, s.deltas[maxIdx]),
                 currCumProb: s.candidates[maxIdx],
-                sig: updateSig(s.sig,  s.deltas[maxIdx])
+                sig: updateSig(s.sig,  s.deltas[maxIdx]),
+                depth: s.depth + 1
             };
             if (stage4IssuedPrefetch[0] || stage4IssuedPrefetch[1] || 
                 stage4IssuedPrefetch[2] || stage4IssuedPrefetch[3]) begin
@@ -258,7 +264,7 @@ module mkPrefetchCalculator#(Prob threshold, String divTableFile)
     method Action submitCandidates(
             LineAddr currAddr, Sig sig, Prob alpha, 
             Prob currCumProb, 
-            Count sigCount, Vector#(4, DeltaEntry) deltaCounts);
+            Count sigCount, Vector#(4, DeltaEntry) deltaCounts, Bit#(8) depth);
         //if (verbose) probWrite("pfCalculator:submitCandidates alpha: ", alpha);
         //if (verbose) probWrite("pfCalculator:submitCandidates currCumProb: ", currCumProb);
         //if (verbose) $display("%t pfCalculator:submitCandidates deltaCounts ", $time, fshow(deltaCounts));
@@ -267,7 +273,7 @@ module mkPrefetchCalculator#(Prob threshold, String divTableFile)
         div1.doDiv2(deltaCounts[1].count, sigCount);
         div2.doDiv1(deltaCounts[2].count, sigCount);
         div2.doDiv2(deltaCounts[3].count, sigCount);
-        Prob alphaXCumProb = multProb(currCumProb, alpha);
+        Prob alphaXCumProb = (depth == 0) ? currCumProb : multProb(currCumProb, alpha);
         Vector#(4, Delta) deltas;
         deltas[0] = deltaCounts[0].delta;
         deltas[1] = deltaCounts[1].delta;
@@ -277,7 +283,8 @@ module mkPrefetchCalculator#(Prob threshold, String divTableFile)
             alphaXCumProb: alphaXCumProb, 
             deltas: deltas, 
             currAddr: currAddr,
-            sig: sig};
+            sig: sig,
+            depth: depth};
 
         //if (verbose) $display("%t pfCalculator:submitCandidates ", $time, fshow(s));
         stage1Out.enq(s);
@@ -332,8 +339,8 @@ module mkSignatureTable(SignatureTable#(outputQueueSize, tableSets, tableWays)) 
     Add#(c__, tableIndexBits, 52),
     Add#(1, b__, tableWays)
 );
-    FIFO#(PTLookupEntry) ptlQueue <- mkSizedFIFO(valueof(outputQueueSize));
-    FIFO#(PTUpdateEntry) ptuQueue <- mkSizedFIFO(valueof(outputQueueSize));
+    Fifo#(outputQueueSize, PTLookupEntry) ptlQueue <- mkOverflowPipelineFifo;
+    Fifo#(outputQueueSize, PTUpdateEntry) ptuQueue <- mkOverflowPipelineFifo;
     FIFO#(LineAddr) addrForRdReq <- mkFIFO;
     RWBramCore#(tableIndexT, Vector#(tableWays, stEntryT)) st <- mkRWBramCoreForwarded();
 
@@ -410,6 +417,7 @@ module mkSignatureTable(SignatureTable#(outputQueueSize, tableSets, tableWays)) 
                 ptl.sig = updateSig(entry.signature, delta);
                 ptl.addr = addrForRdReq.first;
                 ptl.currCumProb = 7'b1111111;
+                ptl.depth = 0;
                 if (extraVerbose) $display("%t signatureTable:processStRead create PTL: ", $time, fshow(ptl));
                 ptlQueue.enq(ptl);
 
@@ -484,8 +492,8 @@ module mkPatternTable(PatternTable#(numEntries, inputFifoSize)) provisos
     FIFO#(PTLookupEntry) ptlFifo_afterRead <- mkFIFO;
     FIFO#(PTUpdateEntry) ptuFifo_afterRead <- mkFIFO;
 
-    FIFOF#(PTLookupEntry) ptlFifo <- mkSizedBypassFIFOF(valueOf(inputFifoSize));
-    FIFOF#(PTUpdateEntry) ptuFifo <- mkSizedBypassFIFOF(valueOf(inputFifoSize));
+    Fifo#(inputFifoSize, PTLookupEntry) ptlFifo <- mkOverflowBypassFifo;
+    Fifo#(inputFifoSize, PTUpdateEntry) ptuFifo <- mkOverflowBypassFifo;
 
     RWBramCore#(tableIndexT, PTEntry) pt <- mkRWBramCoreForwarded();
     
@@ -582,7 +590,6 @@ module mkPatternTable(PatternTable#(numEntries, inputFifoSize)) provisos
         ptuFifo.enq(ptu);
     endmethod
 endmodule
-//TODO add overflow fifos!
 
 interface PrefetchFilter#(numeric type numEntries, numeric type pfCounterBits, 
     numeric type queueSize);
@@ -613,7 +620,7 @@ module mkPrefetchFilter(PrefetchFilter#(numEntries, pfCounterBits, queueSize)) p
     RWBramCore#(tableIdxT, filterEntryT) filterTable <- mkRWBramCoreForwarded;
     Reg#(countT) pfTotal <- mkReg(0);
     Reg#(countT) pfUseful <- mkReg(0);
-    Reg#(Prob) currAlpha <- mkReg(7'b1111111);
+    Reg#(Prob) currAlpha <- mkReg(7'b1100000);
 
     Fifo#(1, LineAddr) pfReqFifo_afterRead <- mkPipelineFifo;
     Fifo#(queueSize, LineAddr) pfReqFifo <- mkOverflowBypassFifo;
@@ -730,7 +737,8 @@ module mkPrefetchFilter(PrefetchFilter#(numEntries, pfCounterBits, queueSize)) p
     endmethod
 
     method Prob getCurrAlpha;
-        return currAlpha;
+        //return currAlpha; TEMP
+        return 7'b1100000;
     endmethod
 endmodule
 
@@ -743,7 +751,6 @@ Add#(b__, TLog#(stSets), 58),
 Add#(c__, TLog#(stSets), 52),
 Add#(1, d__, stWays)
 );
-    Prob alpha = 7'b1100000;
     PrefetchCalculator#(8, 8) calculator <- mkPrefetchCalculator(prefetchThreshold, divTableFile);
     SignatureTable#(4, stSets, stWays) st <- mkSignatureTable;
     PatternTable#(ptEntries, 4) pt <- mkPatternTable;
@@ -752,7 +759,7 @@ Add#(1, d__, stWays)
 
     Bool verbose = True;
 
-    rule ptlFromSt;
+    rule ptlFromStToPt;
         let ptl <- st.getPTLookupEntry;
         pt.doPTLookup(ptl);
     endrule
@@ -762,14 +769,15 @@ Add#(1, d__, stWays)
         pt.doPTUpdate(ptu);
     endrule
 
-    rule ptlFromCalc;
+    rule ptlFromCalcToPt;
         let ptl <- calculator.getPTLookupEntry;
         pt.doPTLookup(ptl);
     endrule
 
-    rule pteToCalc;
+    rule pteFromPtToCalc;
         let {ptl, pte} <- pt.getPTEntry;
-        calculator.submitCandidates(ptl.addr, ptl.sig, alpha, ptl.currCumProb, pte.sigCount, pte.deltaCounts);
+        Prob alpha = (useFilter ? filter.getCurrAlpha : 7'b1100000);
+        calculator.submitCandidates(ptl.addr, ptl.sig, alpha, ptl.currCumProb, pte.sigCount, pte.deltaCounts, ptl.depth);
     endrule
     
     rule pfAddrFromCalcToFilter;
@@ -796,4 +804,10 @@ Add#(1, d__, stWays)
         if (verbose) $display("%t Prefetcher:getNextPrefetchAddr %x", $time, Addr'{lineAddr, '0});
         return {lineAddr, '0};
     endmethod
+
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return unpack(0);
+    endmethod
+`endif
 endmodule

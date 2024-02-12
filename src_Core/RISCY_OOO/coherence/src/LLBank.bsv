@@ -282,7 +282,7 @@ action
     end
 `endif
 `ifdef PERFORMANCE_MONITORING
-    if (cRq.child == 2 || cRq.child == 0) begin //Only track DCache misses
+    if (cRq.child[0] == 0) begin //Only track DCache misses
         EventsLL events = unpack (0);
         events.evt_LD_MISS_LAT = saturating_truncate(lat);
         events.evt_LD_MISS = 1;
