@@ -337,7 +337,7 @@ module mkL1DPrefetcher(CheriPCPrefetcher);
         Prob prefetchThreshold = 7'b0100000;
         Bool useFilter = True;
         let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkSignaturePathPrefetcher(
-            "./../../src_Testbench/Signature_path_prefetcher/div_table.memhex",
+            "./div_table.memhex",
             stSets, stWays, ptEntries, prefetchThreshold, useFilter)));
     `endif
 `else 
@@ -392,7 +392,7 @@ module mkLLDPrefetcherInL1D(CheriPCPrefetcher);
         Prob prefetchThreshold = 7'b0100000;
         Bool useFilter = True;
         let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkSignaturePathPrefetcher(
-            "./../../src_Testbench/Signature_path_prefetcher/div_table.memhex",
+            "./div_table.memhex",
             stSets, stWays, ptEntries, prefetchThreshold, useFilter)));
     `endif
 `else 
@@ -432,7 +432,7 @@ module mkLLDPrefetcher(Prefetcher);
         Prob prefetchThreshold = 7'b0100000;
         Bool useFilter = True;
         let m <- mkSignaturePathPrefetcher(
-            "./../../src_Testbench/Signature_path_prefetcher/div_table.memhex",
+            "./div_table.memhex",
             stSets, stWays, ptEntries, prefetchThreshold, useFilter);
     `endif
 `else 
