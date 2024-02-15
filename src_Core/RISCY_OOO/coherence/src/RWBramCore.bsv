@@ -90,7 +90,7 @@ endmodule
 module mkRBramCore#(String fileName, Bool binary)(RBramCore#(addrT, dataT)) provisos(
     Bits#(addrT, addrSz), Bits#(dataT, dataSz)
 );
-    BRAM_DUAL_PORT#(addrT, dataT) bram <- mkBRAMCore2Load(valueOf(TExp#(addrSz)), False, fileName, binary);
+    BRAM_DUAL_PORT#(addrT, dataT) bram <- mkBRAMCore2(valueOf(TExp#(addrSz)), False/*, fileName, binary*/);
     BRAM_PORT#(addrT, dataT) rd1Port = bram.a;
     BRAM_PORT#(addrT, dataT) rd2Port = bram.b;
     // 1 elem pipeline fifo to add guard for read req/resp
