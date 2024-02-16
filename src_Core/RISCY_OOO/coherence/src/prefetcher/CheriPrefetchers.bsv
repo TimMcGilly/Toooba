@@ -284,7 +284,8 @@ provisos(
     endrule
 
     method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
-        Bit#(8) boundsHash = pcHash[7:0] ^ pcHash[15:8];
+        Bit#(8) lenHash = hash(boundsLength)
+        Bit#(8) boundsHash = pcHash[7:0] ^ pcHash[15:8] ^ lenHash;
         Addr topCapGap = (boundsLength == 0) ? -1 : boundsLength-boundsOffset-1;
         EventsPrefetcher evt = unpack(0);
         if (boundsLength == 0) begin
