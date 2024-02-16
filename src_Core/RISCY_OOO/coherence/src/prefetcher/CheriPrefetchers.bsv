@@ -123,7 +123,7 @@ provisos(
     Add#(a__, TLog#(strideTableSize), 8)
     );
     RWBramCore#(strideTableIndexT, StrideEntry) strideTable <- mkRWBramCoreForwarded;
-    FIFOF#(Tuple5#(Addr, Bit#(8), HitOrMiss, Addr, Addr)) memAccesses <- mkSizedBypassFIFOF(8);
+    FIFOF#(Tuple5#(Addr, Bit#(8), HitOrMiss, Addr, Addr)) memAccesses <- mkSizedBypassFIFOF(16);
     Reg#(Tuple5#(Addr, Bit#(8), HitOrMiss, Addr, Addr)) rdRespEntry <- mkReg(?);
 
     Fifo#(8, Addr) addrToPrefetch <- mkOverflowPipelineFifo;
@@ -243,14 +243,14 @@ provisos(
             cLinesPrefetched != 
             fromInteger(valueof(cLinesAheadToPrefetch)) &&
             reqAddr[63:12] == addr[63:12] && //Check if same page
-            isInCapBounds
+            True /*isInCapBounds*/
         ) begin
             //can prefetch
 
             addrToPrefetch.enq(reqAddr);
             EventsPrefetcher evt = unpack(0);
             evt.evt_2 = 1;
-            if (se.stride < 'd64) begin
+            if (isInCapBounds) begin
                 evt.evt_3 = 1;
             end
             perf_events[0] <= evt;
@@ -286,6 +286,11 @@ provisos(
     method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
         Bit#(8) boundsHash = pcHash[7:0] ^ pcHash[15:8];
         Addr topCapGap = (boundsLength == 0) ? -1 : boundsLength-boundsOffset-1;
+        EventsPrefetcher evt = unpack(0);
+        if (boundsLength == 0) begin
+            evt.evt_1 = 1;
+        end
+        perf_events[1] <= evt;
         //Bit#(8) boundsHash = hash(boundsVirtBase ^ boundsLength) ^ pcHash[7:0] ^ pcHash[15:8];
         //if (boundsHash == 0)
             //hashIsSmall.send();
@@ -302,7 +307,7 @@ provisos(
     method EventsPrefetcher events;
         let evt = EventsPrefetcher {
             evt_0: (!memAccesses.notFull) ? 1 : 0,
-            evt_1: (!addrToPrefetch.notFull) ? 1 : 0,
+            evt_1: perf_events[0].evt_1,
             evt_2: perf_events[0].evt_2,
             evt_3: perf_events[0].evt_3
         };
