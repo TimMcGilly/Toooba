@@ -86,7 +86,7 @@ module mkPrefetchCalculatorTest(Empty);
                 deltaCounts[1] = DeltaEntry{delta: 7'd2, count: 2};
                 deltaCounts[2] = DeltaEntry{delta: {1'b1, 6'd1}, count: 3};
                 deltaCounts[3] = DeltaEntry{delta: {1'b1, 6'd2}, count: 4};
-                d.submitCandidates(currAddr, sig, alpha, currCumProb, sigCount, deltaCounts);
+                d.submitCandidates(currAddr, sig, alpha, currCumProb, sigCount, deltaCounts, 1);
             endaction
             action
             endaction
@@ -107,7 +107,7 @@ module mkPrefetchCalculatorTest(Empty);
                 deltaCounts[2] = DeltaEntry{delta: 7'd2, count: 2};
                 deltaCounts[1] = DeltaEntry{delta: {1'b1, 6'd1}, count: 3};
                 deltaCounts[0] = DeltaEntry{delta: {1'b1, 6'd2}, count: 4};
-                d.submitCandidates(currAddr, sig, alpha, currCumProb, sigCount, deltaCounts);
+                d.submitCandidates(currAddr, sig, alpha, currCumProb, sigCount, deltaCounts, 1);
 
                 let addr <- d.getNextPrefetchAddr;
                 doAssert(addr == 'h7fff, "test fail");
@@ -121,6 +121,7 @@ module mkPrefetchCalculatorTest(Empty);
                 doAssert(ptl.addr == 'h7ffe, "test fail");
                 doAssert(ptl.sig == 'h5a2, "test fail");
                 doAssert(ptl.currCumProb == 'h29, "test fail");
+                doAssert(ptl.depth == 2, "test fail");
             endaction
             action
                 let addr <- d.getNextPrefetchAddr;
@@ -135,6 +136,7 @@ module mkPrefetchCalculatorTest(Empty);
                 doAssert(ptl.addr == 'h8ffe, "test fail");
                 doAssert(ptl.sig == 'h5a2, "test fail");
                 doAssert(ptl.currCumProb == 'h14, "test fail");
+                doAssert(ptl.depth == 2, "test fail");
             endaction
             action 
             endaction
@@ -177,6 +179,7 @@ module mkSignatureTableTest1(Empty);
                 let ptl <- d.getPTLookupEntry;
                 doAssert(ptl.sig == 'ha, "test fail");
                 doAssert(ptl.addr == 'h123456789ae, "test fail");
+                doAssert(ptl.depth == 0, "test fail");
             endaction
             action 
                 LineAddr currAddr = 'h00001234567;
@@ -329,6 +332,7 @@ module mkPatternTableTest1(Empty);
                 ptl.sig = 4;
                 ptl.addr = 3;
                 ptl.currCumProb = 1;
+                ptl.depth = 2;
                 d.doPTLookup(ptl);
 
                 PTUpdateEntry ptu;
@@ -347,11 +351,12 @@ module mkPatternTableTest1(Empty);
                 ptl.sig = 2;
                 ptl.addr = 5;
                 ptl.currCumProb = 1;
+                ptl.depth = 2;
                 d.doPTLookup(ptl);
             endaction
             action
                 let t <- d.getPTEntry;
-                doAssert(tpl_1(t) == PTLookupEntry {sig:2, addr:5, currCumProb:1}, "test fail");
+                doAssert(tpl_1(t) == PTLookupEntry {sig:2, addr:5, currCumProb:1, depth:2}, "test fail");
                 doAssert(tpl_2(t).sigCount == 2, "test fail");
                 doAssert(tpl_2(t).deltaCounts[0] == DeltaEntry {delta:3, count:2}, "test fail");
             endaction
@@ -366,11 +371,12 @@ module mkPatternTableTest1(Empty);
                 ptl.sig = 2;
                 ptl.addr = 5;
                 ptl.currCumProb = 1;
+                ptl.depth = 2;
                 d.doPTLookup(ptl);
             endaction
             action
                 let t <- d.getPTEntry;
-                doAssert(tpl_1(t) == PTLookupEntry {sig:2, addr:5, currCumProb:1}, "test fail");
+                doAssert(tpl_1(t) == PTLookupEntry {sig:2, addr:5, currCumProb:1, depth:2}, "test fail");
                 doAssert(tpl_2(t).sigCount == 3, "test fail");
                 doAssert(tpl_2(t).deltaCounts[0] == DeltaEntry {delta:3, count:2}, "test fail");
                 doAssert(tpl_2(t).deltaCounts[1] == DeltaEntry {delta:1, count:1}, "test fail");
@@ -398,11 +404,12 @@ module mkPatternTableTest1(Empty);
                 ptl.sig = 2;
                 ptl.addr = 5;
                 ptl.currCumProb = 1;
+                ptl.depth = 2;
                 d.doPTLookup(ptl);
             endaction
             action
                 let t <- d.getPTEntry;
-                doAssert(tpl_1(t) == PTLookupEntry {sig:2, addr:5, currCumProb:1}, "test fail");
+                doAssert(tpl_1(t) == PTLookupEntry {sig:2, addr:5, currCumProb:1, depth:2}, "test fail");
                 doAssert(tpl_2(t).sigCount == 6, "test fail");
                 doAssert(tpl_2(t).deltaCounts[0] == DeltaEntry {delta:3, count:2}, "test fail");
                 doAssert(tpl_2(t).deltaCounts[1] == DeltaEntry {delta:6, count:1}, "test fail");
@@ -431,13 +438,14 @@ module mkPatternTableTest1(Empty);
                 ptl.sig = 2;
                 ptl.addr = 5;
                 ptl.currCumProb = 1;
+                ptl.depth = 2;
                 d.doPTLookup(ptl);
             endaction
             action
             endaction
             action
                 let t <- d.getPTEntry;
-                doAssert(tpl_1(t) == PTLookupEntry {sig:2, addr:5, currCumProb:1}, "test fail");
+                doAssert(tpl_1(t) == PTLookupEntry {sig:2, addr:5, currCumProb:1, depth:2}, "test fail");
                 doAssert(tpl_2(t).sigCount == 9, "test fail");
                 doAssert(tpl_2(t).deltaCounts[0] == DeltaEntry {delta:3, count:2}, "test fail");
                 doAssert(tpl_2(t).deltaCounts[1] == DeltaEntry {delta:6, count:3}, "test fail");
@@ -454,11 +462,12 @@ module mkPatternTableTest1(Empty);
                 ptl.sig = 1;
                 ptl.addr = 100;
                 ptl.currCumProb = 2;
+                ptl.depth = 2;
                 d.doPTLookup(ptl);
             endaction
             action
                 let t <- d.getPTEntry;
-                doAssert(tpl_1(t) == PTLookupEntry {sig:1, addr:100, currCumProb:2}, "test fail");
+                doAssert(tpl_1(t) == PTLookupEntry {sig:1, addr:100, currCumProb:2, depth:2}, "test fail");
                 doAssert(tpl_2(t).sigCount == 1, "test fail");
                 doAssert(tpl_2(t).deltaCounts[0] == DeltaEntry {delta:10, count:1}, "test fail");
                 doAssert(tpl_2(t).deltaCounts[1] == DeltaEntry {delta:0, count:0}, "test fail");
@@ -502,11 +511,12 @@ module mkPatternTableTest2(Empty);
                 ptl.sig = 1;
                 ptl.addr = 5;
                 ptl.currCumProb = 1;
+                ptl.depth = 2;
                 d.doPTLookup(ptl);
             endaction
             action
                 let t <- d.getPTEntry;
-                doAssert(tpl_1(t) == PTLookupEntry {sig:1, addr:5, currCumProb:1}, "test fail");
+                doAssert(tpl_1(t) == PTLookupEntry {sig:1, addr:5, currCumProb:1, depth:2}, "test fail");
                 doAssert(tpl_2(t).sigCount == 15, "test fail");
                 doAssert(tpl_2(t).deltaCounts[0] == DeltaEntry {delta:3, count:13}, "test fail");
                 doAssert(tpl_2(t).deltaCounts[1] == DeltaEntry {delta:4, count:2}, "test fail");
@@ -522,11 +532,12 @@ module mkPatternTableTest2(Empty);
                 ptl.sig = 1;
                 ptl.addr = 5;
                 ptl.currCumProb = 1;
+                ptl.depth = 2;
                 d.doPTLookup(ptl);
             endaction
             action
                 let t <- d.getPTEntry;
-                doAssert(tpl_1(t) == PTLookupEntry {sig:1, addr:5, currCumProb:1}, "test fail");
+                doAssert(tpl_1(t) == PTLookupEntry {sig:1, addr:5, currCumProb:1, depth:2}, "test fail");
                 doAssert(tpl_2(t).sigCount == 8, "test fail");
                 doAssert(tpl_2(t).deltaCounts[0] == DeltaEntry {delta:3, count:6}, "test fail");
                 doAssert(tpl_2(t).deltaCounts[1] == DeltaEntry {delta:4, count:1}, "test fail");
@@ -544,7 +555,7 @@ module mkSignaturePathPrefetcherTest1(Empty);
     Parameter#(4) stWays <- mkParameter;
     Parameter#(512) ptEntries <- mkParameter;
     Prob prefetchThreshold = 7'b1000000;
-    Bool useFilter = False;
+    Bool useFilter = True;
     Prefetcher d <- mkSignaturePathPrefetcher(
         "./../../src_Testbench/Signature_path_prefetcher/div_table.memhex",
         stSets, stWays, ptEntries, prefetchThreshold, useFilter);
@@ -587,6 +598,11 @@ module mkSignaturePathPrefetcherTest1(Empty);
                 LineAddr lineAddr = truncate(addr);
                 doAssert(addr == 'h8300, "test fail");
             endaction
+            action
+                let addr <- d.getNextPrefetchAddr;
+                LineAddr lineAddr = truncate(addr);
+                doAssert(addr == 'h8380, "test fail");
+            endaction
             action endaction
             action endaction
             action endaction
@@ -626,10 +642,11 @@ module mkSignaturePathPrefetcherTest1(Empty);
                 LineAddr lineAddr = truncate(addr);
                 doAssert(addr == 'h80c0, "test fail");
             endaction
+            //Skips 'h8080 due to filter!
             action
                 let addr <- d.getNextPrefetchAddr;
                 LineAddr lineAddr = truncate(addr);
-                doAssert(addr == 'h8080, "test fail");
+                doAssert(addr == 'h8040, "test fail");
             endaction
             action endaction
             action endaction

@@ -33,6 +33,9 @@ import SpecialFIFOs :: *;
 import GetPut::*;
 import RWBramCore::*;
 import FixedPoint::*;
+import SpecialRegs::*;
+
+`include "div_table.bsvi"
 
 interface Divider;
     method Action doDiv1(Bit#(4) a, Bit#(4) b);
@@ -46,31 +49,36 @@ endinterface
 module mkDivider#(String divTableFile)(Divider);
     RBramCore#(Bit#(8), Bit#(7)) divide_table <- 
         mkRBramCore(divTableFile, True);
+    
+    FIFOF#(Bit#(7)) div1Res <- mkPipelineFIFOF;
+    FIFOF#(Bit#(7)) div2Res <- mkPipelineFIFOF;
 
     method Action doDiv1(Bit#(4) a, Bit#(4) b);
         Bit#(8) addr = {a, b};
-        divide_table.rd1Req(addr);
+        Bit#(7) divres = fn_read_divtable(addr);
+        div1Res.enq(divres);
     endmethod
 
     method Action doDiv2(Bit#(4) a, Bit#(4) b);
         Bit#(8) addr = {a, b};
-        divide_table.rd2Req(addr);
+        Bit#(7) divres = fn_read_divtable(addr);
+        div2Res.enq(divres);
     endmethod
 
     method Bit#(7) getDiv1Res;
-        return divide_table.rd1Resp;
+        return div1Res.first;
     endmethod
     
     method Bit#(7) getDiv2Res;
-        return divide_table.rd2Resp;
+        return div2Res.first;
     endmethod
 
     method Action deqDiv1Res;
-        divide_table.deqRd1Resp;
+        div1Res.deq;
     endmethod
 
     method Action deqDiv2Res;
-        divide_table.deqRd2Resp;
+        div2Res.deq;
     endmethod
 endmodule
 
@@ -133,6 +141,7 @@ interface PrefetchCalculator#(numeric type pfQueueSize, numeric type lookupQueue
     method Action submitCandidates(LineAddr currAddr, Sig sig, Prob alpha, Prob currCumProb, Count sigCount, Vector#(4, DeltaEntry) deltaCounts, Bit#(8) depth);
     method ActionValue#(PTLookupEntry) getPTLookupEntry;
     method ActionValue#(LineAddr) getNextPrefetchAddr;
+    method ActionValue#(Bit#(8)) getNextPrefetchAddrDepth;
 endinterface
 
 module mkPrefetchCalculator#(Prob threshold, String divTableFile)
@@ -143,6 +152,7 @@ module mkPrefetchCalculator#(Prob threshold, String divTableFile)
     FIFO#(Stage2Out) stage2Out <- mkFIFO;
     FIFO#(Stage3Out) stage3Out <- mkBypassFIFO;
     Fifo#(pfQueueSize, LineAddr) pfQueue <- mkOverflowBypassFifo;
+    Fifo#(pfQueueSize, Bit#(8)) pfDepthQueue <- mkOverflowBypassFifo;
     Fifo#(lookupQueueSize, PTLookupEntry) lookupQueue <- mkOverflowBypassFifo;
     //Each divider supports two concurrent divisions. Implemented with BRAM
     Divider div1 <- mkDivider(divTableFile);
@@ -220,24 +230,28 @@ module mkPrefetchCalculator#(Prob threshold, String divTableFile)
             LineAddr nextAddr = addDelta(s.currAddr, s.deltas[0]);
             if (verbose) $display("%t pfCalculator:stage4 pfQueue.enq %h (entry 0) with confidence 0.%b", $time, Addr'{nextAddr, 0}, s.candidates[0]);
             pfQueue.enq(nextAddr);
+            pfDepthQueue.enq(s.depth);
             stage4IssuedPrefetch[0] <= True;
         end
         else if (s.canPrefetch[1] && stage4IssuedPrefetch[1] == False) begin
             LineAddr nextAddr = addDelta(s.currAddr, s.deltas[1]);
             if (verbose) $display("%t pfCalculator:stage4 pfQueue.enq %h (entry 1) with confidence 0.%b", $time, Addr'{nextAddr, 0}, s.candidates[1]);
             pfQueue.enq(nextAddr);
+            pfDepthQueue.enq(s.depth);
             stage4IssuedPrefetch[1] <= True;
         end
         else if (s.canPrefetch[2] && stage4IssuedPrefetch[2] == False) begin
             LineAddr nextAddr = addDelta(s.currAddr, s.deltas[2]);
             if (verbose) $display("%t pfCalculator:stage4 pfQueue.enq %h (entry 2) with confidence 0.%b", $time, Addr'{nextAddr, 0}, s.candidates[2]);
             pfQueue.enq(nextAddr);
+            pfDepthQueue.enq(s.depth);
             stage4IssuedPrefetch[2] <= True;
         end
         else if (s.canPrefetch[3] && stage4IssuedPrefetch[3] == False) begin
             LineAddr nextAddr = addDelta(s.currAddr, s.deltas[3]);
             if (verbose) $display("%t pfCalculator:stage4 pfQueue.enq %h (entry 3) with confidence 0.%b", $time, Addr'{nextAddr, 0}, s.candidates[3]);
             pfQueue.enq(nextAddr);
+            pfDepthQueue.enq(s.depth);
             stage4IssuedPrefetch[3] <= True;
         end
         else begin
@@ -296,6 +310,10 @@ module mkPrefetchCalculator#(Prob threshold, String divTableFile)
     method ActionValue#(LineAddr) getNextPrefetchAddr;
         pfQueue.deq;
         return pfQueue.first;
+    endmethod
+    method ActionValue#(Bit#(8)) getNextPrefetchAddrDepth;
+        pfDepthQueue.deq;
+        return pfDepthQueue.first;
     endmethod
 endmodule
 
@@ -737,8 +755,7 @@ module mkPrefetchFilter(PrefetchFilter#(numEntries, pfCounterBits, queueSize)) p
     endmethod
 
     method Prob getCurrAlpha;
-        //return currAlpha; TEMP
-        return 7'b1100000;
+        return currAlpha; 
     endmethod
 endmodule
 
@@ -756,6 +773,7 @@ Add#(1, d__, stWays)
     PatternTable#(ptEntries, 4) pt <- mkPatternTable;
     PrefetchFilter#(1024, 5, 8) filter <- mkPrefetchFilter;
     Fifo#(8, LineAddr) addrToPrefetch <- mkOverflowBypassFifo;
+    Array #(Reg #(EventsPrefetcher)) perf_events <- mkDRegOR (3, unpack (0));
 
     Bool verbose = True;
 
@@ -776,12 +794,21 @@ Add#(1, d__, stWays)
 
     rule pteFromPtToCalc;
         let {ptl, pte} <- pt.getPTEntry;
-        Prob alpha = (useFilter ? filter.getCurrAlpha : 7'b1100000);
+        Prob alpha = (7'b1100000); //TEMP change to filter.getCurrAlpha
         calculator.submitCandidates(ptl.addr, ptl.sig, alpha, ptl.currCumProb, pte.sigCount, pte.deltaCounts, ptl.depth);
     endrule
     
     rule pfAddrFromCalcToFilter;
         let lineAddr <- calculator.getNextPrefetchAddr;
+        let depth <- calculator.getNextPrefetchAddrDepth;
+        EventsPrefetcher evt = unpack(0);
+        evt.evt_0 = extend(filter.getCurrAlpha);
+        if (depth >= 2) begin
+            evt.evt_1 = 1;
+        end
+        evt.evt_2 = 1;
+        evt.evt_3 = extend(depth);
+        perf_events[0] <= evt;
         filter.canPrefetchReq(lineAddr);
     endrule
 
@@ -807,7 +834,12 @@ Add#(1, d__, stWays)
 
 `ifdef PERFORMANCE_MONITORING
     method EventsPrefetcher events;
-        return unpack(0);
+    EventsPrefetcher evt;
+    evt.evt_0 = perf_events[0].evt_0;
+    evt.evt_1 = perf_events[0].evt_1;
+    evt.evt_2 = perf_events[0].evt_2;
+    evt.evt_3 = perf_events[0].evt_3;
+    return evt;
     endmethod
 `endif
 endmodule
