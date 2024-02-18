@@ -120,14 +120,14 @@ typedef struct {
 module mkCheriStridePrefetcher#(Parameter#(strideTableSize) _, Parameter#(cLinesAheadToPrefetch) __)(CheriPCPrefetcher)
 provisos(
     Alias#(strideTableIndexT, Bit#(TLog#(strideTableSize))),
-    Add#(a__, TLog#(strideTableSize), 8)
+    Add#(a__, TLog#(strideTableSize), 16)
     );
     RWBramCore#(strideTableIndexT, StrideEntry) strideTable <- mkRWBramCoreForwarded;
-    FIFOF#(Tuple5#(Addr, Bit#(8), HitOrMiss, Addr, Addr)) memAccesses <- mkSizedBypassFIFOF(16);
-    Reg#(Tuple5#(Addr, Bit#(8), HitOrMiss, Addr, Addr)) rdRespEntry <- mkReg(?);
+    FIFOF#(Tuple5#(Addr, Bit#(16), HitOrMiss, Addr, Addr)) memAccesses <- mkSizedBypassFIFOF(16);
+    Reg#(Tuple5#(Addr, Bit#(16), HitOrMiss, Addr, Addr)) rdRespEntry <- mkReg(?);
 
     Fifo#(8, Addr) addrToPrefetch <- mkOverflowPipelineFifo;
-    FIFO#(Tuple5#(StrideEntry, Addr, Bit#(8), Addr, Addr)) strideEntryForPrefetch <- mkBypassFIFO();
+    FIFO#(Tuple5#(StrideEntry, Addr, Bit#(16), Addr, Addr)) strideEntryForPrefetch <- mkBypassFIFO();
     Reg#(Maybe#(Bit#(4))) cLinesPrefetchedLatest <- mkReg(?);
     PulseWire holdReadReq <- mkPulseWire;
     Array #(Reg #(EventsPrefetcher)) perf_events <- mkDRegOR (3, unpack (0));
@@ -243,7 +243,7 @@ provisos(
             cLinesPrefetched != 
             fromInteger(valueof(cLinesAheadToPrefetch)) &&
             reqAddr[63:12] == addr[63:12] && //Check if same page
-            True /*isInCapBounds*/
+            isInCapBounds
         ) begin
             //can prefetch
 
@@ -270,22 +270,9 @@ provisos(
         end
     endrule
 
-    rule printEvt; 
-        /*
-        let evt = EventsPrefetcher {
-            evt_0: (!memAccesses.notFull) ? 1 : 0,
-            evt_1: (!addrToPrefetch.notFull) ? 1 : 0,
-            evt_2: hashIsSmall ? 1 : 0,
-            evt_3: 1
-        };
-        $display ("%t Prefetcher returning events ", $time, fshow(evt));
-        */
-        
-    endrule
-
     method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
-        Bit#(8) lenHash = hash(boundsLength);
-        Bit#(8) boundsHash = pcHash[7:0] ^ pcHash[15:8] ^ lenHash;
+        Bit#(16) lenHash = hash(boundsLength);
+        Bit#(16) boundsHash = pcHash;
         Addr topCapGap = (boundsLength == 0) ? -1 : boundsLength-boundsOffset-1;
         EventsPrefetcher evt = unpack(0);
         if (boundsLength == 0) begin
@@ -300,6 +287,9 @@ provisos(
     endmethod
 
     method ActionValue#(Addr) getNextPrefetchAddr;
+        EventsPrefetcher evt = unpack(0);
+        evt.evt_4 = 1;
+        perf_events[2] <= evt;
         addrToPrefetch.deq;
         return addrToPrefetch.first;
     endmethod
@@ -310,7 +300,8 @@ provisos(
             evt_0: (!memAccesses.notFull) ? 1 : 0,
             evt_1: perf_events[0].evt_1,
             evt_2: perf_events[0].evt_2,
-            evt_3: perf_events[0].evt_3
+            evt_3: perf_events[0].evt_3,
+            evt_4: perf_events[0].evt_4
         };
         return evt;
     endmethod

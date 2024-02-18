@@ -407,7 +407,8 @@ provisos(
             evt_0: (!memAccesses.notFull) ? 1 : 0,
             evt_1: (!addrToPrefetch.notFull) ? 1 : 0,
             evt_2: perf_events[0].evt_2,
-            evt_3: perf_events[0].evt_3
+            evt_3: perf_events[0].evt_3,
+            evt_4: 0
         };
         return evt;
     endmethod

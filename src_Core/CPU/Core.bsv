@@ -1195,7 +1195,7 @@ module mkCore#(CoreId coreId)(Core);
      core_evts.evt_JALR = dmem_evts.evt_AMO_MISS_LAT;
      core_evts.evt_TRAP = llmem_evts.evt_LD;
      core_evts.evt_BRANCH = (rob.isFull_ehrPort0) ? 1 : 0;
-     tgc_evts.evt_READ = dmem_evts.evt_ST;
+     tgc_evts.evt_READ = dmem_evts.evt_TLB_FLUSH;
      tgc_evts.evt_READ_MISS = dmem_evts.evt_ST_MISS_LAT;
      tgc_evts.evt_WRITE = dmem_evts.evt_AMO;
      tgc_evts.evt_WRITE_MISS = dmem_evts.evt_AMO;

@@ -363,7 +363,7 @@ module mkSignatureTable(SignatureTable#(outputQueueSize, tableSets, tableWays)) 
     RWBramCore#(tableIndexT, Vector#(tableWays, stEntryT)) st <- mkRWBramCoreForwarded();
 
     Bool verbose = True;
-    Bool extraVerbose = False;
+    Bool extraVerbose = True;
 
     function Maybe#(UInt#(tableWayBits)) getTagMatchWay (Vector#(tableWays, stEntryT) entries, tableTagT tag);
         function Bool isMatch (stEntryT entry);
@@ -471,7 +471,7 @@ module mkSignatureTable(SignatureTable#(outputQueueSize, tableSets, tableWays)) 
         pageAddressT pa = truncateLSB(addr);
         pageOffsetT po = truncate(addr);
         tableIndexT idx = truncate(pa);
-        //if (verbose) $display("%t signatureTable:reportAccess %x, sending rdReq with idx:%x", $time, addr, idx);
+        if (extraVerbose) $display("%t signatureTable:reportAccess %x, sending rdReq with idx:%x", $time, addr, idx);
         st.rdReq(idx);
     endmethod
 
@@ -516,7 +516,7 @@ module mkPatternTable(PatternTable#(numEntries, inputFifoSize)) provisos
     RWBramCore#(tableIndexT, PTEntry) pt <- mkRWBramCoreForwarded();
     
     Bool verbose = True;
-    Bool extraVerbose = False;
+    Bool extraVerbose = True;
     
     function Maybe#(UInt#(2)) getDeltaMatchingIdx (Vector#(4, DeltaEntry) entries, Delta delta);
         function Bool isMatch (DeltaEntry entry);
@@ -683,7 +683,7 @@ module mkPrefetchFilter(PrefetchFilter#(numEntries, pfCounterBits, queueSize)) p
         reportFifo_afterRead.deq;
         if (entry.valid && !entry.useful && hm == HIT && entry.tag == tag)  begin
             //This condition is just to keep the counters 'canonical'. If we allow pfUseful
-            //to exceed pfTotal, we can't update alpha when pfUseful hits counterMaxVal.
+            //to exceed pfTotal, we can't update alpha when pfTotal hits counterMaxVal.
             if (pfUseful < pfTotal) begin 
                 if (pfUseful == fromInteger(valueOf(maxCounterValue))) begin
                     pfUseful <= (pfUseful >> 1) + 1;
@@ -750,6 +750,7 @@ module mkPrefetchFilter(PrefetchFilter#(numEntries, pfCounterBits, queueSize)) p
         //If no entry, insert entry with valid = 1, useful = 1
         //If find tag matching entry with valid = 1, useful = 1, do nothing
         //If find tag matching entry with valid = 1, useful = 0, increment pfUseful
+        if (verbose) $display("%t PrefetchFilter:pfUseful: %d pfTotal: %d alpha: %d", $time, pfUseful, pfTotal, currAlpha);
         if (extraVerbose) $display("%t PrefetchFilter:reportAccess %x", $time, addr, fshow(hitMiss));
         reportFifo.enq(tuple2(addr, hitMiss));
     endmethod
@@ -794,7 +795,7 @@ Add#(1, d__, stWays)
 
     rule pteFromPtToCalc;
         let {ptl, pte} <- pt.getPTEntry;
-        Prob alpha = (7'b1100000); //TEMP change to filter.getCurrAlpha
+        Prob alpha = filter.getCurrAlpha;
         calculator.submitCandidates(ptl.addr, ptl.sig, alpha, ptl.currCumProb, pte.sigCount, pte.deltaCounts, ptl.depth);
     endrule
     
@@ -826,6 +827,9 @@ Add#(1, d__, stWays)
     endmethod
 
     method ActionValue#(Addr) getNextPrefetchAddr();
+        EventsPrefetcher evt = unpack(0);
+        evt.evt_4 = 1;
+        perf_events[0] <= evt;
         let lineAddr = addrToPrefetch.first;
         addrToPrefetch.deq;
         if (verbose) $display("%t Prefetcher:getNextPrefetchAddr %x", $time, Addr'{lineAddr, '0});
@@ -839,6 +843,7 @@ Add#(1, d__, stWays)
     evt.evt_1 = perf_events[0].evt_1;
     evt.evt_2 = perf_events[0].evt_2;
     evt.evt_3 = perf_events[0].evt_3;
+    evt.evt_4 = perf_events[0].evt_4;
     return evt;
     endmethod
 `endif

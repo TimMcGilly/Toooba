@@ -327,7 +327,7 @@ module mkL1DPrefetcher(CheriPCPrefetcher);
         Parameter#(256) maxCapSizeToPrefetch <- mkParameter;
         let m <- mkAllInCapPrefetcher(maxCapSizeToPrefetch);
     `elsif DATA_PREFETCHER_CHERI_STRIDE
-        Parameter#(256) strideTableSize <- mkParameter;
+        Parameter#(512) strideTableSize <- mkParameter;
         Parameter#(1) cLinesAheadToPrefetch <- mkParameter;
         let m <- mkCheriStridePrefetcher(strideTableSize, cLinesAheadToPrefetch);
     `elsif DATA_PREFETCHER_SPP
@@ -382,7 +382,7 @@ module mkLLDPrefetcherInL1D(CheriPCPrefetcher);
         Parameter#(256) maxCapSizeToPrefetch <- mkParameter;
         let m <- mkAllInCapPrefetcher(maxCapSizeToPrefetch);
     `elsif DATA_PREFETCHER_CHERI_STRIDE
-        Parameter#(256) strideTableSize <- mkParameter;
+        Parameter#(512) strideTableSize <- mkParameter;
         Parameter#(1) cLinesAheadToPrefetch <- mkParameter;
         let m <- mkCheriStridePrefetcher(strideTableSize, cLinesAheadToPrefetch);
     `elsif DATA_PREFETCHER_SPP

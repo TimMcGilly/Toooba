@@ -315,6 +315,7 @@ endfunction
         events.evt_ST_MISS_LAT = prefetcher.events.evt_1;
         events.evt_AMO = prefetcher.events.evt_2;
         events.evt_EVICT = prefetcher.events.evt_3;
+        events.evt_TLB_FLUSH = prefetcher.events.evt_4;
         perf_events[2] <= events;
     endrule
     

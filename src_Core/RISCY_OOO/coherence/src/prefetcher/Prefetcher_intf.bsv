@@ -33,6 +33,7 @@ typedef struct {
 	Bit#(Report_Width) evt_1;
 	Bit#(Report_Width) evt_2;
 	Bit#(Report_Width) evt_3;
+	Bit#(Report_Width) evt_4;
 } EventsPrefetcher deriving (Bits, FShow);
 
 interface Prefetcher;

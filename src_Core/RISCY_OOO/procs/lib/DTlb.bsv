@@ -259,7 +259,7 @@ module mkDTlb#(
         if(verbose) $display("[DTLB] flush begin");
 `ifdef PERFORMANCE_MONITORING
         EventsL1D ev = unpack(0);
-        ev.evt_TLB_FLUSH = 1;
+        //ev.evt_TLB_FLUSH = 1;
         perf_events[2] <= ev;
 `endif
     endrule
