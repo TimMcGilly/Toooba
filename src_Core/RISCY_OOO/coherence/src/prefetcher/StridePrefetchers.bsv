@@ -392,6 +392,7 @@ provisos(
     endrule
 
     method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
+        Bit#(16) pch = {8'h0, pcHash[15:8] ^ pcHash[7:0]};
         memAccesses.enq(tuple3 (addr, pcHash, hitMiss));
     endmethod
 

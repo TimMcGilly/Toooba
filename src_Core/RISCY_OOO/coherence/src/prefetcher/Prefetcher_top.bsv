@@ -297,7 +297,7 @@ module mkL1DPrefetcher(CheriPCPrefetcher);
         let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkBlockPrefetcher(numLinesEachWay)));
     `elsif DATA_PREFETCHER_STRIDE
         //let m <- mkStridePCPrefetcher;
-        Parameter#(512) strideTableSize <- mkParameter;
+        Parameter#(256) strideTableSize <- mkParameter;
         Parameter#(1) cLinesAheadToPrefetch <- mkParameter;
         let m <- mkCheriPCPrefetcherAdapter(mkStride2PCPrefetcher(strideTableSize, cLinesAheadToPrefetch));
     `elsif DATA_PREFETCHER_STRIDE_ADAPTIVE
