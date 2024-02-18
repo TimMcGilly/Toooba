@@ -658,6 +658,7 @@ module mkPrefetchFilter(PrefetchFilter#(numEntries, pfCounterBits, queueSize)) p
 
     endfunction
 
+    (* descending_urgency = "reportAccessRd, canPrefetchRd" *)
     rule canPrefetchRd;
         pfReqFifo.deq;
         let addr = pfReqFifo.first;
@@ -667,6 +668,7 @@ module mkPrefetchFilter(PrefetchFilter#(numEntries, pfCounterBits, queueSize)) p
         filterTable.rdReq(idx);
     endrule
 
+    (* descending_urgency = "reportAccessRd, canPrefetchRd" *)
     rule reportAccessRd;
         reportFifo.deq;
         let {addr, hm} = reportFifo.first;
@@ -809,7 +811,7 @@ Add#(1, d__, stWays)
         end
         evt.evt_2 = 1;
         evt.evt_3 = extend(depth);
-        perf_events[0] <= evt;
+        perf_events[1] <= evt;
         filter.canPrefetchReq(lineAddr);
     endrule
 
@@ -829,7 +831,7 @@ Add#(1, d__, stWays)
     method ActionValue#(Addr) getNextPrefetchAddr();
         EventsPrefetcher evt = unpack(0);
         evt.evt_4 = 1;
-        perf_events[0] <= evt;
+        perf_events[2] <= evt;
         let lineAddr = addrToPrefetch.first;
         addrToPrefetch.deq;
         if (verbose) $display("%t Prefetcher:getNextPrefetchAddr %x", $time, Addr'{lineAddr, '0});
