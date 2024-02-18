@@ -772,7 +772,7 @@ Add#(1, d__, stWays)
     PrefetchCalculator#(8, 8) calculator <- mkPrefetchCalculator(prefetchThreshold, divTableFile);
     SignatureTable#(4, stSets, stWays) st <- mkSignatureTable;
     PatternTable#(ptEntries, 4) pt <- mkPatternTable;
-    PrefetchFilter#(1024, 5, 8) filter <- mkPrefetchFilter;
+    PrefetchFilter#(1024, 6, 8) filter <- mkPrefetchFilter;
     Fifo#(8, LineAddr) addrToPrefetch <- mkOverflowBypassFifo;
     Array #(Reg #(EventsPrefetcher)) perf_events <- mkDRegOR (3, unpack (0));
 
