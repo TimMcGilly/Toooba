@@ -429,7 +429,7 @@ module mkLLDPrefetcher(Prefetcher);
         Parameter#(64) stSets <- mkParameter;
         Parameter#(4) stWays <- mkParameter;
         Parameter#(512) ptEntries <- mkParameter;
-        Prob prefetchThreshold = 7'b1100000;
+        Prob prefetchThreshold = 7'b0100000;
         Bool useFilter = True;
         let m <- mkSignaturePathPrefetcher(
             "./div_table.memhex",

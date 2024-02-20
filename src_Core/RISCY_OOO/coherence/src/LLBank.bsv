@@ -260,7 +260,7 @@ module mkLLBank#(
     Count#(Data) dmaStReqCnt <- mkCount(0);
 `endif
 `ifdef PERFORMANCE_MONITORING
-    Array #(Reg #(EventsLL)) perf_events <- mkDRegOR (2, unpack (0));
+    Array #(Reg #(EventsLL)) perf_events <- mkDRegOR (3, unpack (0));
 `endif
 function Action incrMissCnt(cRqT cRq, cRqIndexT idx, Bool isDma, Bool isInstructionAccess);
 action
@@ -662,6 +662,11 @@ endfunction
         // Check lowest bit of child ID to determine if this was an ICache access
         if (!cRqIsPrefetch[n]) begin
             incrMissCnt(cRq, n, False, cRq.child[0] == 1);
+        end
+        else begin
+            EventsLL events = unpack (0);
+            events.evt_EVICT = 1;
+            perf_events[2] <= events;
         end
     endrule
 
