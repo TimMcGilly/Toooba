@@ -272,7 +272,7 @@ provisos(
 
     method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
         Bit#(16) lenHash = hash(boundsLength);
-        Bit#(16) boundsHash = pcHash;
+        Bit#(16) boundsHash = lenHash;
         Addr topCapGap = (boundsLength == 0) ? -1 : boundsLength-boundsOffset-1;
         EventsPrefetcher evt = unpack(0);
         if (boundsLength == 0) begin
