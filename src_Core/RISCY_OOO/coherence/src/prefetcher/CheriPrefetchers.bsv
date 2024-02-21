@@ -249,6 +249,7 @@ provisos(
 
             addrToPrefetch.enq(reqAddr);
             EventsPrefetcher evt = unpack(0);
+            evt.evt_0 = (bot+top >= 4096) ? 1 : 0;
             evt.evt_2 = 1;
             if (isInCapBounds) begin
                 evt.evt_3 = 1;
@@ -272,7 +273,7 @@ provisos(
 
     method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
         Bit#(16) lenHash = hash(boundsLength);
-        Bit#(16) boundsHash = lenHash;
+        Bit#(16) boundsHash = pcHash;
         Addr topCapGap = (boundsLength == 0) ? -1 : boundsLength-boundsOffset-1;
         EventsPrefetcher evt = unpack(0);
         if (boundsLength == 0) begin
@@ -283,7 +284,9 @@ provisos(
         //if (boundsHash == 0)
             //hashIsSmall.send();
         if (`VERBOSE) $display("%t Prefetcher reportAccess %h %h, hash: %h", $time, boundsLength, boundsVirtBase, boundsHash);
-        memAccesses.enq(tuple5 (addr, boundsHash, hitMiss, boundsOffset, topCapGap));
+        if (boundsLength > 64) begin
+            memAccesses.enq(tuple5 (addr, boundsHash, hitMiss, boundsOffset, topCapGap));
+        end
     endmethod
 
     method ActionValue#(Addr) getNextPrefetchAddr;
@@ -297,7 +300,7 @@ provisos(
 `ifdef PERFORMANCE_MONITORING
     method EventsPrefetcher events;
         let evt = EventsPrefetcher {
-            evt_0: (!memAccesses.notFull) ? 1 : 0,
+            evt_0: perf_events[0].evt_0,
             evt_1: perf_events[0].evt_1,
             evt_2: perf_events[0].evt_2,
             evt_3: perf_events[0].evt_3,
