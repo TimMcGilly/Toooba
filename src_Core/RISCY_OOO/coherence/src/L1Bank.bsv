@@ -682,7 +682,7 @@ endfunction
                 },
                 line: newLine // write new data into cache
             }, True); // hit, so update rep info
-            if (!cRqIsPrefetch[n]) begin
+            if (!cRqIsPrefetch[n] && req.op == Ld) begin
                 prefetcher.reportAccess(req.addr, req.pcHash, HIT, req.boundsOffset, req.boundsLength, req.boundsVirtBase);
                 llcPrefetcher.reportAccess(req.addr, req.pcHash, HIT, req.boundsOffset, req.boundsLength, req.boundsVirtBase);
             end
@@ -836,7 +836,7 @@ endfunction
                 },
                 line: ram.line
             }, False);
-            if (!cRqIsPrefetch[n]) begin
+            if (!cRqIsPrefetch[n] && procRq.op == Ld) begin
                 prefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength, procRq.boundsVirtBase);
                 llcPrefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength, procRq.boundsVirtBase);
                 EventsL1D events = unpack(0);
@@ -868,7 +868,7 @@ endfunction
                 waitP: False // we send req to parent later (when resp to parent is sent)
             });
             cRqMshr.pipelineResp.setData(n, ram.info.cs == M ? Valid (ram.line) : Invalid);
-            if (!cRqIsPrefetch[n]) begin
+            if (!cRqIsPrefetch[n] && procRq.op == Ld) begin
                 prefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength, procRq.boundsVirtBase);
                 llcPrefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength, procRq.boundsVirtBase);
             end

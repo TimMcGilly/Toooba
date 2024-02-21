@@ -284,9 +284,7 @@ provisos(
         //if (boundsHash == 0)
             //hashIsSmall.send();
         if (`VERBOSE) $display("%t Prefetcher reportAccess %h %h, hash: %h", $time, boundsLength, boundsVirtBase, boundsHash);
-        if (boundsLength > 64) begin
-            memAccesses.enq(tuple5 (addr, boundsHash, hitMiss, boundsOffset, topCapGap));
-        end
+        memAccesses.enq(tuple5 (addr, boundsHash, hitMiss, boundsOffset, topCapGap));
     endmethod
 
     method ActionValue#(Addr) getNextPrefetchAddr;
