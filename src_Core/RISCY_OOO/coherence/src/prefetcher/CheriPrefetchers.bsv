@@ -34,6 +34,7 @@ import SpecialFIFOs :: *;
 import Ehr::*;
 import GetPut::*;
 import RWBramCore::*;
+import ConfigReg::*;
 import SpecialRegs::*;
 
 `define VERBOSE True
@@ -293,6 +294,232 @@ provisos(
         perf_events[2] <= evt;
         addrToPrefetch.deq;
         return addrToPrefetch.first;
+    endmethod
+
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        let evt = EventsPrefetcher {
+            evt_0: perf_events[0].evt_0,
+            evt_1: perf_events[0].evt_1,
+            evt_2: perf_events[0].evt_2,
+            evt_3: perf_events[0].evt_3,
+            evt_4: perf_events[0].evt_4
+        };
+        return evt;
+    endmethod
+`endif
+
+endmodule
+
+typedef enum {
+  NOTUSED = 2'd0, USED1 = 2'd1, USED2 = 2'd2, USED3 = 2'd3
+} LineState deriving (Bits, Eq, FShow);
+
+typedef struct {
+    Vector#(numEntries, LineState) bitmap;
+} BitmapEntry#(numeric type numEntries) deriving (Bits, Eq, FShow);
+
+typedef struct {
+    Bit#(tagBits) tag;
+    Bool prefetched;
+} FilterEntry#(numeric type tagBits) deriving (Bits, Eq, FShow);
+
+module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmapTableSize) __, 
+        Parameter#(filterTableSize) ___, Parameter#(inverseDecayChance) ____)(CheriPCPrefetcher) provisos (
+    Add#(a__, TLog#(TDiv#(maxCapSizeToTrack, 64)), 58),
+    NumAlias#(pageIndexBits, 6), //assume 4k pages
+    Alias#(pageAddressT, Bit#(TSub#(LineAddrSz, pageIndexBits))),
+    NumAlias#(tagBits, 16),
+    NumAlias#(pfQueueSize, 16),
+    NumAlias#(linesInPage, 64),
+    NumAlias#(bitmapLength, TDiv#(maxCapSizeToTrack, 64)),
+    Alias#(bitmapIndexT, Bit#(TLog#(bitmapLength))),
+    Alias#(bitmapTableIdxT, Bit#(TLog#(bitmapTableSize))),
+    Alias#(filterTableIdxT, Bit#(TLog#(filterTableSize))),
+    Alias#(filterTableIdxTagT, Bit#(TAdd#(TLog#(filterTableSize), tagBits))),
+    Alias#(bitmapEntryT, BitmapEntry#(bitmapLength)),
+    Alias#(filterEntryT, FilterEntry#(tagBits)),
+    Alias#(pageBitmapT, Vector#(64, LineState)),
+
+    Add#(1, b__, TDiv#(64, TAdd#(TLog#(filterTableSize), 16))),
+    Add#(c__, 64, TMul#(TDiv#(64, TAdd#(TLog#(filterTableSize), 16)), TAdd#(TLog#(filterTableSize), 16))),
+    Add#(d__, 52, TMul#(TDiv#(52, TAdd#(TLog#(filterTableSize), 16)), TAdd#(TLog#(filterTableSize), 16))),
+    Add#(1, f__, TDiv#(64, TLog#(bitmapTableSize))),
+    Add#(g__, 64, TMul#(TDiv#(64, TLog#(bitmapTableSize)),TLog#(bitmapTableSize))), 
+    Add#(1, e__, TDiv#(52, TAdd#(TLog#(filterTableSize), 16)))
+);
+    Array #(Reg #(EventsPrefetcher)) perf_events <- mkDRegOR (4, unpack (0));
+    RWBramCore#(bitmapTableIdxT, bitmapEntryT) bt <- mkRWBramCoreForwarded();
+    RWBramCore#(filterTableIdxT, filterEntryT) ft <- mkRWBramCoreForwarded();
+    Fifo#(pfQueueSize, LineAddr) pfQueue <- mkOverflowPipelineFifo;
+    Fifo#(1, Tuple7#(Addr, HitOrMiss, LineAddr, Addr, bitmapTableIdxT, filterTableIdxTagT, Addr)) dataForRdResp <- mkPipelineFifo;
+    Reg#(Tuple2#(pageAddressT, UInt#(8))) dataForIssuePrefetches <- mkConfigReg(?);
+    Reg#(Vector#(linesInPage, Bool)) canPrefetch <- mkConfigReg(replicate(False));
+    Reg#(Bit#(8)) randomCounter <- mkConfigReg(0);
+
+    function LineState upgrade(LineState st) = 
+        case (st)
+            NOTUSED: USED1;
+            USED1: USED2;
+            USED2: USED3;
+            USED3: USED3;
+        endcase;
+
+    function LineState downgrade(LineState st) =
+        case (st)
+            NOTUSED: NOTUSED;
+            USED1: NOTUSED;
+            USED2: USED1;
+            USED3: USED2;
+        endcase;
+
+    rule incrRandomCounter;
+        if (randomCounter == fromInteger(valueof(inverseDecayChance))-1)
+            randomCounter <= 0;
+        else
+            randomCounter <= randomCounter + 1;
+    endrule
+
+    rule processRdResp;
+        bitmapEntryT bte = bt.rdResp;
+        bt.deqRdResp;
+        filterEntryT fte = ft.rdResp;
+        ft.deqRdResp;
+        let {accessAddr, hitMiss, boundsOffset, boundsVirtBase, btIdx, ftIdxTag, boundsLength} = dataForRdResp.first;
+        LineAddr accessLineAddr = truncateLSB(accessAddr);
+        dataForRdResp.deq;
+
+        Bit#(tagBits) ftTag = truncateLSB(ftIdxTag);
+        if (hitMiss == MISS && (ftTag != fte.tag || fte.prefetched == False)) begin
+            //Update filter table
+            fte.tag = ftTag;
+            fte.prefetched = True;
+            ft.wrReq(truncate(ftIdxTag), fte); 
+
+            //Find cache lines in current page to possibly prefetch
+            pageAddressT pa = truncateLSB(accessAddr);
+            LineAddr pageStartAddr = {pa, '0};
+            LineAddr pageStartCapOffset = boundsOffset - (accessLineAddr - pageStartAddr);
+            Vector#(linesInPage, Bool) canPrefetchVec = replicate(False);
+            Vector#(linesInPage, Bool) atLeastUsed2 = replicate(False);
+            for (Integer i = 0; i < valueOf(linesInPage); i = i + 1) begin
+                if (fromInteger(i) + pageStartCapOffset >= 0 && fromInteger(i) + pageStartCapOffset < fromInteger(valueof(bitmapLength))) begin
+                    LineState st = bte.bitmap[fromInteger(i)+pageStartCapOffset];
+                    canPrefetchVec[i] = st == USED3;
+                    atLeastUsed2[i] = st == USED2 || st == USED3;
+                end
+            end
+            if (`VERBOSE) $display("%t prefetcher:processRdResp MISS offset %h in new cap %h (for cap idx %h), found %d possible prefetches!", 
+                $time, boundsOffset, ftIdxTag, btIdx, countElem(True, canPrefetchVec));
+            if (`VERBOSE) $display("%t prefetcher:processRdResp canPrefetchVec: ", 
+                $time, fshow(canPrefetchVec));
+
+            canPrefetch <= canPrefetchVec;
+            dataForIssuePrefetches <= tuple2(pa, unpack(truncate(accessLineAddr - pageStartAddr)));
+
+            EventsPrefetcher evt = unpack(0);
+            evt.evt_0 = 1;
+            evt.evt_1 = extend(pack(countElem(True, canPrefetchVec)));
+            evt.evt_2 = extend(pack(countElem(True, atLeastUsed2)));
+            perf_events[1] <= evt;
+        end
+        
+        //NB: Change this for LLC prefetching -- then L1 acts as filter, so can upgrade and downgrade on hits too!
+        //For L1, will get many hits for the same cache line, so only want to do stuff for misses.
+        if (hitMiss == MISS) begin
+            //Downgrade all states with probability 1/inverseDecayChance
+            if (randomCounter == 0) begin
+                for (Integer i = 0; i < valueof(bitmapLength); i = i + 1) begin
+                        bte.bitmap[i] = downgrade(bte.bitmap[i]);
+                end
+                if (`VERBOSE) $display("%t prefetcher:processRdResp downgrading lines in cap %h!. Status now: ", 
+                $time, btIdx);
+                for (Integer i = 0; i < valueof(bitmapLength); i = i + 1) begin
+                    if (`VERBOSE) $write(" ", fshow(bte.bitmap[i]));
+                end
+                
+            end
+            //Update state of cache line in bitmap
+            //LineAddr accessLineAddr = truncateLSB(addr);
+            EventsPrefetcher evt = unpack(0);
+            evt.evt_3 = 1;
+            perf_events[2] <= evt;
+
+            bitmapIndexT bitmapIdx = truncate(boundsOffset);
+            LineState state = bte.bitmap[bitmapIdx];
+            LineState nextState = upgrade(state);
+            bte.bitmap[bitmapIdx] = nextState;
+            if (`VERBOSE) $display("%t prefetcher:processRdResp upgrading offset %h in cap %h to ", $time, boundsOffset, btIdx, fshow(nextState));
+            bt.wrReq(btIdx, bte);
+        end
+    endrule
+
+    rule issuePrefetches;
+        let {pageStartAddr, accessOffset} = dataForIssuePrefetches;
+        Vector#(linesInPage, Bool) canPrefetchAbove = replicate(False);
+        Vector#(linesInPage, Bool) canPrefetchBelow = replicate(False);
+        for (Integer i = 1; i < valueof(linesInPage); i = i + 1) begin
+            if (fromInteger(i)+accessOffset < fromInteger(valueof(linesInPage)))
+                canPrefetchAbove[i] = canPrefetch[fromInteger(i)+accessOffset];
+        end
+        for (Integer i = 1; i < valueof(linesInPage); i = i + 1) begin
+            //Check for underflow
+            if (accessOffset - fromInteger(i) < fromInteger(valueOf(linesInPage)))
+                canPrefetchBelow[i] = canPrefetch[accessOffset - fromInteger(i)];
+        end
+
+        let canPrefetchAboveIdx = findElem(True, canPrefetchAbove);
+        let canPrefetchBelowIdx = findElem(True, canPrefetchBelow);
+        Maybe#(UInt#(6)) prefetchIdx = Invalid;
+        if (canPrefetchAboveIdx matches tagged Valid .aboveIdx) begin
+            if (canPrefetchBelowIdx matches tagged Valid .belowIdx) begin
+                //Prefetch the closest cache lines first
+                if (aboveIdx <= belowIdx) 
+                    prefetchIdx = tagged Valid (truncate(accessOffset)+aboveIdx);
+                else 
+                    prefetchIdx = tagged Valid (truncate(accessOffset)-belowIdx);
+            end
+            else begin
+                prefetchIdx = tagged Valid (truncate(accessOffset)+aboveIdx);
+            end
+        end
+        else if (canPrefetchBelowIdx matches tagged Valid .belowIdx) begin
+            prefetchIdx = tagged Valid (truncate(accessOffset)-belowIdx);
+        end
+        
+        if (prefetchIdx matches tagged Valid .idx) begin
+            //if (`VERBOSE) $display("%t prefetcher:issuePrefetches canPrefetch at start: ", $time, fshow(canPrefetch));
+            let canPrefetchVec = canPrefetch;
+            canPrefetchVec[idx] = False;
+            canPrefetch <= canPrefetchVec;
+            LineAddr toPrefetch = {pageStartAddr, '0} + pack(extend(idx));
+            if (`VERBOSE) $display("%t prefetcher:issuePrefetches %h", $time, Addr'{toPrefetch, '0});
+            pfQueue.enq(extend(toPrefetch));
+
+            EventsPrefetcher evt = unpack(0);
+            evt.evt_4 = 1;
+            perf_events[3] <= evt;
+        end
+    endrule
+
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
+        if (boundsLength > 64 && boundsLength <= fromInteger(valueOf(maxCapSizeToTrack))) begin
+            bitmapTableIdxT bidx = hash(boundsLength);
+            bt.rdReq(bidx);
+            pageAddressT pa = truncateLSB(addr);
+            filterTableIdxTagT fidx = hash(boundsVirtBase) ^ hash(pa);
+            ft.rdReq(truncate(fidx));
+            Bit#(6) offsetInLine = truncate(boundsVirtBase);
+            //boundsOffset2 tracks the idx of the cache line in the capability.
+            LineAddr boundsOffset2 = truncateLSB(boundsOffset+extend(offsetInLine));
+            dataForRdResp.enq(tuple7(addr, hitMiss, boundsOffset2, boundsVirtBase, bidx, fidx, boundsLength));
+        end
+    endmethod
+
+    method ActionValue#(Addr) getNextPrefetchAddr;
+        pfQueue.deq;
+        return {pfQueue.first, '0};
     endmethod
 
 `ifdef PERFORMANCE_MONITORING
