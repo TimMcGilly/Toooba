@@ -405,8 +405,8 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
             for (Integer i = 0; i < valueOf(linesInPage); i = i + 1) begin
                 if (fromInteger(i) + pageStartCapOffset >= 0 && fromInteger(i) + pageStartCapOffset < fromInteger(valueof(bitmapLength))) begin
                     LineState st = bte.bitmap[fromInteger(i)+pageStartCapOffset];
-                    canPrefetchVec[i] = st == USED3;
-                    atLeastUsed2[i] = st == USED2 || st == USED3;
+                    canPrefetchVec[i] = st == USED2 || st == USED3;
+                    atLeastUsed2[i] = st == USED1 || st == USED2 || st == USED3;
                 end
             end
             if (`VERBOSE) $display("%t prefetcher:processRdResp MISS offset %h in new cap %h (for cap idx %h), found %d possible prefetches!", 
@@ -420,7 +420,8 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
             EventsPrefetcher evt = unpack(0);
             evt.evt_0 = 1;
             evt.evt_1 = extend(pack(countElem(True, canPrefetchVec)));
-            evt.evt_2 = extend(pack(countElem(True, atLeastUsed2)));
+            //evt.evt_2 = extend(pack(countElem(True, atLeastUsed2)));
+            evt.evt_2 = truncate(boundsLength[63:4]);
             perf_events[1] <= evt;
         end
         
