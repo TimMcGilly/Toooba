@@ -347,7 +347,8 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
     Add#(1, f__, TDiv#(64, TLog#(bitmapTableSize))),
     Add#(g__, 64, TMul#(TDiv#(64, TLog#(bitmapTableSize)),TLog#(bitmapTableSize))), 
     Add#(1, e__, TDiv#(52, TAdd#(TLog#(filterTableSize), 16))),
-    Add#(h__, 16, TMul#(TDiv#(16, TLog#(bitmapTableSize)), TLog#(bitmapTableSize)))
+    Add#(h__, 16, TMul#(TDiv#(16, TLog#(bitmapTableSize)), TLog#(bitmapTableSize))),
+    Add#(1, i__, TDiv#(16, TLog#(bitmapTableSize)))
 
 );
     Array #(Reg #(EventsPrefetcher)) perf_events <- mkDRegOR (4, unpack (0));
