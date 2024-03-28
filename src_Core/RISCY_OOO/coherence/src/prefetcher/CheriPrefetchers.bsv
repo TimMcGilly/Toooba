@@ -346,7 +346,9 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
     Add#(d__, 52, TMul#(TDiv#(52, TAdd#(TLog#(filterTableSize), 16)), TAdd#(TLog#(filterTableSize), 16))),
     Add#(1, f__, TDiv#(64, TLog#(bitmapTableSize))),
     Add#(g__, 64, TMul#(TDiv#(64, TLog#(bitmapTableSize)),TLog#(bitmapTableSize))), 
-    Add#(1, e__, TDiv#(52, TAdd#(TLog#(filterTableSize), 16)))
+    Add#(1, e__, TDiv#(52, TAdd#(TLog#(filterTableSize), 16))),
+    Add#(h__, 16, TMul#(TDiv#(16, TLog#(bitmapTableSize)), TLog#(bitmapTableSize)))
+
 );
     Array #(Reg #(EventsPrefetcher)) perf_events <- mkDRegOR (4, unpack (0));
     RWBramCore#(bitmapTableIdxT, bitmapEntryT) bt <- mkRWBramCoreForwarded();
@@ -405,7 +407,7 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
             for (Integer i = 0; i < valueOf(linesInPage); i = i + 1) begin
                 if (fromInteger(i) + pageStartCapOffset >= 0 && fromInteger(i) + pageStartCapOffset < fromInteger(valueof(bitmapLength))) begin
                     LineState st = bte.bitmap[fromInteger(i)+pageStartCapOffset];
-                    canPrefetchVec[i] = st == USED2 || st == USED3;
+                    canPrefetchVec[i] = st == USED3;
                     atLeastUsed2[i] = st == USED1 || st == USED2 || st == USED3;
                 end
             end
@@ -506,7 +508,8 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
     method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
         if (boundsLength > 64 && boundsLength <= fromInteger(valueOf(maxCapSizeToTrack))) begin
-            bitmapTableIdxT bidx = hash(boundsLength);
+            $display("%t prefetcher:reportAccess MISS %h with bounds length %d base %h offset %d", $time, addr, boundsLength, boundsVirtBase, boundsOffset);
+            bitmapTableIdxT bidx = hash(boundsLength) ^ hash(pcHash);
             bt.rdReq(bidx);
             pageAddressT pa = truncateLSB(addr);
             filterTableIdxTagT fidx = hash(boundsVirtBase) ^ hash(pa);
