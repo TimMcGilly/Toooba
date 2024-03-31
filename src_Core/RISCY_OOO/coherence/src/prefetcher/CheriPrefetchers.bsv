@@ -408,7 +408,7 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
             for (Integer i = 0; i < valueOf(linesInPage); i = i + 1) begin
                 if (fromInteger(i) + pageStartCapOffset >= 0 && fromInteger(i) + pageStartCapOffset < fromInteger(valueof(bitmapLength))) begin
                     LineState st = bte.bitmap[fromInteger(i)+pageStartCapOffset];
-                    canPrefetchVec[i] = st == USED3 || st == USED2;
+                    canPrefetchVec[i] = st == USED3 || st == USED2 || st == USED1;
                     atLeastUsed2[i] = st == USED1 || st == USED2 || st == USED3;
                 end
             end
@@ -509,7 +509,7 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
     method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
         if (boundsLength > 64 && boundsLength <= fromInteger(valueOf(maxCapSizeToTrack))) begin
-            $display("%t prefetcher:reportAccess MISS %h with bounds length %d base %h offset %d", $time, addr, boundsLength, boundsVirtBase, boundsOffset);
+            $display("%t prefetcher:reportAccess %h with bounds length %d base %h offset %d", $time, addr, boundsLength, boundsVirtBase, boundsOffset);
             bitmapTableIdxT bidx = hash(boundsLength);
             bt.rdReq(bidx);
             pageAddressT pa = truncateLSB(addr);
