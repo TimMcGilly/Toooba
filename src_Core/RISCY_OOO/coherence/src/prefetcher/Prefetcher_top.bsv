@@ -395,7 +395,7 @@ module mkLLDPrefetcherInL1D(CheriPCPrefetcher);
         Parameter#(1) cLinesAheadToPrefetch <- mkParameter;
         let m <- mkCheriStridePrefetcher(strideTableSize, cLinesAheadToPrefetch);
     `elsif DATA_PREFETCHER_CAP_BITMAP
-        Parameter#(8192) maxCapSizeToTrack <- mkParameter;
+        Parameter#(1024) maxCapSizeToTrack <- mkParameter;
         Parameter#(128) bitmapTableSize <- mkParameter;
         Parameter#(64) filterTableSize <- mkParameter;
         Parameter#(64) inverseDecayChance <- mkParameter;
