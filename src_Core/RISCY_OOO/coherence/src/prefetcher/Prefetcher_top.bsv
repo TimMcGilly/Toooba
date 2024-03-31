@@ -347,7 +347,10 @@ module mkL1DPrefetcher(CheriPCPrefetcher);
             stSets, stWays, ptEntries, prefetchThreshold, useFilter)));
     `endif
 `else 
-    let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));
+    //let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));
+    Parameter#(512) strideTableSize <- mkParameter;
+    Parameter#(1) cLinesAheadToPrefetch <- mkParameter;
+    let m <- mkCheriPCPrefetcherAdapter(mkStride2PCPrefetcher(strideTableSize, cLinesAheadToPrefetch));
 `endif
     return m;
 endmodule
