@@ -356,6 +356,10 @@ module mkCapBitmapPrefetcherTest3(Empty);
                 let x <- t.getNextPrefetchAddr;
                 doAssert(x == 'h8340, "test fail!");
             endaction
+            action
+                let x <- t.getNextPrefetchAddr;
+                doAssert(x == 'h8300, "test fail!");
+            endaction
 
             //Access new cap, and see that the 4th cache line (outside of cap) is prefetched
             action
@@ -372,6 +376,38 @@ module mkCapBitmapPrefetcherTest3(Empty);
             action
                 let x <- t.getNextPrefetchAddr;
                 doAssert(x == 'h8400, "test fail!");
+            endaction
+
+            //Test queueing up issuing prefetches
+            action
+                t.reportAccess('h8500, 'h0, MISS, 'h000, 'h00a0, 'h4500);  
+            endaction
+            action
+                t.reportAccess('h8600, 'h0, MISS, 'h000, 'h00a0, 'h4600);  
+            endaction
+            action
+                let x <- t.getNextPrefetchAddr;
+                doAssert(x == 'h8540, "test fail!");
+            endaction
+            action
+                let x <- t.getNextPrefetchAddr;
+                doAssert(x == 'h8580, "test fail!");
+            endaction
+            action
+                let x <- t.getNextPrefetchAddr;
+                doAssert(x == 'h85c0, "test fail!");
+            endaction
+            action
+                let x <- t.getNextPrefetchAddr;
+                doAssert(x == 'h8640, "test fail!");
+            endaction
+            action
+                let x <- t.getNextPrefetchAddr;
+                doAssert(x == 'h8680, "test fail!");
+            endaction
+            action
+                let x <- t.getNextPrefetchAddr;
+                doAssert(x == 'h86c0, "test fail!");
             endaction
             action endaction
             action endaction

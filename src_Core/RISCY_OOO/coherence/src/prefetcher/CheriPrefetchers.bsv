@@ -356,6 +356,7 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
     RWBramCore#(filterTableIdxT, filterEntryT) ft <- mkRWBramCoreForwarded();
     Fifo#(pfQueueSize, LineAddr) pfQueue <- mkOverflowPipelineFifo;
     Fifo#(1, Tuple7#(Addr, HitOrMiss, LineAddr, Addr, bitmapTableIdxT, filterTableIdxTagT, Addr)) dataForRdResp <- mkPipelineFifo;
+    Fifo#(4, Tuple3#(Vector#(linesInPage, Bool), pageAddressT, UInt#(8))) issuePrefetchesQueue <- mkBypassFifo;
     Reg#(Tuple2#(pageAddressT, UInt#(8))) dataForIssuePrefetches <- mkConfigReg(?);
     Reg#(Vector#(linesInPage, Bool)) canPrefetch <- mkConfigReg(replicate(False));
     Reg#(Bit#(8)) randomCounter <- mkConfigReg(0);
@@ -406,7 +407,8 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
             Vector#(linesInPage, Bool) canPrefetchVec = replicate(False);
             Vector#(linesInPage, Bool) atLeastUsed2 = replicate(False);
             for (Integer i = 0; i < valueOf(linesInPage); i = i + 1) begin
-                if (fromInteger(i) + pageStartCapOffset >= 0 && fromInteger(i) + pageStartCapOffset < fromInteger(valueof(bitmapLength))) begin
+                if (fromInteger(i) != (accessLineAddr - pageStartAddr) && 
+                    fromInteger(i) + pageStartCapOffset >= 0 && fromInteger(i) + pageStartCapOffset < fromInteger(valueof(bitmapLength))) begin
                     LineState st = bte.bitmap[fromInteger(i)+pageStartCapOffset];
                     canPrefetchVec[i] = st == USED3 || st == USED2;
                     atLeastUsed2[i] = st == USED1 || st == USED2 || st == USED3;
@@ -417,8 +419,7 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
             if (`VERBOSE) $display("%t prefetcher:processRdResp canPrefetchVec: ", 
                 $time, fshow(canPrefetchVec));
 
-            canPrefetch <= canPrefetchVec;
-            dataForIssuePrefetches <= tuple2(pa, unpack(truncate(accessLineAddr - pageStartAddr)));
+            issuePrefetchesQueue.enq(tuple3(canPrefetchVec, pa, unpack(truncate(accessLineAddr - pageStartAddr))));
 
             EventsPrefetcher evt = unpack(0);
             evt.evt_0 = 1;
@@ -455,6 +456,15 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
             bte.bitmap[bitmapIdx] = nextState;
             if (`VERBOSE) $display("%t prefetcher:processRdResp upgrading offset %h in cap %h to ", $time, boundsOffset, btIdx, fshow(nextState));
             bt.wrReq(btIdx, bte);
+        end
+    endrule
+
+    rule issuePrefetchesQToReg;
+        if (canPrefetch == replicate(False) || !issuePrefetchesQueue.notFull) begin
+            issuePrefetchesQueue.deq;
+            let {canPrefetchVec, pa, accessOffset} = issuePrefetchesQueue.first;
+            canPrefetch <= canPrefetchVec;
+            dataForIssuePrefetches <= tuple2(pa, accessOffset);
         end
     endrule
 
