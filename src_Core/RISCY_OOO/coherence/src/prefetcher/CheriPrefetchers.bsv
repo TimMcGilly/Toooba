@@ -423,9 +423,9 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
 
             EventsPrefetcher evt = unpack(0);
             evt.evt_0 = 1;
-            evt.evt_1 = (boundsLength <= 1024) ? 0 : extend(pack(countElem(True, canPrefetchVec)));
-            //evt.evt_1 = extend(pack(countElem(True, atLeastUsed2)));
-            evt.evt_2 = (boundsLength <= 1024) ? 0 : 1; 
+            evt.evt_2 = (boundsLength <= 1024) ? 0 : extend(pack(countElem(True, canPrefetchVec)));
+            evt.evt_1 = extend(pack(countElem(True, canPrefetchVec)));
+            //evt.evt_2 = extend(pack(countElem(True, canPrefetchVec)));
             perf_events[1] <= evt;
         end
         
