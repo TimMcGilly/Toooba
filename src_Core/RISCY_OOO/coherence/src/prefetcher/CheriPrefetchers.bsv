@@ -348,7 +348,8 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
     Add#(g__, 64, TMul#(TDiv#(64, TLog#(bitmapTableSize)),TLog#(bitmapTableSize))), 
     Add#(1, e__, TDiv#(52, TAdd#(TLog#(filterTableSize), 16))),
     Add#(h__, 16, TMul#(TDiv#(16, TLog#(bitmapTableSize)), TLog#(bitmapTableSize))),
-    Add#(1, i__, TDiv#(16, TLog#(bitmapTableSize)))
+    Add#(1, i__, TDiv#(16, TLog#(bitmapTableSize))),
+    Add#(j__, 2, TLog#(bitmapTableSize))
 
 );
     Array #(Reg #(EventsPrefetcher)) perf_events <- mkDRegOR (4, unpack (0));
@@ -520,7 +521,13 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
         if (boundsLength > 64 && boundsLength <= fromInteger(valueOf(maxCapSizeToTrack))) begin
             $display("%t prefetcher:reportAccess %h with bounds length %d base %h offset %d", $time, addr, boundsLength, boundsVirtBase, boundsOffset);
-            bitmapTableIdxT bidx = hash(boundsLength);
+            //Not all objects are aligned in the same way, so we separate the training bitmaps for objects that are aligned differently
+            //Otherwise, one 8-byte field in different objects might land in 2 different cache lines, 
+            //meaning both cache lines would be prefetched every time.
+            //As this reduces the amount of training data, this is done partially, grouping objects with same 16byte alignment together
+            //(Although it is likely malloc allocates all objects with a 16-byte aligned start anyway)
+            Bit#(2) capStart16byteOffset = boundsVirtBase[5:4]; 
+            bitmapTableIdxT bidx = hash(boundsLength) ^ extend(capStart16byteOffset);
             bt.rdReq(bidx);
             pageAddressT pa = truncateLSB(addr);
             filterTableIdxTagT fidx = hash(boundsVirtBase) ^ hash(pa);
