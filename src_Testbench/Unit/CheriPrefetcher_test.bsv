@@ -24,9 +24,94 @@ import Prefetcher_intf::*;
 import Prefetcher_top::*;
 import CheriPrefetchers::*;
 import RWBramCore::*;
+import RWBramCoreSequential::*;
 import StmtFSM::*;
 import Types::*;
 import Fifos::*;
+import CacheUtils::*;
+import CHERICap::*;
+import CHERICC_Fat::*;
+
+module mkRWBramCoreSequentialTest(Empty);
+    RWBramCoreSequential#(8, Bit#(16), 4) t <- mkRWBramCoreSequential;
+    mkAutoFSM(
+        seq
+            action
+                t.wrReq('h2, 'h6969);
+            endaction
+            action
+                t.wrReq('h3, 'h7979);
+            endaction
+            action
+                t.wrReq('h4, 'h8989);
+            endaction
+            action
+                t.rdReq('h0);
+            endaction
+            action
+                let x = t.rdResp;
+                let y <- t.deqRdResp;
+                $display("rdresp ", fshow(x));
+            endaction
+            action
+                t.rdReq('h1);
+            endaction
+            action
+                let x = t.rdResp;
+                let y <- t.deqRdResp;
+                $display("rdresp ", fshow(x));
+            endaction
+            action
+                t.rdReq('h2);
+            endaction
+            action
+                let x = t.rdResp;
+                let y <- t.deqRdResp;
+                $display("rdresp ", fshow(x));
+            endaction
+            action
+                t.rdReq('h3);
+            endaction
+            action
+                let x = t.rdResp;
+                let y <- t.deqRdResp;
+                $display("rdresp ", fshow(x));
+            endaction
+            action
+                t.rdReq('h4);
+            endaction
+            action
+                let x = t.rdResp;
+                let y <- t.deqRdResp;
+                $display("rdresp ", fshow(x));
+            endaction
+            action
+                t.rdReq('h5);
+            endaction
+            action
+                let x = t.rdResp;
+                let y <- t.deqRdResp;
+                $display("rdresp ", fshow(x));
+            endaction
+
+            action
+                t.wrReq('hfe, 'hbbbb);
+            endaction
+            action
+                t.wrReq('h0, 'h9999);
+            endaction
+            action
+                t.rdReq('hfe);
+            endaction
+            action
+                let x = t.rdResp;
+                let y <- t.deqRdResp;
+                $display("rdresp ", fshow(x));
+            endaction
+        endseq
+    );
+endmodule
+
 
 module mkAllInCapPrefetcherTest(Empty);
     Parameter#(256) maxCapSizeToPrefetch <- mkParameter;
