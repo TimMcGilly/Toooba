@@ -324,7 +324,7 @@ typedef struct {
     Bool prefetched;
 } FilterEntry#(numeric type tagBits) deriving (Bits, Eq, FShow);
 
-module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmapTableSize) __, 
+module mkCapBitmapPrefetcherOld#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmapTableSize) __, 
         Parameter#(filterTableSize) ___, Parameter#(inverseDecayChance) ____)(CheriPCPrefetcher) provisos (
     Add#(a__, TLog#(TDiv#(maxCapSizeToTrack, 64)), 58),
     NumAlias#(pageIndexBits, 6), //assume 4k pages
@@ -558,3 +558,298 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
 `endif
 
 endmodule
+
+module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmapTableSize) __, 
+        Parameter#(filterTableSize) ___, Parameter#(inverseDecayChance) ____)(CheriPCPrefetcher) provisos (
+    Add#(a__, TLog#(TDiv#(maxCapSizeToTrack, 64)), 58),
+    NumAlias#(pageIndexBits, 6), //assume 4k pages
+    Alias#(pageAddressT, Bit#(TSub#(LineAddrSz, pageIndexBits))),
+    NumAlias#(tagBits, 16),
+    NumAlias#(pfQueueSize, 16),
+    NumAlias#(linesInPage, 64),
+    NumAlias#(bitmapLength, 64),
+    Alias#(bitmapIndexT, Bit#(TLog#(bitmapLength))),
+    Alias#(bitmapTableIdxT, Bit#(TLog#(bitmapTableSize))),
+    Alias#(filterTableIdxT, Bit#(TLog#(filterTableSize))),
+    Alias#(filterTableIdxTagT, Bit#(TAdd#(TLog#(filterTableSize), tagBits))),
+    Alias#(bitmapEntryT, BitmapEntry#(bitmapLength)),
+    Alias#(filterEntryT, FilterEntry#(tagBits)),
+    Alias#(pageBitmapT, Vector#(64, LineState)),
+
+    Add#(1, b__, TDiv#(64, TAdd#(TLog#(filterTableSize), 16))),
+    Add#(c__, 64, TMul#(TDiv#(64, TAdd#(TLog#(filterTableSize), 16)), TAdd#(TLog#(filterTableSize), 16))),
+    Add#(d__, 52, TMul#(TDiv#(52, TAdd#(TLog#(filterTableSize), 16)), TAdd#(TLog#(filterTableSize), 16))),
+    Add#(1, f__, TDiv#(64, TLog#(bitmapTableSize))),
+    Add#(g__, 64, TMul#(TDiv#(64, TLog#(bitmapTableSize)),TLog#(bitmapTableSize))), 
+    Add#(1, e__, TDiv#(52, TAdd#(TLog#(filterTableSize), 16))),
+    Add#(h__, 16, TMul#(TDiv#(16, TLog#(bitmapTableSize)), TLog#(bitmapTableSize))),
+    Add#(1, i__, TDiv#(16, TLog#(bitmapTableSize))),
+    Add#(j__, 2, TLog#(bitmapTableSize)),
+    Add#(k__, 1, TLog#(bitmapTableSize)),
+    Add#(l__, 8, TLog#(bitmapTableSize)),
+    Add#(n__, 64, TMul#(TDiv#(64, TSub#(TLog#(bitmapTableSize), 1)),
+    TSub#(TLog#(bitmapTableSize), 1))),
+    Add#(1, m__, TDiv#(64, TSub#(TLog#(bitmapTableSize), 1))),
+    Add#(3, o__, TLog#(bitmapTableSize))
+
+);
+    Array #(Reg #(EventsPrefetcher)) perf_events <- mkDRegOR (4, unpack (0));
+    RWBramCoreSequential#(TLog#(bitmapTableSize), bitmapEntryT, 2) bt <- mkRWBramCoreSequential();
+    RWBramCore#(filterTableIdxT, filterEntryT) ft <- mkRWBramCoreForwarded();
+    Fifo#(pfQueueSize, LineAddr) pfQueue <- mkOverflowPipelineFifo;
+    Fifo#(1, Tuple8#(Addr, HitOrMiss, LineAddr, Bool, Bool, bitmapTableIdxT, filterTableIdxTagT, Addr)) dataForRdResp <- mkPipelineFifo;
+    Fifo#(1, Bit#(7)) dataForRdResp2 <- mkPipelineFifo;
+    Fifo#(4, Tuple3#(Vector#(linesInPage, Bool), pageAddressT, UInt#(8))) issuePrefetchesQueue <- mkBypassFifo;
+    Reg#(Tuple2#(pageAddressT, UInt#(8))) dataForIssuePrefetches <- mkConfigReg(?);
+    Reg#(Vector#(linesInPage, Bool)) canPrefetch <- mkConfigReg(replicate(False));
+    Reg#(Bit#(8)) randomCounter <- mkConfigReg(0);
+
+    function LineState upgrade(LineState st) = 
+        case (st)
+            NOTUSED: USED1;
+            USED1: USED2;
+            USED2: USED3;
+            USED3: USED3;
+        endcase;
+
+    function LineState downgrade(LineState st) =
+        case (st)
+            NOTUSED: NOTUSED;
+            USED1: NOTUSED;
+            USED2: USED1;
+            USED3: USED2;
+        endcase;
+
+    rule incrRandomCounter;
+        if (randomCounter == fromInteger(valueof(inverseDecayChance))-1)
+            randomCounter <= 0;
+        else
+            randomCounter <= randomCounter + 1;
+    endrule
+
+    rule processRdResp;
+        
+        Vector#(128, LineState) bitmap = append(bt.rdResp[0].bitmap, bt.rdResp[1].bitmap);
+        //if (`VERBOSE) $display("%t prefetcher:processRdResp bitmap: ", $time, fshow(bitmap));
+        bt.deqRdResp;
+        filterEntryT fte = ft.rdResp;
+        ft.deqRdResp;
+        let {accessAddr, hitMiss, boundsOffset2, ignoreFirstPage, ignoreSecondPage, btIdx, ftIdxTag, boundsLength} = dataForRdResp.first;
+        Bit#(7) accessIdx = dataForRdResp2.first;
+        LineAddr accessLineAddr = truncateLSB(accessAddr);
+        dataForRdResp.deq;
+        dataForRdResp2.deq;
+
+        Bit#(tagBits) ftTag = truncateLSB(ftIdxTag);
+
+        pageAddressT pa = truncateLSB(accessAddr);
+        LineAddr pageStartAddr = {pa, '0};
+        Bit#(6) accessLineInPage = accessAddr[11:6];
+        Bit#(7) accessLineInPage2 = extend(accessLineInPage);
+        Bit#(7) pageStartBitmapIdx = accessIdx - accessLineInPage2;
+        doAssert(pageStartBitmapIdx < 64, "Page start should always be in first half of bitmap");
+        Bit#(7) pageEndBitmapIdx = pageStartBitmapIdx + 64;
+        Bool accessInFirstBitmapGroup = (accessIdx < 64);
+        if (hitMiss == MISS && (ftTag != fte.tag || fte.prefetched == False)) begin
+            
+            //Update filter table
+            fte.tag = ftTag;
+            fte.prefetched = True;
+            ft.wrReq(truncate(ftIdxTag), fte); 
+
+            //Find cache lines in current page to possibly prefetch
+            Vector#(linesInPage, Bool) canPrefetchVec = replicate(False);
+            Vector#(linesInPage, Bool) atLeastUsed2 = replicate(False);
+            if (`VERBOSE) $display("%t prefetcher:processRdResp accesslineinpage: %d pagestartbitmapidx %d pageendbitmapidx %d accessix %d",
+                 $time, accessLineInPage, pageStartBitmapIdx, pageEndBitmapIdx, accessIdx);
+                 
+            for (Integer i = 0; i < valueOf(linesInPage); i = i + 1) begin
+                Bit#(8) idx = fromInteger(i)+extend(pageStartBitmapIdx); 
+                if ((!ignoreFirstPage || idx >= 64) &&
+                    (!ignoreSecondPage || idx < 64) &&
+                    idx < 128 &&
+                    fromInteger(i) != (accessLineAddr - pageStartAddr)) begin
+                    //fromInteger(i) + pageStartCapOffset >= 0 && fromInteger(i) + pageStartCapOffset < fromInteger(valueof(bitmapLength))) begin
+                    LineState st = bitmap[fromInteger(i)+pageStartBitmapIdx];
+                    canPrefetchVec[i] = st == USED3 || st == USED2;
+                    atLeastUsed2[i] = st == USED1 || st == USED2 || st == USED3;
+                end
+            end
+            
+            if (`VERBOSE) $display("%t prefetcher:processRdResp MISS offset %h in new cap %h (for cap idx %h), found %d possible prefetches!", 
+                $time, boundsOffset2, ftIdxTag, btIdx, countElem(True, canPrefetchVec));
+            //if (`VERBOSE) $display("%t prefetcher:processRdResp canPrefetchVec: ", 
+                //$time, fshow(canPrefetchVec));
+
+            issuePrefetchesQueue.enq(tuple3(canPrefetchVec, pa, unpack(truncate(accessLineAddr - pageStartAddr))));
+
+            EventsPrefetcher evt = unpack(0);
+            evt.evt_0 = 1;
+            evt.evt_2 = (boundsLength <= 1024) ? 0 : extend(pack(countElem(True, canPrefetchVec)));
+            evt.evt_1 = extend(pack(countElem(True, canPrefetchVec)));
+            //evt.evt_2 = extend(pack(countElem(True, canPrefetchVec)));
+            perf_events[1] <= evt;
+            
+            
+        end
+        
+        //NB: Change this for LLC prefetching -- then L1 acts as filter, so can upgrade and downgrade on hits too!
+        //For L1, will get many hits for the same cache line, so only want to do stuff for misses.
+        if (hitMiss == MISS) begin
+            
+            Vector#(64, LineState) writeBackBitmap; // = takeAt(accessInFirstBitmapGroup ? 0 : 64, bitmap);
+            if (accessInFirstBitmapGroup) begin
+                writeBackBitmap = take(bitmap);
+            end
+            else begin
+                writeBackBitmap = drop(bitmap);
+            end
+            //Downgrade all states with probability 1/inverseDecayChance
+            if (randomCounter == 0) begin
+            
+                for (Integer i = 0; i < 64; i = i + 1) begin
+                    writeBackBitmap[i] = downgrade(writeBackBitmap[i]);
+                end
+                if (`VERBOSE) $display("%t prefetcher:processRdResp downgrading lines in cap %h!. Status now: ", 
+                $time, btIdx);
+                for (Integer i = 0; i < valueof(bitmapLength); i = i + 1) begin
+                    if (`VERBOSE) $write(" ", fshow(bitmap[i]));
+                end
+                
+            end
+            //Update state of cache line in bitmap
+            //LineAddr accessLineAddr = truncateLSB(addr);
+            EventsPrefetcher evt = unpack(0);
+            evt.evt_3 = 1;
+            perf_events[2] <= evt;
+            Bit#(6) accessIdx2 = truncate(accessIdx);
+            LineState state = writeBackBitmap[accessIdx2];
+            LineState nextState = upgrade(state);
+            writeBackBitmap[accessIdx2] = nextState;
+            
+            if (`VERBOSE) $display("%t prefetcher:processRdResp upgrading offset %h in cap %h to ", $time, boundsOffset2, btIdx, fshow(nextState));
+            bt.wrReq(btIdx, unpack(pack(writeBackBitmap)));
+            
+        end
+        
+    endrule
+
+    rule issuePrefetchesQToReg;
+        if (canPrefetch == replicate(False) || !issuePrefetchesQueue.notFull) begin
+            issuePrefetchesQueue.deq;
+            let {canPrefetchVec, pa, accessOffset} = issuePrefetchesQueue.first;
+            canPrefetch <= canPrefetchVec;
+            dataForIssuePrefetches <= tuple2(pa, accessOffset);
+        end
+    endrule
+
+    rule issuePrefetches;
+        let {pageStartAddr, accessOffset} = dataForIssuePrefetches;
+        Vector#(linesInPage, Bool) canPrefetchAbove = replicate(False);
+        Vector#(linesInPage, Bool) canPrefetchBelow = replicate(False);
+        for (Integer i = 1; i < valueof(linesInPage); i = i + 1) begin
+            if (fromInteger(i)+accessOffset < fromInteger(valueof(linesInPage)))
+                canPrefetchAbove[i] = canPrefetch[fromInteger(i)+accessOffset];
+        end
+        for (Integer i = 1; i < valueof(linesInPage); i = i + 1) begin
+            //Check for underflow
+            if (accessOffset - fromInteger(i) < fromInteger(valueOf(linesInPage)))
+                canPrefetchBelow[i] = canPrefetch[accessOffset - fromInteger(i)];
+        end
+
+        let canPrefetchAboveIdx = findElem(True, canPrefetchAbove);
+        let canPrefetchBelowIdx = findElem(True, canPrefetchBelow);
+        Maybe#(UInt#(6)) prefetchIdx = Invalid;
+        if (canPrefetchAboveIdx matches tagged Valid .aboveIdx) begin
+            if (canPrefetchBelowIdx matches tagged Valid .belowIdx) begin
+                //Prefetch the closest cache lines first
+                if (aboveIdx <= belowIdx) 
+                    prefetchIdx = tagged Valid (truncate(accessOffset)+aboveIdx);
+                else 
+                    prefetchIdx = tagged Valid (truncate(accessOffset)-belowIdx);
+            end
+            else begin
+                prefetchIdx = tagged Valid (truncate(accessOffset)+aboveIdx);
+            end
+        end
+        else if (canPrefetchBelowIdx matches tagged Valid .belowIdx) begin
+            prefetchIdx = tagged Valid (truncate(accessOffset)-belowIdx);
+        end
+        
+        if (prefetchIdx matches tagged Valid .idx) begin
+            //if (`VERBOSE) $display("%t prefetcher:issuePrefetches canPrefetch at start: ", $time, fshow(canPrefetch));
+            let canPrefetchVec = canPrefetch;
+            canPrefetchVec[idx] = False;
+            canPrefetch <= canPrefetchVec;
+            LineAddr toPrefetch = {pageStartAddr, '0} + pack(extend(idx));
+            if (`VERBOSE) $display("%t -- prefetcher:issuePrefetches %h", $time, Addr'{toPrefetch, '0});
+            pfQueue.enq(extend(toPrefetch));
+
+            EventsPrefetcher evt = unpack(0);
+            evt.evt_4 = 1;
+            perf_events[3] <= evt;
+        end
+        
+    endrule
+
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
+        if (boundsLength > 64 && boundsLength <= fromInteger(valueOf(maxCapSizeToTrack))) begin
+            //$display("%t prefetcher:reportAccess %h with bounds length %d base %h offset %d", $time, addr, boundsLength, boundsVirtBase, boundsOffset);
+            //Not all objects are aligned in the same way, so we separate the training bitmaps for objects that are aligned differently
+            //Otherwise, one 8-byte field in different objects might land in 2 different cache lines, 
+            //meaning both cache lines would be prefetched every time.
+            //As this reduces the amount of training data, this is done partially, grouping objects with same 16byte alignment together
+            Bit#(2) capStart16byteOffset = boundsVirtBase[5:4]; 
+            Bit#(6) offsetInLine = truncate(boundsVirtBase);
+            pageAddressT pa = truncateLSB(addr);
+            Bit#(6) accessLineInPage = addr[11:6];
+            //boundsOffset2 tracks the idx of the cache line in the capability.
+            LineAddr boundsOffset2 = truncateLSB(boundsOffset+extend(offsetInLine));
+            Bit#(8) cacheLineGroup = truncate(boundsOffset2 >> 6);
+            //boundsOffset2pagestart tracks the idx of the cache line in the capability of page start.
+            LineAddr boundsOffset2PageStart = boundsOffset2 - extend(accessLineInPage);
+            Bit#(8) cacheLineGroupPageStart = truncate(boundsOffset2PageStart >> 6);
+            Bit#(8) numLineGroupsInCap = truncate((boundsLength + 4095) >> 12);
+            //Check which bitmap half will the access be in
+            Bit#(7) accessIdxInBitmap = {1'b0, boundsOffset2[5:0]} + ((cacheLineGroup == cacheLineGroupPageStart) ? 0 : 64);
+            Bool ignoreFirstPage = (cacheLineGroupPageStart == -1); //page starts before cap starts
+            Bool ignoreSecondPage = (cacheLineGroupPageStart == numLineGroupsInCap-1); //Page starts in last line group of cap
+            Bit#(TSub#(TLog#(bitmapTableSize), 1)) ogHash = (hash(boundsLength) ^ extend(capStart16byteOffset));
+            bitmapTableIdxT bidx =       {ogHash, 1'b0} + signExtend(cacheLineGroupPageStart);
+            bitmapTableIdxT write_bidx = {ogHash, 1'b0} + signExtend(cacheLineGroup);
+            doAssert(bidx == write_bidx || bidx + 1 == write_bidx, "");
+            bt.rdReq(bidx);
+            filterTableIdxTagT fidx = hash(boundsVirtBase) ^ hash(pa);
+            ft.rdReq(truncate(fidx));
+            $display("%t -- prefetcher:reportAccess %h boundslength %d boundsoffset2 %h ignorefirstp %d ignroesecondp %d readbidx %h write_bidx %h accessidxbitmap %d oghash %h clinegroup %d clinepagest %d",
+             $time, addr, boundsLength, boundsOffset2, ignoreFirstPage, ignoreSecondPage, bidx, write_bidx, accessIdxInBitmap, ogHash, cacheLineGroup, cacheLineGroupPageStart);
+            dataForRdResp.enq(tuple8(addr, hitMiss, boundsOffset2, ignoreFirstPage, ignoreSecondPage, write_bidx, fidx, boundsLength));
+            dataForRdResp2.enq(accessIdxInBitmap);
+        end
+    endmethod
+
+    method ActionValue#(Addr) getNextPrefetchAddr;
+        pfQueue.deq;
+        return {pfQueue.first, '0};
+    endmethod
+    //method Action reportCacheDataArrival(CLine lineWithTags, Addr accessAddr, Bit#(16) pcHash, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
+        //Addr boundsVirtBase);
+    //endmethod
+    
+
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        let evt = EventsPrefetcher {
+            evt_0: perf_events[0].evt_0,
+            evt_1: perf_events[0].evt_1,
+            evt_2: perf_events[0].evt_2,
+            evt_3: perf_events[0].evt_3,
+            evt_4: perf_events[0].evt_4
+        };
+        return evt;
+    endmethod
+`endif
+
+endmodule
+

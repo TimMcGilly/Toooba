@@ -22,6 +22,7 @@
 // SOFTWARE.
 
 import BRAMCore::*;
+import RWBramCore::*;
 import Fifos::*;
 import Vector::*;
 
@@ -56,7 +57,6 @@ module mkRWBramCoreSequential(RWBramCoreSequential#(addrSz, dataT, seqLen)) prov
     method Action wrReq(addrT a, dataT d);
         innerAddrT ia = truncateLSB(a);
         bramSelector bs = truncate(a);
-        $display ("WRREq %h %h", ia, bs);
         wrPorts[bs].put(True, ia, d);
     endmethod
 
@@ -64,7 +64,6 @@ module mkRWBramCoreSequential(RWBramCoreSequential#(addrSz, dataT, seqLen)) prov
         bramSelector firstBram = truncate(a);
         function innerAddrT genInnerAddr(Integer x) = truncateLSB(a+fromInteger(x));
         Vector#(seqLen, innerAddrT) lookupAddrs = rotateBy(genWith(genInnerAddr), unpack(firstBram));
-        $display("rd req", fshow(lookupAddrs));
         rdReqFirstBram.enq(truncate(a));
         for (Integer x = 0; x < valueOf(seqLen); x = x + 1) begin
             rdPorts[x].put(False, lookupAddrs[x], ?);
@@ -87,5 +86,59 @@ module mkRWBramCoreSequential(RWBramCoreSequential#(addrSz, dataT, seqLen)) prov
 
     method Action deqRdResp;
         rdReqFirstBram.deq;
+    endmethod
+endmodule
+
+module mkRWBramCoreSequentialForwarded(RWBramCoreSequential#(addrSz, dataT, seqLen)) provisos(
+    Bits#(dataT, dataSz),
+    Alias#(addrT, Bit#(addrSz)),
+    NumAlias#(innerAddrSz, TSub#(addrSz, TLog#(seqLen))),
+    Alias#(innerAddrT, Bit#(innerAddrSz)),
+    Alias#(bramSelector, Bit#(TLog#(seqLen))),
+    Add#(a__, TLog#(seqLen), addrSz)
+);
+
+    Vector#(seqLen, RWBramCore#(innerAddrT, dataT)) bram <- replicateM(mkRWBramCoreForwarded);
+    // 1 elem pipeline fifo to add guard for read req/resp
+    // must be 1 elem to make sure rdResp is not corrupted
+    // BRAMCore should not change output if no req is made
+    Fifo#(1, bramSelector) rdReqFirstBram <- mkPipelineFifo;
+
+    method Action wrReq(addrT a, dataT d);
+        innerAddrT ia = truncateLSB(a);
+        bramSelector bs = truncate(a);
+        //wrPorts[bs].put(True, ia, d);
+        bram[bs].wrReq(ia, d);
+    endmethod
+
+    method Action rdReq(addrT a);
+        bramSelector firstBram = truncate(a);
+        function innerAddrT genInnerAddr(Integer x) = truncateLSB(a+fromInteger(x));
+        Vector#(seqLen, innerAddrT) lookupAddrs = rotateBy(genWith(genInnerAddr), unpack(firstBram));
+        rdReqFirstBram.enq(truncate(a));
+        for (Integer x = 0; x < valueOf(seqLen); x = x + 1) begin
+            bram[x].rdReq(lookupAddrs[x]);
+        end
+    endmethod
+
+    method Vector#(seqLen, dataT) rdResp if(rdReqFirstBram.notEmpty);
+        bramSelector firstBram = rdReqFirstBram.first;
+        //$display("rdresp %h", firstBram);
+        function dataT getData(Integer i);
+            //bramselector should naturally overflow
+            bramSelector idx = (fromInteger(i)+firstBram);
+            return bram[idx].rdResp;
+        endfunction
+        Vector#(seqLen, dataT) res = genWith(getData);
+        return res;
+    endmethod
+
+    method rdRespValid = rdReqFirstBram.notEmpty;
+
+    method Action deqRdResp;
+        rdReqFirstBram.deq;
+        for (Integer x = 0; x < valueOf(seqLen); x = x + 1) begin
+            bram[x].deqRdResp;
+        end
     endmethod
 endmodule
