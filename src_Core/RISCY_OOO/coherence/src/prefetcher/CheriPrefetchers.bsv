@@ -34,6 +34,7 @@ import SpecialFIFOs :: *;
 import Ehr::*;
 import GetPut::*;
 import RWBramCore::*;
+import RWBramCoreSequential::*;
 import ConfigReg::*;
 import SpecialRegs::*;
 
