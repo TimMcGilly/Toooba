@@ -686,6 +686,12 @@ endfunction
                 prefetcher.reportAccess(req.addr, req.pcHash, HIT, req.boundsOffset, req.boundsLength, req.boundsVirtBase);
                 llcPrefetcher.reportAccess(req.addr, req.pcHash, HIT, req.boundsOffset, req.boundsLength, req.boundsVirtBase);
             end
+            if (req.op == Ld) begin
+                //TODO with this llcPrefetcher only sees arrival of non-prefetched lines
+                //TODO also would be good to provide whether this was a MISS to avoid triggering too many prefetches.
+                prefetcher.reportCacheDataArrival(curLine, req.addr, req.pcHash, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase);
+                llcPrefetcher.reportCacheDataArrival(curLine, req.addr, req.pcHash, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase);
+            end
            if (verbose)
             $display("%t L1 %m pipelineResp: Hit func: update ram: ", $time,
                 fshow(newLine), " ; ",

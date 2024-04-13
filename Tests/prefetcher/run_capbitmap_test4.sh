@@ -9,7 +9,7 @@ bsc $FLAGS -bdir $BUILD_DIR -simdir $BUILD_DIR ./../../src_Core/RISCY_OOO/cohere
 bsc $FLAGS -bdir $BUILD_DIR -simdir $BUILD_DIR ./../../src_Core/RISCY_OOO/coherence/src/prefetcher/MarkovPrefetchers.bsv && \
 bsc $FLAGS -bdir $BUILD_DIR -simdir $BUILD_DIR ./../../src_Core/RISCY_OOO/coherence/src/prefetcher/SignaturePathPrefetcher.bsv && \
 bsc $FLAGS -bdir $BUILD_DIR -simdir $BUILD_DIR ./../../src_Core/RISCY_OOO/coherence/src/prefetcher/Prefetcher_top.bsv && \
-bsc $FLAGS -bdir $BUILD_DIR -show-range-conflict -simdir $BUILD_DIR -sim -g mkCapBitmapPrefetcherTest1 ./../../src_Testbench/Unit/CheriPrefetcher_test.bsv && \
-bsc $FLAGS -bdir $BUILD_DIR -simdir $BUILD_DIR -sim -e mkCapBitmapPrefetcherTest1 -o prefetch_capbitmap_test1 && \ 
-./prefetch_capbitmap_test1  && \
+bsc $FLAGS -bdir $BUILD_DIR -show-range-conflict -simdir $BUILD_DIR -sim -g mkCapBitmapPrefetcherTest4 ./../../src_Testbench/Unit/CheriPrefetcher_test.bsv && \
+bsc $FLAGS -bdir $BUILD_DIR -simdir $BUILD_DIR -sim -e mkCapBitmapPrefetcherTest4 -o prefetch_capbitmap_test4 && \ 
+./prefetch_capbitmap_test4  && \
 rm ./prefetch_capbitmap_test*
