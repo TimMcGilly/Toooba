@@ -293,7 +293,7 @@ module mkLLIPrefetcher(Prefetcher);
     return m;
 endmodule
 
-module mkL1DPrefetcher(CheriPCPrefetcher);
+module mkL1DPrefetcher#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
 `ifdef DATA_PREFETCHER_IN_L1
     `ifdef DATA_PREFETCHER_BLOCK
         Parameter#(1) numLinesEachWay <- mkParameter;
@@ -332,7 +332,7 @@ module mkL1DPrefetcher(CheriPCPrefetcher);
     `elsif DATA_PREFETCHER_CHERI_STRIDE
         Parameter#(512) strideTableSize <- mkParameter;
         Parameter#(1) cLinesAheadToPrefetch <- mkParameter;
-        let m <- mkCheriStridePrefetcher(strideTableSize, cLinesAheadToPrefetch);
+        let m <- mkCheriStridePrefetcher(toTlb, strideTableSize, cLinesAheadToPrefetch);
     `elsif DATA_PREFETCHER_CAP_BITMAP
         Parameter#(8192) maxCapSizeToTrack <- mkParameter;
         Parameter#(128) bitmapTableSize <- mkParameter;
@@ -360,7 +360,7 @@ module mkL1DPrefetcher(CheriPCPrefetcher);
     return m;
 endmodule
 
-module mkLLDPrefetcherInL1D(CheriPCPrefetcher);
+module mkLLDPrefetcherInL1D#(DTlbToPrefetcher toPrefetcher)(CheriPCPrefetcher);
 `ifdef DATA_PREFETCHER_IN_L1LL
     `ifdef DATA_PREFETCHER_BLOCK
         Parameter#(1) numLinesEachWay <- mkParameter;

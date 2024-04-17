@@ -45,6 +45,8 @@ import Performance::*;
 import FullAssocTlb::*;
 import ConfigReg::*;
 import Fifos::*;
+import FIFO::*;
+import CHERICC_Fat::*;
 import Cntrs::*;
 import SafeCounter::*;
 import CacheUtils::*;
@@ -62,6 +64,7 @@ import StatCounters::*;
 export DTlbReq(..);
 export DTlbResp(..);
 export DTlbRqToP(..);
+export DTlbToPrefetcher(..);
 export DTlbTransRsFromP(..);
 export DTlbToParent(..);
 export DTlb(..);
@@ -115,6 +118,8 @@ interface DTlb#(type instT);
     method DTlbResp#(instT) procResp;
     method Action deqProcResp;
 
+    interface DTlbToPrefetcher toPrefetcher;
+
     // req/resp with L2 TLB
     interface DTlbToParent toParent;
 
@@ -142,9 +147,10 @@ typedef union tagged {
 } DTlbWait deriving(Bits, Eq, FShow);
 
 module mkDTlb#(
-    function TlbReq getTlbReq(instT inst)
-)(DTlb::DTlb#(instT)) provisos(Bits#(instT, a__));
-    Bool verbose = False;
+    function TlbReq getTlbReq(instT inst),
+    function DTlbReq#(instT) createReqForPrefetch(CapPipe vaddr))
+    (DTlb::DTlb#(instT)) provisos(Bits#(instT, a__));
+    Bool verbose = True;
 
     // TLB array
     DTlbArray tlb <- mkDTlbArray;
@@ -168,6 +174,7 @@ module mkDTlb#(
     Vector#(DTlbReqNum, Reg#(instT)) pendInst <- replicateM(mkRegU);
     Vector#(DTlbReqNum, Reg#(TlbResp)) pendResp <- replicateM(mkRegU);
     Vector#(DTlbReqNum, Ehr#(2, SpecBits)) pendSpecBits <- replicateM(mkEhr(?));
+    Vector#(DTlbReqNum, Reg#(Bool)) pendIsPrefetch <- replicateM(mkRegU);
 
     // ordering of methods/rules that access pend reqs
     // procReq mutually exclusive with doPRs (no procReq when pRs ready)
@@ -206,6 +213,8 @@ module mkDTlb#(
     // flush req/resp with parent TLB
     Fifo#(1, void) flushRqToPQ <- mkCFFifo;
     Fifo#(1, void) flushRsFromPQ <- mkCFFifo;
+    RWire#(Tuple2#(DTlbReq#(instT), Bool)) rqFromProc <- mkRWire;
+    RWire#(Tuple2#(DTlbReq#(instT), Bool)) rqFromPrefetcher <- mkRWire;
 
     // perf counters
     LatencyTimer#(DTlbReqNum, 12) latTimer <- mkLatencyTimer; // max latency: 4K cycles
@@ -391,7 +400,15 @@ module mkDTlb#(
     // idx of entries that are ready to resp to proc
     function Maybe#(DTlbReqIdx) validProcRespIdx;
         function Bool validResp(DTlbReqIdx i);
-            return pendValid_procResp[i] && pendWait[i] == None && !pendPoisoned[i];
+            return pendValid_procResp[i] && pendWait[i] == None && !pendPoisoned[i] && !pendIsPrefetch[i];
+        endfunction
+        Vector#(DTlbReqNum, DTlbReqIdx) idxVec = genWith(fromInteger);
+        return find(validResp, idxVec);
+    endfunction
+
+    function Maybe#(DTlbReqIdx) validPrefetcherRespIdx;
+        function Bool validResp(DTlbReqIdx i);
+            return pendValid_procResp[i] && pendWait[i] == None && !pendPoisoned[i] && pendIsPrefetch[i];
         endfunction
         Vector#(DTlbReqNum, DTlbReqIdx) idxVec = genWith(fromInteger);
         return find(validResp, idxVec);
@@ -413,32 +430,20 @@ module mkDTlb#(
         wrongSpec_procResp_conflict.wset(?);
     endrule
 
-    method Action flush if(!needFlush);
-        needFlush <= True;
-        waitFlushP <= False;
-        // this won't interrupt current processing, since
-        // (1) miss process will continue even if needFlush=True
-        // (2) flush truly starts when there is no pending req
-    endmethod
-
-    method Bool flush_done = !needFlush;
-
-    method Action updateVMInfo(VMInfo vm);
-        vm_info <= vm;
-    endmethod
-
-    // Since this method is called at commit stage to determine no in-flight
-    // TLB req, even poisoned req should be considered as pending, because it
-    // may be in L2 TLB.
-    method Bool noPendingReq = noMiss;
-
-    // We do not accept new req when flushing flag is set. We also do not
-    // accept new req when parent resp is ready. This avoids bypass in TLB. We
-    // also check rqToPQ not full. This simplifies the guard, i.e., it does not
-    // depend on whether we hit in TLB or not.
-    method Action procReq(DTlbReq#(instT) req) if(
-        !needFlush && !ldTransRsFromPQ.notEmpty && rqToPQ.notFull && freeQInited
-    );
+    rule handleMergedRq if (isValid(rqFromProc.wget) || isValid(rqFromPrefetcher.wget)); 
+        Bool isPrefetch = False;
+        DTlbReq#(instT) req = unpack(0);
+        if (rqFromProc.wget matches tagged Valid .t) begin
+            req = tpl_1(t);
+            isPrefetch = tpl_2(t);
+        end
+        else if (rqFromPrefetcher.wget matches tagged Valid .t) begin
+            req = tpl_1(t);
+            isPrefetch = tpl_2(t);
+        end
+        else begin
+            doAssert(False, "Unreachable");
+        end
         // allocate MSHR entry
         freeQ.deq;
         DTlbReqIdx idx = freeQ.first;
@@ -448,6 +453,7 @@ module mkDTlb#(
         pendValid_procReq[idx] <= True;
         pendPoisoned[idx] <= False;
         pendInst[idx] <= req.inst;
+        pendIsPrefetch[idx] <= isPrefetch;
         pendSpecBits_procReq[idx] <= req.specBits;
         // pendWait and pendResp are set later in this method
 
@@ -511,6 +517,7 @@ module mkDTlb#(
                             perf_events[1] <= ev;
                     `endif
                     */
+                    
                     Addr trans_addr = translate(r.addr, entry.ppn, entry.level);
                     pendWait[idx] <= None;
                     pendResp[idx] <= tuple3(trans_addr, Invalid, permCheck.allowCap);
@@ -588,7 +595,65 @@ module mkDTlb#(
  `endif
         // conflict with wrong spec
         wrongSpec_procReq_conflict.wset(?);
+    endrule
+    
+    method Action flush if(!needFlush);
+        needFlush <= True;
+        waitFlushP <= False;
+        // this won't interrupt current processing, since
+        // (1) miss process will continue even if needFlush=True
+        // (2) flush truly starts when there is no pending req
     endmethod
+
+    method Bool flush_done = !needFlush;
+
+    method Action updateVMInfo(VMInfo vm);
+        vm_info <= vm;
+    endmethod
+
+    // Since this method is called at commit stage to determine no in-flight
+    // TLB req, even poisoned req should be considered as pending, because it
+    // may be in L2 TLB.
+    method Bool noPendingReq = noMiss;
+
+    // We do not accept new req when flushing flag is set. We also do not
+    // accept new req when parent resp is ready. This avoids bypass in TLB. We
+    // also check rqToPQ not full. This simplifies the guard, i.e., it does not
+    // depend on whether we hit in TLB or not.
+    method Action procReq(DTlbReq#(instT) req) if(
+        !needFlush && !ldTransRsFromPQ.notEmpty && rqToPQ.notFull && freeQInited
+    );
+        rqFromProc.wset(tuple2(req, False));
+    endmethod
+
+    interface DTlbToPrefetcher toPrefetcher;
+        method Action prefetcherReq(CapPipe vaddr) if(
+            !isValid(rqFromProc.wget) && !needFlush && !ldTransRsFromPQ.notEmpty && rqToPQ.notFull && freeQInited
+        );
+            DTlbReq#(instT) req = createReqForPrefetch(vaddr);
+            rqFromPrefetcher.wset(tuple2(req, True));
+        endmethod
+
+        method Action deqPrefetcherResp if(
+            validPrefetcherRespIdx matches tagged Valid .idx &&& freeQInited
+        );
+            pendValid_procResp[idx] <= False;
+            freeQ.enq(idx);
+            // conflict with wrong spec
+            wrongSpec_procResp_conflict.wset(?);
+        endmethod
+
+        method DTlbRespToPrefetcher prefetcherResp if(
+            validPrefetcherRespIdx matches tagged Valid .idx &&& freeQInited
+        );
+            let resp = pendResp[idx];
+            return DTlbRespToPrefetcher {
+                paddr: tpl_1(resp),
+                haveException: isValid(tpl_2(resp)),
+                permsCheckPass: tpl_3(resp)
+            };
+        endmethod
+    endinterface
 
     method Action deqProcResp if(
         validProcRespIdx matches tagged Valid .idx &&& freeQInited

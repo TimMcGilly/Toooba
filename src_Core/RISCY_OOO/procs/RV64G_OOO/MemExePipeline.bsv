@@ -212,7 +212,33 @@ module mkDTlbSynth(DTlbSynth);
             potentialCapLoad: x.allowCapLoad
         };
     endfunction
-    let m <- mkDTlb(getTlbReq);
+    
+    function DTlbReq#(MemExeToFinish) createReqForPrefetch(CapPipe vaddr);
+        //return unpack(0);
+        return (DTlbReq {
+            inst: MemExeToFinish {
+                mem_func: Ld,
+                tag: unpack(0),
+                ldstq_tag: tagged Ld 'h0,
+                shiftedBE: unpack(0),
+                vaddr: vaddr,
+`ifdef INCLUDE_TANDEM_VERIF
+                store_data: unpack(0),
+                store_data_BE: unpack(0),
+`endif
+                misaligned: unpack(0),
+                capStore: False,
+                allowCapLoad: False,
+                capException: Invalid,
+                check: unpack(0)
+            },
+            specBits: unpack(0) 
+        });
+       
+
+    endfunction
+    
+    let m <- mkDTlb(getTlbReq, createReqForPrefetch);
     return m;
 endmodule
 
@@ -471,7 +497,7 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
         endmethod
     endinterface);
     // non-blocking coherent D$
-    DCoCache dMem <- mkDCoCache(procRespIfc);
+    DCoCache dMem <- mkDCoCache(procRespIfc, dTlb.toPrefetcher);
 
 `ifdef SELF_INV_CACHE
     // Waiting bit for reconcile to be performed. We set the bit and start

@@ -44,6 +44,7 @@ import Assert::*;
 import Connectable::*;
 import GetPut::*;
 import ClientServer::*;
+import CHERICC_Fat::*;
 
 typedef enum {
     I = 2'd0,
@@ -220,6 +221,18 @@ interface L1ProcResp#(type idT);
     method Action respLrScAmo(idT id, MemTaggedData resp);
     method ActionValue#(Tuple2#(LineByteEn, Line)) respSt(idT id);
     method Action evict(LineAddr a); // called when cache line is evicted
+endinterface
+
+typedef struct {
+    Addr paddr;
+    Bool haveException;
+    Bool permsCheckPass;
+} DTlbRespToPrefetcher deriving (Bits, Eq, FShow);
+
+interface DTlbToPrefetcher;
+    method Action prefetcherReq(CapPipe addr);
+    method DTlbRespToPrefetcher prefetcherResp;
+    method Action deqPrefetcherResp;
 endinterface
 
 // RISCV-specific store-cond return values
