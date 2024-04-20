@@ -430,7 +430,15 @@ module mkDTlb#(
         wrongSpec_procResp_conflict.wset(?);
     endrule
 
-    rule handleMergedRq if (isValid(rqFromProc[1]) || isValid(rqFromPrefetcher[1])); 
+    rule printStatus;
+        $display ("%t DTlb ldTransRsFromPq empty %b full %b rqtopq empty %b full %b freeq empty %b full %b", $time, 
+        !ldTransRsFromPQ.notEmpty, !ldTransRsFromPQ.notFull, !rqToPQ.notEmpty, !rqToPQ.notFull,
+        !freeQ.notEmpty, !freeQ.notFull);
+    endrule
+
+    rule handleMergedRq if (!needFlush && !ldTransRsFromPQ.notEmpty && rqToPQ.notFull && freeQInited &&
+        (isValid(rqFromProc[1]) || isValid(rqFromPrefetcher[1]))
+    ); 
         $display ("%t DTlb handleMergedRq", $time);
         Bool isPrefetch = False;
         DTlbReq#(instT) req = unpack(0);
@@ -624,19 +632,20 @@ module mkDTlb#(
     // also check rqToPQ not full. This simplifies the guard, i.e., it does not
     // depend on whether we hit in TLB or not.
     method Action procReq(DTlbReq#(instT) req) if(
-        !needFlush && !ldTransRsFromPQ.notEmpty && rqToPQ.notFull && freeQInited && 
+        !needFlush && !ldTransRsFromPQ.notEmpty && rqToPQ.notFull && freeQInited && freeQ.notEmpty &&
         !isValid(rqFromProc[0])
     );
-        $display ("%t DTlb procReq", $time);
+        $display ("%t DTlb procReq ", $time, fshow(getTlbReq(req.inst)));
         rqFromProc[0] <= Valid(req);
     endmethod
 
     interface DTlbToPrefetcher toPrefetcher;
         method Action prefetcherReq(CapPipe vaddr) if(
             !isValid(rqFromProc[1]) && !needFlush && !ldTransRsFromPQ.notEmpty && 
-            rqToPQ.notFull && freeQInited && !isValid(rqFromPrefetcher[0])
+            rqToPQ.notFull && freeQInited && freeQ.notEmpty && !isValid(rqFromPrefetcher[0])
         );
             DTlbReq#(instT) req = createReqForPrefetch(vaddr);
+            $display ("%t DTlb prefetcherReq ", $time, fshow(getTlbReq(req.inst)));
             rqFromPrefetcher[0] <= Valid(req);
         endmethod
 
