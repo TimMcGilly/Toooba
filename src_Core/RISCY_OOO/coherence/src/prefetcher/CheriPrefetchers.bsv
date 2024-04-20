@@ -293,9 +293,9 @@ provisos(
         let resp = toTlb.prefetcherResp;
         toTlb.deqPrefetcherResp;
         if (`VERBOSE) $display("%t prefetcher got TLB response: ", $time, fshow(resp));
-        //if (!resp.haveException) begin
-            //addrToPrefetch.enq(resp.paddr);
-        //end
+        if (!resp.haveException) begin
+            addrToPrefetch.enq(resp.paddr);
+        end
     endrule
 
     method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);

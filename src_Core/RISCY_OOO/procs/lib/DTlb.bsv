@@ -213,8 +213,8 @@ module mkDTlb#(
     // flush req/resp with parent TLB
     Fifo#(1, void) flushRqToPQ <- mkCFFifo;
     Fifo#(1, void) flushRsFromPQ <- mkCFFifo;
-    RWire#(Tuple2#(DTlbReq#(instT), Bool)) rqFromProc <- mkRWire;
-    RWire#(Tuple2#(DTlbReq#(instT), Bool)) rqFromPrefetcher <- mkRWire;
+    Ehr#(2, Maybe#(DTlbReq#(instT))) rqFromProc <- mkEhr(Invalid);
+    Ehr#(2, Maybe#(DTlbReq#(instT))) rqFromPrefetcher <- mkEhr(Invalid);
 
     // perf counters
     LatencyTimer#(DTlbReqNum, 12) latTimer <- mkLatencyTimer; // max latency: 4K cycles
@@ -430,16 +430,19 @@ module mkDTlb#(
         wrongSpec_procResp_conflict.wset(?);
     endrule
 
-    rule handleMergedRq if (isValid(rqFromProc.wget) || isValid(rqFromPrefetcher.wget)); 
+    rule handleMergedRq if (isValid(rqFromProc[1]) || isValid(rqFromPrefetcher[1])); 
+        $display ("%t DTlb handleMergedRq", $time);
         Bool isPrefetch = False;
         DTlbReq#(instT) req = unpack(0);
-        if (rqFromProc.wget matches tagged Valid .t) begin
-            req = tpl_1(t);
-            isPrefetch = tpl_2(t);
+        if (rqFromProc[1] matches tagged Valid .t) begin
+            req = t;
+            isPrefetch = False;
+            rqFromProc[1] <= Invalid;
         end
-        else if (rqFromPrefetcher.wget matches tagged Valid .t) begin
-            req = tpl_1(t);
-            isPrefetch = tpl_2(t);
+        else if (rqFromPrefetcher[1] matches tagged Valid .t) begin
+            req = t;
+            isPrefetch = True;
+            rqFromPrefetcher[1] <= Invalid;
         end
         else begin
             doAssert(False, "Unreachable");
@@ -621,17 +624,20 @@ module mkDTlb#(
     // also check rqToPQ not full. This simplifies the guard, i.e., it does not
     // depend on whether we hit in TLB or not.
     method Action procReq(DTlbReq#(instT) req) if(
-        !needFlush && !ldTransRsFromPQ.notEmpty && rqToPQ.notFull && freeQInited
+        !needFlush && !ldTransRsFromPQ.notEmpty && rqToPQ.notFull && freeQInited && 
+        !isValid(rqFromProc[0])
     );
-        rqFromProc.wset(tuple2(req, False));
+        $display ("%t DTlb procReq", $time);
+        rqFromProc[0] <= Valid(req);
     endmethod
 
     interface DTlbToPrefetcher toPrefetcher;
         method Action prefetcherReq(CapPipe vaddr) if(
-            !isValid(rqFromProc.wget) && !needFlush && !ldTransRsFromPQ.notEmpty && rqToPQ.notFull && freeQInited
+            !isValid(rqFromProc[1]) && !needFlush && !ldTransRsFromPQ.notEmpty && 
+            rqToPQ.notFull && freeQInited && !isValid(rqFromPrefetcher[0])
         );
             DTlbReq#(instT) req = createReqForPrefetch(vaddr);
-            rqFromPrefetcher.wset(tuple2(req, True));
+            rqFromPrefetcher[0] <= Valid(req);
         endmethod
 
         method Action deqPrefetcherResp if(
