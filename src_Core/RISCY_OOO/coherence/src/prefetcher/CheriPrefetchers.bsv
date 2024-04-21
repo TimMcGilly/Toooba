@@ -294,7 +294,7 @@ provisos(
         toTlb.deqPrefetcherResp;
         if (`VERBOSE) $display("%t prefetcher got TLB response: ", $time, fshow(resp));
         if (!resp.haveException) begin
-            addrToPrefetch.enq(resp.paddr);
+            //addrToPrefetch.enq(resp.paddr);
         end
     endrule
 

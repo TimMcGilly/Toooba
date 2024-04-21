@@ -220,7 +220,7 @@ module mkDTlbSynth(DTlbSynth);
                 mem_func: Ld,
                 tag: unpack(0),
                 ldstq_tag: tagged Ld 'h0,
-                shiftedBE: unpack(0),
+                shiftedBE: DataMemAccess(unpack(~0)),
                 vaddr: vaddr,
 `ifdef INCLUDE_TANDEM_VERIF
                 store_data: unpack(0),
@@ -232,7 +232,7 @@ module mkDTlbSynth(DTlbSynth);
                 capException: Invalid,
                 check: unpack(0)
             },
-            specBits: unpack(0) 
+            specBits: unpack(~0) 
         });
        
 
