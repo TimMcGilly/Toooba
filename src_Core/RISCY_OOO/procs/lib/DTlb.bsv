@@ -208,6 +208,8 @@ module mkDTlb#(
 
     // free list of pend entries, to cut off path from procResp to procReq
     Fifo#(DTlbReqNum, DTlbReqIdx) freeQ <- mkCFFifo;
+    ConfigReg#(Bit#(64)) freeQEnqs <- mkConfigReg(0);
+    ConfigReg#(Bit#(64)) freeQDeqs <- mkConfigReg(0);
     Reg#(Bool) freeQInited <- mkReg(False);
     Reg#(DTlbReqIdx) freeQInitIdx <- mkReg(0);
 
@@ -230,8 +232,11 @@ module mkDTlb#(
     Fifo#(1, PerfResp#(L1TlbPerfType)) perfRespQ <- mkCFFifo;
     Reg#(Bool) doStats <- mkConfigReg(False);
     Count#(Data) accessCnt <- mkCount(0);
+    Count#(Data) prefetchAccessCnt <- mkCount(0);
     Count#(Data) missParentCnt <- mkCount(0);
+    Count#(Data) prefetchMissParentCnt <- mkCount(0);
     Count#(Data) missParentLat <- mkCount(0);
+    Count#(Data) prefetchMissParentLat <- mkCount(0);
     Count#(Data) missPeerCnt <- mkCount(0);
     Count#(Data) missPeerLat <- mkCount(0);
     Count#(Data) hitUnderMissCnt <- mkCount(0);
@@ -381,18 +386,27 @@ module mkDTlb#(
                 missPeerCnt.incr(1);
             end
             else begin
-                missParentLat.incr(zeroExtend(lat));
-                missParentCnt.incr(1);
+                if (!pendIsPrefetch[idx]) begin
+                    missParentLat.incr(zeroExtend(lat));
+                    missParentCnt.incr(1);
+                end
+                else begin
+                    prefetchMissParentLat.incr(zeroExtend(lat));
+                    prefetchMissParentCnt.incr(1);
+                end
             end
         end
 `endif
 `ifdef PERFORMANCE_MONITORING
+        EventsL1D ev = unpack(0);
         if (!pendIsPrefetch[idx]) begin
-            EventsL1D ev = unpack(0);
             ev.evt_TLB_MISS_LAT = saturating_truncate(lat);
             ev.evt_TLB_MISS = 1;
-            perf_events[0] <= ev;
         end
+        else begin
+            ev.evt_AMO_MISS = 1;
+        end
+        perf_events[0] <= ev;
 `endif
         // conflict with wrong spec
         wrongSpec_doPRs_conflict.wset(?);
@@ -401,6 +415,7 @@ module mkDTlb#(
     // init freeQ
     rule doInitFreeQ(!freeQInited);
         freeQ.enq(freeQInitIdx);
+        freeQEnqs <= freeQEnqs + 1;
         freeQInitIdx <= freeQInitIdx + 1;
         if(freeQInitIdx == fromInteger(valueof(DTlbReqNum) - 1)) begin
             freeQInited <= True;
@@ -437,17 +452,21 @@ module mkDTlb#(
         $display ("%t Dtlb dropPoisoned", $time);
         pendValid_procResp[idx] <= False;
         freeQ.enq(idx);
+        freeQEnqs <= freeQEnqs + 1;
         // conflict with wrong spec
         wrongSpec_procResp_conflict.wset(?);
     endrule
 
     rule printStatus;
+        /*
         $display ("%t D Tlb ldTransRsFromPq empty %b full %b rqtopq empty %b full %b freeq empty %b full %b candoprocreq %b nomiss %b", $time, 
         !ldTransRsFromPQ.notEmpty, !ldTransRsFromPQ.notFull, !rqToPQ.notEmpty, !rqToPQ.notFull,
         !freeQ.notEmpty, !freeQ.notFull, 
         (!needFlush && !ldTransRsFromPQ.notEmpty && rqToPQ.notFull && freeQInited && freeQ.notEmpty),
         noMiss, fshow(respForOtherReq)
-        );
+        */
+        $display("L1 DTlb accessCnt %d prefetchAccessCnt %d missParentCnt %d prefetchMissParentCnt %d missParentLat %d prfMissParentLat %d missPeerCnt %d missPeerLat %d hitUnderMissCnt %d totalMissCycles %d freeqlen",
+            accessCnt, prefetchAccessCnt, missParentCnt, prefetchMissParentCnt, missParentLat, prefetchMissParentLat, missPeerCnt, missPeerLat, hitUnderMissCnt, allMissCycles, freeQEnqs-freeQDeqs);
     endrule
 
     rule handleMergedRq if (!needFlush && !ldTransRsFromPQ.notEmpty && rqToPQ.notFull && freeQInited &&
@@ -469,6 +488,7 @@ module mkDTlb#(
         end
         // allocate MSHR entry
         freeQ.deq;
+        freeQDeqs <= freeQDeqs + 1;
         DTlbReqIdx idx = freeQ.first;
         doAssert(!pendValid_procReq[idx], "free entry cannot be valid");
         doAssert(pendWait[idx] == None, "entry cannot wait for parent resp");
@@ -608,7 +628,10 @@ module mkDTlb#(
 `ifdef PERF_COUNT
         // perf: access
         if(doStats) begin
-            accessCnt.incr(1);
+            if (!pendIsPrefetch[idx])
+                accessCnt.incr(1);
+            else 
+                prefetchAccessCnt.incr(1);
         end
 `endif
  `ifdef PERFORMANCE_MONITORING
@@ -660,7 +683,7 @@ module mkDTlb#(
     interface DTlbToPrefetcher toPrefetcher;
         method Action prefetcherReq(CapPipe vaddr) if(
             !isValid(rqFromProc.wget) && !needFlush && !ldTransRsFromPQ.notEmpty && 
-            rqToPQ.notFull && freeQInited && freeQ.notEmpty && !isValid(doingWrongSpec.wget) && (prefetchTimeout == 0)
+            rqToPQ.notFull && freeQInited && freeQ.notEmpty && !isValid(doingWrongSpec.wget) && (prefetchTimeout == 0) && (freeQEnqs-freeQDeqs >= 3)
         );
             DTlbReq#(instT) req = createReqForPrefetch(vaddr);
             //wrongSpec_prefetcherReq_conflict.wset(?);
@@ -674,6 +697,7 @@ module mkDTlb#(
             $display ("%t DTlb deqPrefetcherReq ", $time, fshow(idx));
             pendValid_procResp[idx] <= False;
             freeQ.enq(idx);
+            freeQEnqs <= freeQEnqs + 1;
             // conflict with wrong spec
             //wrongSpec_procResp_conflict.wset(?);
         endmethod
@@ -696,6 +720,7 @@ module mkDTlb#(
         $display ("%t DTlb deqProcReq ", $time, fshow(idx));
         pendValid_procResp[idx] <= False;
         freeQ.enq(idx);
+        freeQEnqs <= freeQEnqs + 1;
         // conflict with wrong spec
         wrongSpec_procResp_conflict.wset(?);
     endmethod

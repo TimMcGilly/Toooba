@@ -310,7 +310,7 @@ endfunction
     rule transferRegularEvents;
         EventsL1D events = unpack(0);
         if (cRqMshr.isFull)  begin
-            events.evt_AMO_MISS = 1;
+            //events.evt_AMO_MISS = 1;
         end
         events.evt_ST = llcPrefetcher.events.evt_0;
         events.evt_ST_MISS_LAT = llcPrefetcher.events.evt_1;

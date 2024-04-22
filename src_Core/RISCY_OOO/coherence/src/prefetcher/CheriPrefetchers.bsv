@@ -259,7 +259,7 @@ provisos(
 
             vaddrToTlb.enq(reqAddr);
             EventsPrefetcher evt = unpack(0);
-            evt.evt_0 = (bot+top >= 4096) ? 1 : 0;
+            //evt.evt_0 = (bot+top >= 4096) ? 1 : 0;
             evt.evt_2 = 1;
             if (isInCapBounds) begin
                 evt.evt_3 = 1;
@@ -292,6 +292,9 @@ provisos(
     rule getTlbResp;
         let resp = toTlb.prefetcherResp;
         toTlb.deqPrefetcherResp;
+        EventsPrefetcher evt = unpack(0);
+        evt.evt_1 = 1;
+        perf_events[1] <= evt;
         if (`VERBOSE) $display("%t prefetcher got TLB response: ", $time, fshow(resp));
         if (!resp.haveException) begin
             //addrToPrefetch.enq(resp.paddr);
@@ -303,11 +306,6 @@ provisos(
         Bit#(16) boundsHash = pcHash;
         Addr topCapGap = (boundsLength == 0) ? -1 : boundsLength-boundsOffset-1;
         Addr vaddr = boundsVirtBase+boundsOffset;
-        EventsPrefetcher evt = unpack(0);
-        if (boundsLength == 0) begin
-            evt.evt_1 = 1;
-        end
-        perf_events[1] <= evt;
         //Bit#(8) boundsHash = hash(boundsVirtBase ^ boundsLength) ^ pcHash[7:0] ^ pcHash[15:8];
         //if (boundsHash == 0)
             //hashIsSmall.send();
