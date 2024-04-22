@@ -465,8 +465,8 @@ module mkDTlb#(
         (!needFlush && !ldTransRsFromPQ.notEmpty && rqToPQ.notFull && freeQInited && freeQ.notEmpty),
         noMiss, fshow(respForOtherReq)
         */
-        $display("L1 DTlb accessCnt %d prefetchAccessCnt %d missParentCnt %d prefetchMissParentCnt %d missParentLat %d prfMissParentLat %d missPeerCnt %d missPeerLat %d hitUnderMissCnt %d totalMissCycles %d freeqlen",
-            accessCnt, prefetchAccessCnt, missParentCnt, prefetchMissParentCnt, missParentLat, prefetchMissParentLat, missPeerCnt, missPeerLat, hitUnderMissCnt, allMissCycles, freeQEnqs-freeQDeqs);
+        //$display("L1 DTlb accessCnt %d prefetchAccessCnt %d missParentCnt %d prefetchMissParentCnt %d missParentLat %d prfMissParentLat %d missPeerCnt %d missPeerLat %d hitUnderMissCnt %d totalMissCycles %d freeqlen",
+            //accessCnt, prefetchAccessCnt, missParentCnt, prefetchMissParentCnt, missParentLat, prefetchMissParentLat, missPeerCnt, missPeerLat, hitUnderMissCnt, allMissCycles, freeQEnqs-freeQDeqs);
     endrule
 
     rule handleMergedRq if (!needFlush && !ldTransRsFromPQ.notEmpty && rqToPQ.notFull && freeQInited &&
