@@ -297,7 +297,7 @@ provisos(
         perf_events[1] <= evt;
         if (`VERBOSE) $display("%t prefetcher got TLB response: ", $time, fshow(resp));
         if (!resp.haveException) begin
-            //addrToPrefetch.enq(resp.paddr);
+            addrToPrefetch.enq(resp.paddr);
         end
     endrule
 
