@@ -324,7 +324,9 @@ module mkDTlb#(
                                             r.potentialCapLoad);
             if (permCheck.allowed) begin
                 // fill TLB, and record resp
+                if (!pendIsPrefetch[idx]) begin
                 tlb.addEntry(en);
+                end
                 let trans_addr = translate(r.addr, en.ppn, en.level);
                 pendResp[idx] <= tuple3(trans_addr, Invalid, permCheck.allowCap);
                 if(verbose) begin
