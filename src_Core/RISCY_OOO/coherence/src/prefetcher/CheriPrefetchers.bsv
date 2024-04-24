@@ -986,7 +986,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
             //Match -- upgrade ptrTable
             if (`VERBOSE) $display("%t Prefetcher training table match! Will upgrade ptr table pit %h", $time, te.ptrTableIdxTag);
             ptUpgradeQueue.enq(te.ptrTableIdxTag);
-            EventsPrefetcher evt;
+            EventsPrefetcher evt = unpack(0);
             evt.evt_0 = 1;
             perf_events[0] <= evt;
         end
@@ -1013,7 +1013,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
         if (pte.tag == truncateLSB(pit)) begin
             pte.state = upgrade(pte.state);
             if (`VERBOSE) $display("%t Prefetcher processPtReadUpgrade upgrading pit %h to ", $time, pit, fshow(pte.state));
-            EventsPrefetcher evt;
+            EventsPrefetcher evt = unpack(0);
             evt.evt_1 = 1;
             perf_events[1] <= evt;
         end
@@ -1033,7 +1033,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
         ptLookupQueueReading.enq(pitVec);
         pt.rdReq(truncate(tpl_1(pitVec[0])));
 
-        EventsPrefetcher evt;
+        EventsPrefetcher evt = unpack(0);
         evt.evt_2 = 1;
         perf_events[2] <= evt;
     endrule
@@ -1093,7 +1093,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
         if (`VERBOSE) $display("%t Prefetcher got TLB response: ", $time, fshow(resp));
         if (!resp.haveException && resp.paddr != 0) begin
             prefetchQueue.enq(resp.paddr);
-            EventsPrefetcher evt;
+            EventsPrefetcher evt = unpack(0);
             evt.evt_3 = 1;
             perf_events[3] <= evt;
         end
@@ -1133,7 +1133,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
                 te.ptrTableIdxTag = pit;
                 tt.wrReq(tIdx, te);
 
-                EventsPrefetcher evt;
+                EventsPrefetcher evt = unpack(0);
                 evt.evt_4 = 1;
                 perf_events[4] <= evt;
             end
