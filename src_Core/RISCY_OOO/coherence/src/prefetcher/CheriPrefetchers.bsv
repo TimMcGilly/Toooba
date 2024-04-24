@@ -93,7 +93,7 @@ module mkAllInCapPrefetcher#(Parameter#(maxCapSizeToPrefetch) _)(CheriPCPrefetch
             if (`VERBOSE) $display("%t Prefetcher report HIT %h", $time, addr);
     endmethod
 
-    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, Bit#(16) pcHash, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, Bit#(16) pcHash, Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
         Addr boundsVirtBase);
     endmethod
 
@@ -313,7 +313,7 @@ provisos(
         memAccesses.enq(tuple5 (vaddr, boundsHash, hitMiss, boundsOffset, topCapGap));
     endmethod
 
-    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, Bit#(16) pcHash, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, Bit#(16) pcHash, Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
         Addr boundsVirtBase);
     endmethod
 
@@ -570,7 +570,7 @@ module mkCapBitmapPrefetcherOld#(Parameter#(maxCapSizeToTrack) _, Parameter#(bit
         end
     endmethod
 
-    method Action reportCacheDataArrival(CLine lineWithTags, Addr accessAddr, Bit#(16) pcHash, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr accessAddr, Bit#(16) pcHash, Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
         Addr boundsVirtBase);
     endmethod
 
@@ -868,7 +868,7 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
         pfQueue.deq;
         return {pfQueue.first, '0};
     endmethod
-    method Action reportCacheDataArrival(CLine lineWithTags, Addr accessAddr, Bit#(16) pcHash, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr accessAddr, Bit#(16) pcHash, Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
         Addr boundsVirtBase);
     endmethod
     
@@ -900,7 +900,7 @@ typedef struct {
     Bit#(ptrTableIdxTagBits) ptrTableIdxTag;
 } TrainingTableEntry#(numeric type tagBits, numeric type ptrTableIdxTagBits) deriving (Bits, Eq, FShow);
 
-module mkCapPtrPrefetcher#(Parameter#(ptrTableSize) _, Parameter#(trainingTableSize) __, Parameter#(inverseDecayChance) ___)(CheriPCPrefetcher) provisos (
+module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, Parameter#(trainingTableSize) __, Parameter#(inverseDecayChance) ___)(CheriPCPrefetcher) provisos (
     NumAlias#(ptrTableTagBits, 16),
     NumAlias#(trainingTableTagBits, 16),
     NumAlias#(ptrTableIdxBits, TLog#(ptrTableSize)),
@@ -915,36 +915,40 @@ module mkCapPtrPrefetcher#(Parameter#(ptrTableSize) _, Parameter#(trainingTableS
     Alias#(trainingTableIdxTagT, Bit#(trainingTableIdxTagBits)),
     Alias#(trainingTableTagT, Bit#(trainingTableTagBits)),
     Alias#(trainingTableEntryT, TrainingTableEntry#(trainingTableTagBits, ptrTableIdxTagBits)),
-    Alias#(potentialPrefetchT, Tuple2#(ptrTableIdxTagT, Addr)),
+    Alias#(potentialPrefetchT, Tuple3#(ptrTableIdxTagT, CapPipe, Bool)),
 
     Add#(a__, 60, TMul#(TDiv#(60, TAdd#(TLog#(ptrTableSize), 16)), TAdd#(TLog#(ptrTableSize), 16))),
     Add#(1, b__, TDiv#(64, TAdd#(TLog#(ptrTableSize), 16))),
     Add#(c__, TAdd#(TLog#(trainingTableSize), 16), 64),
     Add#(1, d__, TDiv#(64, TAdd#(TLog#(trainingTableSize), 16))),
     Add#(e__, 64, TMul#(TDiv#(64, TAdd#(TLog#(trainingTableSize), 16)), TAdd#(TLog#(trainingTableSize), 16))),
-    Add#(f__, 64, TMul#(TDiv#(64, TAdd#(TLog#(ptrTableSize), 16)), TAdd#(TLog#(ptrTableSize), 16))),
-    Add#(1, g__, TDiv#(60, TAdd#(TLog#(ptrTableSize), 16)))
+    Add#(g__, 64, TMul#(TDiv#(64, TAdd#(14, TLog#(ptrTableSize))), TAdd#(14, TLog#(ptrTableSize)))),
+    Add#(i__, 58, TMul#(TDiv#(58, TAdd#(14, TLog#(ptrTableSize))), TAdd#(14, TLog#(ptrTableSize)))),
+    Add#(1, f__, TDiv#(58, TAdd#(14, TLog#(ptrTableSize)))),
+    Add#(1, j__, TDiv#(64, TAdd#(14, TLog#(ptrTableSize)))),
+    Add#(h__, 2, TLog#(ptrTableSize))
 
 );
-    Array #(Reg #(EventsPrefetcher)) perf_events <- mkDRegOR (4, unpack (0));
-    RWBramCore#(ptrTableIdxT, ptrTableEntryT) pt <- mkRWBramCoreForwarded();
-    RWBramCore#(trainingTableIdxT, trainingTableEntryT) tt <- mkRWBramCoreForwarded();
+    Array #(Reg #(EventsPrefetcher)) perf_events <- mkDRegOR (5, unpack (0));
+    RWBramCoreSequential#(ptrTableIdxBits, ptrTableEntryT, 4) pt <- mkRWBramCoreSequential();
+    RWBramCore#(trainingTableIdxT, trainingTableEntryT) tt <- mkRWBramCore();
     Fifo#(1, trainingTableTagT) dataForTtRead <- mkPipelineFifo;
     Fifo#(8, ptrTableIdxTagT) ptUpgradeQueue <- mkOverflowBypassFifo;
     Fifo#(1, ptrTableIdxTagT) ptUpgradeQueueReading <- mkPipelineFifo;
 
-    Fifo#(4, Vector#(4, Maybe#(potentialPrefetchT))) ptLookupQueueWide <- mkOverflowBypassFifo;
-    Reg#(Vector#(4, Maybe#(potentialPrefetchT))) currPit <- mkReg(replicate(Invalid));
-    Fifo#(8, potentialPrefetchT) ptLookupQueue <- mkOverflowBypassFifo;
-    Fifo#(1, potentialPrefetchT) ptLookupQueueReading <- mkPipelineFifo;
+    Fifo#(8, Vector#(4, potentialPrefetchT)) ptLookupQueue <- mkOverflowBypassFifo;
+    Fifo#(1, Vector#(4, potentialPrefetchT)) ptLookupQueueReading <- mkPipelineFifo;
+    Reg#(Vector#(4, Bool)) ptLookupUsedEntry <- mkReg(replicate(False));
 
-    Fifo#(4, Addr) prefetchQueue <- mkOverflowPipelineFifo;
+    Fifo#(8, CapPipe) tlbLookupQueue <- mkOverflowPipelineFifo;
+    Fifo#(8, Addr) prefetchQueue <- mkOverflowPipelineFifo;
     Reg#(Bit#(8)) randomCounter <- mkConfigReg(0);
 
     
     function ptrTableIdxTagT getIdxTag(Addr boundsLength, Addr boundsOffset) =
         //boundsOffset should be an offset of a cap, so 16 byte aligned, so drop its lowest 4 bits
-         hash(boundsLength) ^ hash(boundsOffset[63:4]);
+        //but also, need lowest 2 bits to be sequential and determined by boundsOffset
+         {hash(boundsLength) ^ hash(boundsOffset[63:6]), boundsOffset[5:4]};
 
     function trainingTableIdxTagT getTrainingIdxTag(Addr vaddr) =
         //vaddr is a pointer and is kinda often 16 byte aligned, so rearrange for better LSBs (for index).
@@ -982,29 +986,36 @@ module mkCapPtrPrefetcher#(Parameter#(ptrTableSize) _, Parameter#(trainingTableS
             //Match -- upgrade ptrTable
             if (`VERBOSE) $display("%t Prefetcher training table match! Will upgrade ptr table pit %h", $time, te.ptrTableIdxTag);
             ptUpgradeQueue.enq(te.ptrTableIdxTag);
+            EventsPrefetcher evt;
+            evt.evt_0 = 1;
+            perf_events[0] <= evt;
         end
         else begin
             if (`VERBOSE) $display("%t Prefetcher training table mismatch! table %h now %h", $time, te.tag, tTag);
         end
     endrule
 
-    (* descending_urgency = "doPtReadForUpgrade, doPtReadForLookup" *)
+    //(* descending_urgency = "doPtReadForUpgrade, doPtReadForLookup" *)
     rule doPtReadForUpgrade;
+        if (`VERBOSE) $display("%t Prefetcher doPtReadForUpgrade", $time);
         let pit = ptUpgradeQueue.first;
         ptUpgradeQueue.deq;
         ptUpgradeQueueReading.enq(pit);
         pt.rdReq(truncate(pit));
     endrule
 
-    (* descending_urgency = "processPtReadUpgrade, processPtReadForLookup" *)
     rule processPtReadUpgrade;
-        let pte = pt.rdResp;
+        let pteVec = pt.rdResp;
+        let pte = pteVec[0];
         pt.deqRdResp;
         let pit = ptUpgradeQueueReading.first;
         ptUpgradeQueueReading.deq;
         if (pte.tag == truncateLSB(pit)) begin
             pte.state = upgrade(pte.state);
             if (`VERBOSE) $display("%t Prefetcher processPtReadUpgrade upgrading pit %h to ", $time, pit, fshow(pte.state));
+            EventsPrefetcher evt;
+            evt.evt_1 = 1;
+            perf_events[1] <= evt;
         end
         else begin
             pte.state = USED1;
@@ -1014,66 +1025,94 @@ module mkCapPtrPrefetcher#(Parameter#(ptrTableSize) _, Parameter#(trainingTableS
         pt.wrReq(truncate(pit), pte);
     endrule
 
-    rule serializePtLookupEnq if (countIf(isValid, currPit) > 0);
-        let currPitVec = currPit;
-        let midx = findIndex(isValid, currPitVec);
-        if (midx matches tagged Valid .idx &&& currPit[idx] matches tagged Valid .pp) begin
-            ptLookupQueue.enq(pp);
-            $display("%t serializer enq ", $time, fshow(pp));
-            currPitVec[idx] = Invalid;
-        end
-        currPit <= currPitVec;
-    endrule
-
-    rule serializePtLookupNew if (countIf(isValid, currPit) == 0);
-        let currPitVec = currPit;
-        $display("%t serializer getting new queue entry", $time);
-        currPitVec = ptLookupQueueWide.first;   
-        ptLookupQueueWide.deq;
-        currPit <= currPitVec;
-    endrule
-
     (* descending_urgency = "doPtReadForUpgrade, doPtReadForLookup" *)
     rule doPtReadForLookup;
-        let {pit, addr} = ptLookupQueue.first;
+        $display("%t doPtReadForLookup", $time);
+        let pitVec = ptLookupQueue.first;
         ptLookupQueue.deq;
-        ptLookupQueueReading.enq(tuple2(pit, addr));
-        pt.rdReq(truncate(pit));
+        ptLookupQueueReading.enq(pitVec);
+        pt.rdReq(truncate(tpl_1(pitVec[0])));
+
+        EventsPrefetcher evt;
+        evt.evt_2 = 1;
+        perf_events[2] <= evt;
     endrule
 
-    (* descending_urgency = "processPtReadUpgrade, processPtReadForLookup" *)
+    //usedPrefetch, entry from pt, pit, capValid
+    function Bool canPrefetch(Tuple4#(Bool, ptrTableEntryT, ptrTableIdxTagT, Bool) pte) = 
+        !tpl_1(pte) && 
+        tpl_4(pte) &&
+        tpl_2(pte).tag == truncateLSB(tpl_3(pte)) && 
+        (tpl_2(pte).state == USED2 || tpl_2(pte).state == USED3);
+
+
+    function Bool canDoAnyPrefetch;
+        let pteVec = pt.rdResp;
+        let ppVec = ptLookupQueueReading.first;
+        return any(canPrefetch, zip4(ptLookupUsedEntry, pteVec, map(tpl_1, ppVec), map(tpl_3, ppVec)));
+    endfunction
+
+    rule deqPtRdResp if (!canDoAnyPrefetch);
+        $display("%t deqPtRdResp", $time);
+        pt.deqRdResp;
+        ptLookupQueueReading.deq;
+        ptLookupUsedEntry <= replicate(False);
+    endrule
+
+    (* descending_urgency = "deqPtRdResp, processPtReadForLookup" *)
     rule processPtReadForLookup;
         //downgrade pte with some chance
-        let {pit, addr} = ptLookupQueueReading.first;
-        ptLookupQueueReading.deq;
-        let pte = pt.rdResp;
-        pt.deqRdResp;
-        if (`VERBOSE) $display("%t Prefetcher processPtReadForLookup pit %h table tag %h read tag %h addr %h", $time, pit, pte.tag, ptrTableTagT'{truncateLSB(pit)}, addr);
-        if (pte.tag == truncateLSB(pit)) begin
-            if (`VERBOSE) $display("%t Prefetcher processPtReadForLookup tag match", $time, fshow(pte.state));
-            if (pte.state == USED2 || pte.state == USED3) begin
-                prefetchQueue.enq(addr);
-            end
+        let ppVec = ptLookupQueueReading.first;
+        let pteVec = pt.rdResp;
+        if (`VERBOSE) $display("%t Prefetcher processPtReadForLookup ", $time, fshow(ptLookupUsedEntry), fshow(pteVec));
+        let prefetchIdx = findIndex(canPrefetch, zip4(ptLookupUsedEntry, pteVec, map(tpl_1, ppVec), map(tpl_3, ppVec)));
+        if (prefetchIdx matches tagged Valid .idx) begin
+            let pte = pteVec[idx];
+            let pit = tpl_1(ppVec[idx]);
+            let cap = tpl_2(ppVec[idx]);
+            if (`VERBOSE) $display("%t Prefetcher processPtReadForLookup canprefetch pit %h table tag %h read tag %h target vaddr %h", $time, pit, pte.tag, ptrTableTagT'{truncateLSB(pit)}, getAddr(cap));
+            tlbLookupQueue.enq(cap);
+            ptLookupUsedEntry[idx] <= True;
             if (randomCounter == 0) begin
                 pte.state = downgrade(pte.state);
+                pt.wrReq(truncate(pit), pte);
                 if (`VERBOSE) $display("%t Prefetcher processPtReadForLookup %h downgrading to ", $time, pit, fshow(pte.state));
             end
         end
-        pt.wrReq(truncate(pit), pte);
     endrule
+        
+    rule doTlbLookup;
+        let cap = tlbLookupQueue.first;
+        tlbLookupQueue.deq;
+        toTlb.prefetcherReq(cap);
+    endrule
+
+    rule getTlbResp;
+        let resp = toTlb.prefetcherResp;
+        toTlb.deqPrefetcherResp;
+        if (`VERBOSE) $display("%t Prefetcher got TLB response: ", $time, fshow(resp));
+        if (!resp.haveException && resp.paddr != 0) begin
+            prefetchQueue.enq(resp.paddr);
+            EventsPrefetcher evt;
+            evt.evt_3 = 1;
+            perf_events[3] <= evt;
+        end
+    endrule
+    
 
     method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
         //Lookup addr in training table, if get a hit, update ptrTable
         Addr vaddr = boundsVirtBase + boundsOffset;
         trainingTableIdxTagT tit = getTrainingIdxTag(vaddr);
-        if (`VERBOSE) $display("%t Prefetcher reportAccess %h boundslen %d tit %h", $time, addr, boundsLength, tit, fshow(hitMiss));
+        if (`VERBOSE) $display("%t Prefetcher reportAccess %h offset %h boundslen %d tit %h", $time, addr, boundsOffset, boundsLength, tit, fshow(hitMiss));
         dataForTtRead.enq(truncateLSB(tit));
         tt.rdReq(truncate(tit));
     endmethod
 
-    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, Bit#(16) pcHash, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
-        Addr boundsVirtBase);
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, Bit#(16) pcHash, Bool wasMiss, 
+        Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
+        $display ("%t Prefetcher reportCacheDataArrival wasMiss %d", $time, wasMiss, fshow(lineWithTags));
 
         //Add accessed cap to training table in case we dereference it later.
         if (addr[3:0] == 0) begin
@@ -1093,25 +1132,32 @@ module mkCapPtrPrefetcher#(Parameter#(ptrTableSize) _, Parameter#(trainingTableS
                 te.tag = tTag;
                 te.ptrTableIdxTag = pit;
                 tt.wrReq(tIdx, te);
+
+                EventsPrefetcher evt;
+                evt.evt_4 = 1;
+                perf_events[4] <= evt;
             end
         end
 
+        if (wasMiss) begin
+            //TODO prevent runaway prefetching
         //Queue caps here for lookup in ptr table
-        Vector#(4, Maybe#(potentialPrefetchT)) v = replicate(Invalid);
+            //Only do so on a cache miss to prevent too many prefetches
+            Vector#(4, potentialPrefetchT) v;
+            Bool foundOneCap = False;
         for (Integer i = 0; i < 4; i = i + 1) begin
             MemTaggedData d = getTaggedDataAt(lineWithTags, fromInteger(i));
             CapPipe cap = fromMem(unpack(pack(d)));
             Addr clineStartOffset = (boundsOffset-extend(addr[5:0]));
             ptrTableIdxTagT pit = getIdxTag(boundsLength, clineStartOffset+fromInteger(i)*16);
-            $display("preftcher lookup clinestart offset %h pit %h", clineStartOffset, pit);
-            if (d.tag) begin
-                v[i] = Valid(tuple2(pit, getAddr(cap)));
+                v[i] = tuple3(pit, cap, d.tag);
+                foundOneCap = foundOneCap || d.tag;
             end
-        end
-        if (v != replicate(Invalid)) begin
+            if (foundOneCap) begin
             if (`VERBOSE) $display("%t Prefetcher reportDataArrival addr %h prefetech %b adding %d caps for prefetch lookups ", 
-                $time, addr, wasPrefetch, countElem(True, map(isValid, v)), fshow(v));
-            ptLookupQueueWide.enq(v);
+                    $time, addr, wasPrefetch, countElem(True, map(tpl_3, v)), fshow(v));
+                ptLookupQueue.enq(v);
+            end
         end
     endmethod
 
@@ -1123,7 +1169,7 @@ module mkCapPtrPrefetcher#(Parameter#(ptrTableSize) _, Parameter#(trainingTableS
 
 `ifdef PERFORMANCE_MONITORING
     method EventsPrefetcher events;
-        return  unpack(0);
+        return perf_events[0];
     endmethod
 `endif
 
@@ -1137,7 +1183,7 @@ module mkCapPtrTestPrefetcher(CheriPCPrefetcher) provisos ();
         if (`VERBOSE) $display("%t Prefetcher reportAccess %h boundslen %d", $time, addr, boundsLength, fshow(hitMiss));
     endmethod
 
-    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, Bit#(16) pcHash, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, Bit#(16) pcHash, Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
         Addr boundsVirtBase);
         MemTaggedData d = getTaggedDataAt(lineWithTags, 0);
         CapPipe cap = fromMem(unpack(pack(d)));

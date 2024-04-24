@@ -602,7 +602,7 @@ endfunction
     Maybe#(cRqIdxT) pipeOutSucc = cRqMshr.pipelineResp.getSucc(pipeOutCRqIdx);
 
     // function to process cRq hit (MSHR slot may have garbage)
-    function Action cRqHit(cRqIdxT n, procRqT req);
+    function Action cRqHit(cRqIdxT n, procRqT req, Bool wasMiss);
     action
        if (verbose)
         $display("%t L1 %m pipelineResp: Hit func: ", $time,
@@ -690,8 +690,8 @@ endfunction
             if (req.op == Ld) begin
                 //TODO with this llcPrefetcher only sees arrival of non-prefetched lines
                 //TODO also would be good to provide whether this was a MISS to avoid triggering too many prefetches.
-                prefetcher.reportCacheDataArrival(curLine, req.addr, req.pcHash, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase);
-                llcPrefetcher.reportCacheDataArrival(curLine, req.addr, req.pcHash, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase);
+                prefetcher.reportCacheDataArrival(curLine, req.addr, req.pcHash, wasMiss, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase);
+                llcPrefetcher.reportCacheDataArrival(curLine, req.addr, req.pcHash, wasMiss, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase);
             end
            if (verbose)
             $display("%t L1 %m pipelineResp: Hit func: update ram: ", $time,
@@ -933,7 +933,7 @@ endfunction
                 if(enough_cs_to_hit) begin
                    if (verbose)
                     $display("%t L1 %m pipelineResp: cRq: own by itself, hit", $time);
-                    cRqHit(n, procRq);
+                    cRqHit(n, procRq, False);
                 end
                 else if(scFail) begin
                     // Sc already fails, so we don't need to req parent.  Since
@@ -976,7 +976,7 @@ endfunction
                     doAssert(cs_valid, "hit, so cs must > I");
                    if (verbose)
                     $display("%t L1 %m pipelineResp: cRq: no owner, hit", $time);
-                    cRqHit(n, procRq);
+                    cRqHit(n, procRq, False);
                 end
                 else if(scFail) begin
                     // Sc already fails, so we don't need to req parent.  Since
@@ -1015,7 +1015,7 @@ endfunction
             doAssert(ram.info.cs >= procRq.toState && ram.info.tag == getTag(procRq.addr),
                 ("pRs must be a hit")
             );
-            cRqHit(cOwner, procRq);
+            cRqHit(cOwner, procRq, True);
             // performance counter: miss cRq
             if (!cRqIsPrefetch[cOwner]) begin
                 incrMissCnt(procRq.op, cOwner, procRq.boundsOffset, procRq.boundsLength);
