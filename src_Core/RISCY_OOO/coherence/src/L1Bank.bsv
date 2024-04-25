@@ -312,11 +312,11 @@ endfunction
         if (cRqMshr.isFull)  begin
             //events.evt_AMO_MISS = 1;
         end
-        events.evt_ST = prefetcher.events.evt_0;
-        events.evt_ST_MISS_LAT = prefetcher.events.evt_1;
-        events.evt_AMO = prefetcher.events.evt_2;
-        events.evt_EVICT = prefetcher.events.evt_3;
-        events.evt_TLB_FLUSH = prefetcher.events.evt_4;
+        events.evt_ST = llcPrefetcher.events.evt_0;
+        events.evt_ST_MISS_LAT = llcPrefetcher.events.evt_1;
+        events.evt_AMO = llcPrefetcher.events.evt_2;
+        events.evt_EVICT = llcPrefetcher.events.evt_3;
+        events.evt_TLB_FLUSH = llcPrefetcher.events.evt_4;
         perf_events[2] <= events;
     endrule
     

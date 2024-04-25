@@ -920,8 +920,8 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
     Add#(a__, 60, TMul#(TDiv#(60, TAdd#(TLog#(ptrTableSize), 16)), TAdd#(TLog#(ptrTableSize), 16))),
     Add#(1, b__, TDiv#(64, TAdd#(TLog#(ptrTableSize), 16))),
     Add#(c__, TAdd#(TLog#(trainingTableSize), 16), 64),
-    Add#(1, d__, TDiv#(64, TAdd#(TLog#(trainingTableSize), 16))),
-    Add#(e__, 64, TMul#(TDiv#(64, TAdd#(TLog#(trainingTableSize), 16)), TAdd#(TLog#(trainingTableSize), 16))),
+    Add#(1, d__, TDiv#(58, TAdd#(TLog#(trainingTableSize), 16))),
+    Add#(e__, 58, TMul#(TDiv#(58, TAdd#(TLog#(trainingTableSize), 16)), TAdd#(TLog#(trainingTableSize), 16))),
     Add#(g__, 64, TMul#(TDiv#(64, TAdd#(14, TLog#(ptrTableSize))), TAdd#(14, TLog#(ptrTableSize)))),
     Add#(i__, 58, TMul#(TDiv#(58, TAdd#(14, TLog#(ptrTableSize))), TAdd#(14, TLog#(ptrTableSize)))),
     Add#(1, f__, TDiv#(58, TAdd#(14, TLog#(ptrTableSize)))),
@@ -932,7 +932,9 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
     Array #(Reg #(EventsPrefetcher)) perf_events <- mkDRegOR (5, unpack (0));
     RWBramCoreSequential#(ptrTableIdxBits, ptrTableEntryT, 4) pt <- mkRWBramCoreSequential();
     RWBramCore#(trainingTableIdxT, trainingTableEntryT) tt <- mkRWBramCore();
-    Fifo#(1, trainingTableTagT) dataForTtRead <- mkPipelineFifo;
+    Fifo#(1, trainingTableIdxTagT) dataForTtRead <- mkPipelineFifo;
+    Fifo#(4, trainingTableIdxT) wipeTtEntry <- mkOverflowBypassFifo;
+    Fifo#(4, Tuple2#(trainingTableIdxT, trainingTableEntryT)) installTtEntry <- mkOverflowBypassFifo;
     Fifo#(8, ptrTableIdxTagT) ptUpgradeQueue <- mkOverflowBypassFifo;
     Fifo#(1, ptrTableIdxTagT) ptUpgradeQueueReading <- mkPipelineFifo;
 
@@ -941,7 +943,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
     Reg#(Vector#(4, Bool)) ptLookupUsedEntry <- mkReg(replicate(False));
 
     Fifo#(8, CapPipe) tlbLookupQueue <- mkOverflowPipelineFifo;
-    Fifo#(8, Addr) prefetchQueue <- mkOverflowPipelineFifo;
+    Fifo#(8, Addr) prefetchQueue <- mkOverflowBypassFifo;
     Reg#(Bit#(8)) randomCounter <- mkConfigReg(0);
 
     
@@ -951,8 +953,8 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
          {hash(boundsLength) ^ hash(boundsOffset[63:6]), boundsOffset[5:4]};
 
     function trainingTableIdxTagT getTrainingIdxTag(Addr vaddr) =
-        //vaddr is a pointer and is kinda often 16 byte aligned, so rearrange for better LSBs (for index).
-         hash({vaddr[3:0], vaddr[63:4]});
+        hash(getLineAddr(vaddr));
+         //hash({vaddr[3:0], vaddr[63:4]});
 
     function LineState upgrade(LineState st) = 
         case (st)
@@ -977,9 +979,24 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
             randomCounter <= randomCounter + 1;
     endrule
 
+    rule doInstallTtEntry;
+        let {tIdx, te} = installTtEntry.first;
+        installTtEntry.deq;
+        tt.wrReq(tIdx, te);
+    endrule
+    
+    (* descending_urgency = "doInstallTtEntry, doWipeTtEntry" *)
+    rule doWipeTtEntry;
+        let tIdx = wipeTtEntry.first;
+        wipeTtEntry.deq;
+        trainingTableEntryT te = unpack(0);
+        tt.wrReq(tIdx, te);
+    endrule
+
     rule processTtRead;
         dataForTtRead.deq;
-        let tTag = dataForTtRead.first;
+        trainingTableTagT tTag = truncateLSB(dataForTtRead.first);
+        trainingTableIdxT tIdx = truncate(dataForTtRead.first);
         tt.deqRdResp;
         let te = tt.rdResp;
         if (te.tag == tTag) begin
@@ -989,13 +1006,13 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
             EventsPrefetcher evt = unpack(0);
             evt.evt_0 = 1;
             perf_events[0] <= evt;
+            wipeTtEntry.enq(tIdx);
         end
         else begin
             if (`VERBOSE) $display("%t Prefetcher training table mismatch! table %h now %h", $time, te.tag, tTag);
         end
     endrule
 
-    //(* descending_urgency = "doPtReadForUpgrade, doPtReadForLookup" *)
     rule doPtReadForUpgrade;
         if (`VERBOSE) $display("%t Prefetcher doPtReadForUpgrade", $time);
         let pit = ptUpgradeQueue.first;
@@ -1106,7 +1123,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
         Addr vaddr = boundsVirtBase + boundsOffset;
         trainingTableIdxTagT tit = getTrainingIdxTag(vaddr);
         if (`VERBOSE) $display("%t Prefetcher reportAccess %h offset %h boundslen %d tit %h", $time, addr, boundsOffset, boundsLength, tit, fshow(hitMiss));
-        dataForTtRead.enq(truncateLSB(tit));
+        dataForTtRead.enq(tit);
         tt.rdReq(truncate(tit));
     endmethod
 
@@ -1131,6 +1148,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
                     $time, addr, boundsLength, wasPrefetch, getAddr(cap), tit, pit);
                 te.tag = tTag;
                 te.ptrTableIdxTag = pit;
+                installTtEntry.enq(tuple2(tIdx, te));
                 tt.wrReq(tIdx, te);
 
                 EventsPrefetcher evt = unpack(0);
