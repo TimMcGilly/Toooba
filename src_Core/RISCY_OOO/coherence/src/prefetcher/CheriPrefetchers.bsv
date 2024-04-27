@@ -1128,16 +1128,19 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
     method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
         //Lookup addr in training table, if get a hit, update ptrTable
+        if (boundsLength <= 32768) begin
         Addr vaddr = boundsVirtBase + boundsOffset;
         trainingTableIdxTagT tit = getTrainingIdxTag(vaddr, boundsVirtBase, boundsLength);
         Bit#(24) usedOffset = truncate(boundsOffset);
         if (`VERBOSE) $display("%t Prefetcher reportAccess %h offset %h boundslen %d lineoffset %d tit %h", $time, addr, boundsOffset, boundsLength, usedOffset, tit, fshow(hitMiss));
         dataForTtRead.enq(tuple2(tit, usedOffset));
         tt.rdReq(truncate(tit));
+        end
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, Bit#(16) pcHash, Bool wasMiss, 
         Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
+        if (boundsLength <= 32768) begin
         $display ("%t Prefetcher reportCacheDataArrival wasMiss %d", $time, wasMiss, fshow(lineWithTags));
 
         //Add accessed cap to training table in case we dereference it later.
@@ -1184,6 +1187,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
             if (`VERBOSE) $display("%t Prefetcher reportDataArrival addr %h prefetech %b adding %d caps for prefetch lookups ", 
                     $time, addr, wasPrefetch, countElem(True, map(tpl_3, v)), fshow(v));
                 ptLookupQueue.enq(v);
+                end
             end
         end
     endmethod
