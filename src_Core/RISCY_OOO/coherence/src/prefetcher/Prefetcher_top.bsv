@@ -383,6 +383,8 @@ module mkL1DPrefetcher#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkSignaturePathPrefetcher(
             "./div_table.memhex",
             stSets, stWays, ptEntries, prefetchThreshold, useFilter)));
+    `elsif DATA_PREFETCHER_MEASURER
+        let m <- mkPCCapMeasurer;
     `endif
 `else 
     let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));

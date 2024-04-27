@@ -1234,3 +1234,89 @@ module mkCapPtrTestPrefetcher(CheriPCPrefetcher) provisos ();
 `endif
 
 endmodule
+
+typedef struct {
+    tagT tag; 
+    Bit#(8) numLoads;
+    Bit#(32) lastBoundsLenHash;
+    Bit#(32) lastBoundsBaseHash;
+    Bool diffLenCounted;
+    Bool diffBaseCounted;
+} MeasurmentTableEntry#(type tagT) deriving (Bits, Eq, FShow);
+
+module mkPCCapMeasurer(CheriPCPrefetcher) provisos (
+    NumAlias#(mtEntries, 256),
+    Alias#(mtIdxT, Bit#(TLog#(mtEntries))),
+    Alias#(mtTagT, Bit#(8)),
+    Alias#(mtEntryT, MeasurmentTableEntry#(mtTagT))
+);
+    RWBramCore#(mtIdxT, mtEntryT) mt <- mkRWBramCore();
+    Fifo#(1, Tuple4#(mtIdxT, mtTagT, Bit#(32), Bit#(32))) mtRdFifo <- mkPipelineFifo;
+    Array #(Reg #(EventsPrefetcher)) perf_events <- mkDRegOR (3, unpack (0));
+
+    rule processMtRead;
+        mtEntryT mte = mt.rdResp;
+        mt.deqRdResp;
+        let {idx, tag, lengthHash, baseHash} = mtRdFifo.first;
+        mtRdFifo.deq;
+        EventsPrefetcher evt = unpack(0);
+        if (mte.tag == tag) begin
+            if (baseHash != mte.lastBoundsBaseHash && !mte.diffBaseCounted) begin
+                $display ("%t Prefetcher Found PC %h with different bounds bases! (%h and %h)", $time, {tag, idx}, mte.lastBoundsBaseHash, baseHash);
+                mte.diffBaseCounted = True;
+                evt.evt_1 = 1;
+            end
+            if (lengthHash != mte.lastBoundsLenHash && !mte.diffLenCounted) begin
+                $display ("%t Prefetcher Found PC %h with different bounds lengths! (%d and %d)", $time, {tag, idx}, mte.lastBoundsLenHash, lengthHash);
+                mte.diffLenCounted = True;
+                evt.evt_2 = 1;
+            end
+            mte.numLoads = (mte.numLoads == 255) ? 255 : mte.numLoads + 1;
+        end
+        else begin
+            evt.evt_0 = 1;
+            $display ("%t Prefetcher installing new MT entry", $time);
+            if (mte.diffBaseCounted) begin
+                evt.evt_3 = 1;
+            end
+            else if (mte.numLoads > 4) begin
+                evt.evt_4 = 1;
+            end
+            mte.tag = tag;
+            mte.lastBoundsLenHash = lengthHash;
+            mte.lastBoundsBaseHash = baseHash;
+            mte.diffLenCounted = False;
+            mte.diffBaseCounted = False;
+        end
+        perf_events[1] <= evt;
+        mt.wrReq(idx, mte);
+    endrule
+
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
+        mtIdxT idx = truncate(pcHash);
+        mtTagT tag = truncateLSB(pcHash);
+        Bit#(32) lengthHash = hash(boundsLength);
+        Bit#(32) baseHash = hash(boundsVirtBase);
+        mt.rdReq(idx);
+        mtRdFifo.enq(tuple4(idx, tag, lengthHash, baseHash));
+
+        if (`VERBOSE) $display("%t Prefetcher reportAccess %h pcHash %h boundslen %d boundsBase %h", $time, addr, pcHash, boundsLength, boundsVirtBase, fshow(hitMiss));
+    endmethod
+
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, Bit#(16) pcHash, Bool wasMiss, Bool wasPrefetch, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
+
+    endmethod
+
+    method ActionValue#(Addr) getNextPrefetchAddr if (False);
+        return unpack(0);
+    endmethod
+
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return perf_events[0];
+    endmethod
+`endif
+
+endmodule
