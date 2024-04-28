@@ -1249,9 +1249,9 @@ typedef struct {
 } MeasurmentTableEntry#(type tagT) deriving (Bits, Eq, FShow);
 
 module mkPCCapMeasurer(CheriPCPrefetcher) provisos (
-    NumAlias#(mtEntries, 256),
+    NumAlias#(mtEntries, 1024),
     Alias#(mtIdxT, Bit#(TLog#(mtEntries))),
-    Alias#(mtTagT, Bit#(8)),
+    Alias#(mtTagT, Bit#(6)),
     Alias#(mtEntryT, MeasurmentTableEntry#(mtTagT))
 );
     RWBramCore#(mtIdxT, mtEntryT) mt <- mkRWBramCore();
@@ -1291,6 +1291,7 @@ module mkPCCapMeasurer(CheriPCPrefetcher) provisos (
             mte.lastBoundsBaseHash = baseHash;
             mte.diffLenCounted = False;
             mte.diffBaseCounted = False;
+            mte.numLoads = 0;
         end
         perf_events[1] <= evt;
         mt.wrReq(idx, mte);
