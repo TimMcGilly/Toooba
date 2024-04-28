@@ -1057,9 +1057,11 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
         ptLookupQueueReading.enq(pitVec);
         pt.rdReq(truncate(tpl_1(pitVec[0])));
 
+        /*
         EventsPrefetcher evt = unpack(0);
         evt.evt_2 = 1;
         perf_events[2] <= evt;
+        */
     endrule
 
     //usedPrefetch, entry from pt, pit, capValid
@@ -1102,6 +1104,11 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
                 pte.state = downgrade(pte.state);
                 pt.wrReq(truncate(pit), pte);
                 if (`VERBOSE) $display("%t Prefetcher processPtReadForLookup %h downgrading to ", $time, pit, fshow(pte.state));
+            end
+            if (offset == 0) begin
+                EventsPrefetcher evt = unpack(0);
+                evt.evt_2 = 1;
+                perf_events[2] <= evt;
             end
         end
     endrule
