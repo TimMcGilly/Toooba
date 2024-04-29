@@ -1177,7 +1177,8 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
             end
         end
 
-        if (wasMiss && !wasPrefetch) begin
+            //Previous condition was wasMiss && !wasPrefetch
+            if (wasMiss && (!wasPrefetch || randomCounter != 0)) begin
             //TODO prevent runaway prefetching
         //Queue caps here for lookup in ptr table
             //Only do so on a cache miss to prevent too many prefetches
@@ -1195,6 +1196,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
             if (`VERBOSE) $display("%t Prefetcher reportDataArrival addr %h prefetech %b adding %d caps for prefetch lookups ", 
                     $time, addr, wasPrefetch, countElem(True, map(tpl_3, v)), fshow(v));
                 ptLookupQueue.enq(v);
+                    lastLookupLineAddr <= getLineAddr(addr);
                 end
             end
         end
