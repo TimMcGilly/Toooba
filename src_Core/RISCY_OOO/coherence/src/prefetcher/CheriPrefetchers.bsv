@@ -304,7 +304,7 @@ provisos(
 
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
         Bit#(16) lenHash = hash(boundsLength);
-        Bit#(16) boundsHash = pcHash;
+        Bit#(16) boundsHash = hash(pcHash);
         Addr topCapGap = (boundsLength == 0) ? -1 : boundsLength-boundsOffset-1;
         Addr vaddr = boundsVirtBase+boundsOffset;
         //Bit#(8) boundsHash = hash(boundsVirtBase ^ boundsLength) ^ pcHash[7:0] ^ pcHash[15:8];
