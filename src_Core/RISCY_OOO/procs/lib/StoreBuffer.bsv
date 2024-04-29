@@ -68,7 +68,7 @@ typedef struct {
     SBBlockAddr addr;
     SBByteEn byteEn;
     CLine line;
-    Bit#(16) pcHash;
+    PCHash pcHash;
     Addr boundsOffset;
     Addr boundsVirtBase;
     Addr boundsLength;
@@ -83,7 +83,7 @@ typedef struct {
 interface StoreBuffer;
     method Bool isEmpty;
     method Maybe#(SBIndex) getEnqIndex(Addr paddr);
-    method Action enq(SBIndex idx, Addr paddr, MemDataByteEn be, MemTaggedData data, Bit#(16) pcHash, 
+    method Action enq(SBIndex idx, Addr paddr, MemDataByteEn be, MemTaggedData data, PCHash pcHash, 
         Addr boundsOffset, Addr boundsWidth, Addr boundsVirtBase);
     method ActionValue#(SBEntry) deq(SBIndex idx);
     method ActionValue#(Tuple2#(SBIndex, SBEntry)) issue;
@@ -196,7 +196,7 @@ module mkStoreBufferEhr(StoreBuffer);
         end
     endmethod
 
-    method Action enq(SBIndex idx, Addr paddr, MemDataByteEn be, MemTaggedData d, Bit#(16) pcHash, 
+    method Action enq(SBIndex idx, Addr paddr, MemDataByteEn be, MemTaggedData d, PCHash pcHash, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase) if(inited);
 
         // get data offset
@@ -326,7 +326,7 @@ endmodule
 module mkDummyStoreBuffer(StoreBuffer);
     method Bool isEmpty = True;
     method Maybe#(SBIndex) getEnqIndex(Addr paddr) = Invalid;
-    method Action enq(SBIndex idx, Addr paddr, MemDataByteEn be, MemTaggedData data, Bit#(16) pcHash, Addr boundsOffset, Addr boundsWidth, Addr boundsVirtBase);
+    method Action enq(SBIndex idx, Addr paddr, MemDataByteEn be, MemTaggedData data, PCHash pcHash, Addr boundsOffset, Addr boundsWidth, Addr boundsVirtBase);
         doAssert(False, "enq should never be called)");
     endmethod
     method ActionValue#(SBEntry) deq(SBIndex idx);

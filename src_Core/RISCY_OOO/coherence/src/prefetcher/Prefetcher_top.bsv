@@ -137,11 +137,11 @@ endmodule
 
 module mkCheriPCPrefetcherAdapter#(module#(PCPrefetcher) mkPrefetcher)(CheriPCPrefetcher);
     let p <- mkPrefetcher;
-    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, 
+    method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
-        p.reportAccess(addr, pcHash, hitMiss);
+        p.reportAccess(addr, hash(pcHash), hitMiss);
     endmethod
-    method Action reportCacheDataArrival(CLine lineWithTags, Addr accessAddr, Bit#(16) pcHash, Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr accessAddr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
         Addr boundsVirtBase);
     endmethod
     method ActionValue#(Addr) getNextPrefetchAddr;

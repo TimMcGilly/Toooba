@@ -206,7 +206,7 @@ typedef struct {
     MemTaggedData data; // valid when op == Sc/Amo
     AmoInst amoInst; // valid when op == Amo
     Bool loadTags; // valid when op == Ld
-    Bit#(16) pcHash; // hash of instruction pc sending the request
+    PCHash pcHash; // hash of instruction pc sending the request
     Addr boundsOffset; //From capability sending the memory request. Used in prefetching.
     Addr boundsLength; //From capability sending the memory request. Used in prefetching.
     Addr boundsVirtBase; //From capability sending the memory request. Used in prefetching.

@@ -29,6 +29,7 @@
 
 `include "ProcConfig.bsv"
 import Map::*;
+import Types::*;
 
 typedef Bit#(10) StlPredKey;
 typedef Bit#(6) StlPredIndex;
@@ -36,35 +37,37 @@ typedef Int#(3) StlPredValue;
 typedef 2 StlPredAssociativity;
 
 interface STLPred;
-    method Action update(Bit#(16) pc_hash, Bool waited, Bool killedLd);
-    method Bool pred(Bit#(16) pc_hash);
+    method Action update(PCHash pc_hash, Bool waited, Bool killedLd);
+    method Bool pred(PCHash pc_hash);
 endinterface
 
 module mkSTLPred(STLPred);
     Map#(StlPredKey,StlPredIndex,StlPredValue,StlPredAssociativity) ldKillMap <- mkMapLossy(minBound);
-    Reg#(Bit#(16)) rand_count <- mkReg(0);
+    Reg#(PCHash) rand_count <- mkReg(0);
 
     rule inc_rand_count;
         rand_count <= rand_count + 1;
     endrule
 
-    method Action update(Bit#(16) pc_hash, Bool waited, Bool killedLd);
+    method Action update(PCHash pc_hash, Bool waited, Bool killedLd);
+        Bit#(16) pc_hash16 = pc_hash[31:16] ^ pc_hash[15:0];
         Bool rand_inv = (rand_count & (512-1)) == 0;
         Int#(3) inc = -1; // Subtract one by default.
         if (waited) inc = 0; // Don't train if we waited for stores.
         else if (killedLd) inc = 2;  // Double train if we flushed the pipe.
-        ldKillMap.updateWithFunc(unpack(pc_hash), // Key
+        ldKillMap.updateWithFunc(unpack(pc_hash16), // Key
             inc,                      // value; don't train if we waited.
             boundedPlus, // function to combine this value with existing
             killedLd || rand_inv      // insert if doesn't exist
         );
     endmethod
 
-    method Bool pred(Bit#(16) pc_hash);
+    method Bool pred(PCHash pc_hash);
 `ifdef NO_SPEC_STL
         return True;
 `else
-        return fromMaybe(minBound, ldKillMap.lookup(unpack(pc_hash))) == maxBound;
+        Bit#(16) pc_hash16 = pc_hash[31:16] ^ pc_hash[15:0];
+        return fromMaybe(minBound, ldKillMap.lookup(unpack(pc_hash16))) == maxBound;
 `endif
     endmethod
 

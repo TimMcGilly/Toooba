@@ -295,7 +295,7 @@ typedef struct {
     LdQTag tag;
     Addr paddr;
     ByteOrTagEn shiftedBE;
-    Bit#(16) pcHash;
+    PCHash pcHash;
     Addr boundsOffset;
     Addr boundsLength;
     Addr boundsVirtBase;
@@ -346,7 +346,7 @@ typedef struct {
     MemTaggedData     stData;
     Bool              allowCapAmoLd;
     Maybe#(Trap)      fault;
-    Bit#(16)          pcHash;
+    PCHash            pcHash;
     Addr              boundsOffset;
     Addr              boundsLength;
     Addr              boundsVirtBase;
@@ -362,12 +362,12 @@ interface SplitLSQ;
                         MemInst mem_inst,
                         Maybe#(PhyDst) dst,
                         SpecBits spec_bits,
-                        Bit#(16) pcHash);
+                        PCHash pcHash);
     method Action enqSt(InstTag inst_tag,
                         MemInst mem_inst,
                         Maybe#(PhyDst) dst,
                         SpecBits spec_bits,
-                        Bit#(16) pcHash);
+                        PCHash pcHash);
     // A mem inst needs orignal BE (not shifted) at addr translation
     method ByteOrTagEn getOrigBE(LdStQTag t);
     // Retrieve information when we want to wakeup RS early in case
@@ -671,7 +671,7 @@ module mkSplitLSQ(SplitLSQ);
     Vector#(LdQSize, Reg#(Bool))                    ld_acq             <- replicateM(mkConfigRegU);
     Vector#(LdQSize, Reg#(Bool))                    ld_rel             <- replicateM(mkConfigRegU);
     Vector#(LdQSize, Reg#(Maybe#(PhyDst)))          ld_dst             <- replicateM(mkConfigRegU);
-    Vector#(LdQSize, Reg#(Bit#(16)))                ld_pcHash          <- replicateM(mkConfigRegU);
+    Vector#(LdQSize, Reg#(PCHash))                ld_pcHash          <- replicateM(mkConfigRegU);
     Vector#(LdQSize, Reg#(Addr))                    ld_boundsOffset    <- replicateM(mkConfigRegU);
     Vector#(LdQSize, Reg#(Addr))                    ld_boundsLength    <- replicateM(mkConfigRegU);
     Vector#(LdQSize, Reg#(Addr))                    ld_boundsVirtBase  <- replicateM(mkConfigRegU);
@@ -860,7 +860,7 @@ module mkSplitLSQ(SplitLSQ);
     Vector#(StQSize, Reg#(Bool))                    st_acq       <- replicateM(mkRegU);
     Vector#(StQSize, Reg#(Bool))                    st_rel       <- replicateM(mkRegU);
     Vector#(StQSize, Reg#(Maybe#(PhyDst)))          st_dst       <- replicateM(mkRegU);
-    Vector#(StQSize, Reg#(Bit#(16)))                st_pcHash    <- replicateM(mkRegU);
+    Vector#(StQSize, Reg#(PCHash))                st_pcHash    <- replicateM(mkRegU);
     Vector#(StQSize, Reg#(Addr))                    st_boundsOffset <- replicateM(mkConfigRegU);
     Vector#(StQSize, Reg#(Addr))                    st_boundsLength <- replicateM(mkConfigRegU);
     Vector#(StQSize, Reg#(Addr))                    st_boundsVirtBase <- replicateM(mkConfigRegU);
@@ -1423,7 +1423,7 @@ module mkSplitLSQ(SplitLSQ);
                         MemInst mem_inst,
                         Maybe#(PhyDst) dst,
                         SpecBits spec_bits,
-                        Bit#(16) pcHash) if(ld_can_enq_wire && !wrongSpec_conflict);
+                        PCHash pcHash) if(ld_can_enq_wire && !wrongSpec_conflict);
         if(verbose) begin
             $display("[LSQ - enqLd] enqP %d; ", ld_enqP,
                      "; ", fshow(inst_tag),
@@ -1484,7 +1484,7 @@ module mkSplitLSQ(SplitLSQ);
                         MemInst mem_inst,
                         Maybe#(PhyDst) dst,
                         SpecBits spec_bits,
-                        Bit#(16) pcHash) if(st_can_enq_wire && !wrongSpec_conflict);
+                        PCHash pcHash) if(st_can_enq_wire && !wrongSpec_conflict);
         if(verbose) begin
             $display("[LSQ - enqSt] enqP %d; ", st_enqP,
                      "; ", fshow(inst_tag),

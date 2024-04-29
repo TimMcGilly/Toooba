@@ -163,6 +163,8 @@ typedef TDiv#(MemDataSz, Inst16_Sz) MemDataSzInst;
 typedef TLog#(MemDataSzInst) LgMemDataSzInst;
 typedef Bit#(LgMemDataSzInst) MemDataInstOffset;
 
+typedef Bit#(32) PCHash;
+
 // These types show up in many places so they are defined here
 typedef enum {Swap, Add, Xor, And, Or, Min, Max, Minu, Maxu, None} AmoFunc deriving(Bits, Eq, FShow, Bounded);
 typedef enum {QWord, DWord, Word} AmoWidth deriving(Bits, Eq, FShow, Bounded);
