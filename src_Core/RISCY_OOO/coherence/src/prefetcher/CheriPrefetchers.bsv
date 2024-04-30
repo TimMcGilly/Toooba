@@ -950,6 +950,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
     Fifo#(8, Addr) prefetchQueue <- mkOverflowBypassFifo;
     Reg#(Bit#(8)) randomCounter <- mkConfigReg(0);
     Reg#(LineAddr) lastLookupLineAddr <- mkReg(0);
+    Reg#(trainingTableIdxTagT) lastMatchedTit <- mkReg(0);
 
     
     function ptrTableIdxTagT getIdxTag(Addr boundsLength, Addr boundsOffset) =
@@ -1005,7 +1006,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
         trainingTableIdxT tIdx = truncate(tit);
         tt.deqRdResp;
         let te = tt.rdResp;
-        if (te.tag == tTag) begin
+        if (te.tag == tTag && lastMatchedTit != tit) begin
             //Match -- upgrade ptrTable
             if (`VERBOSE) $display("%t Prefetcher training table match! Will upgrade ptr table pit %h", $time, te.ptrTableIdxTag);
             ptUpgradeQueue.enq(tuple2(te.ptrTableIdxTag, boundsOffset));
@@ -1013,6 +1014,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
             evt.evt_0 = 1;
             perf_events[0] <= evt;
             wipeTtEntry.enq(tIdx);
+            lastMatchedTit <= tit;
         end
         else begin
             if (`VERBOSE) $display("%t Prefetcher training table mismatch! table %h now %h", $time, te.tag, tTag);
@@ -1157,7 +1159,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
             let offset = getLineMemDataOffset(addr);
             MemTaggedData d = getTaggedDataAt(lineWithTags, offset);
             CapPipe cap = fromMem(unpack(pack(d)));
-            if (d.tag) begin
+                if (d.tag && boundsVirtBase != getBase(cap)) begin
                 //install ptr addr of cap in training table
                 ptrTableIdxTagT pit = getIdxTag(boundsLength, boundsOffset);
                 trainingTableIdxTagT tit = getTrainingIdxTag(getAddr(cap), saturating_truncate(getBase(cap)), saturating_truncate(getLength(cap)));
@@ -1178,7 +1180,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
         end
 
             //Previous condition was wasMiss && !wasPrefetch
-            if (wasMiss && (!wasPrefetch || randomCounter != 0)) begin
+            if (wasMiss && !wasPrefetch) begin
             //TODO prevent runaway prefetching
         //Queue caps here for lookup in ptr table
             //Only do so on a cache miss to prevent too many prefetches
