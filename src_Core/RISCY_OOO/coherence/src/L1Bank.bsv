@@ -188,6 +188,9 @@ module mkL1Bank#(
     Reg#(Maybe#(LineAddr)) linkAddr = linkAddrEhr[0]; // normal processing use port 0
     Reg#(Maybe#(LineAddr)) linkAddrRst = linkAddrEhr[1]; // reset by outside use port 1
 
+    Reg#(Bit#(64)) crqMshrEnqs <- mkReg(0);
+    Reg#(Bit#(64)) crqMshrDeqs <- mkReg(0);
+
     // we process AMO resp in a new cycle to cut critical path
     Reg#(Maybe#(AmoHitInfo#(cRqIdxT, procRqT))) processAmo <- mkReg(Invalid);
 
@@ -351,6 +354,7 @@ endfunction
     rule cRqTransfer_new(!cRqRetryIndexQ.notEmpty && flushDone);
         procRqT r <- toGet(rqFromCQ).get;
         cRqIdxT n <- cRqMshr.cRqTransfer.getEmptyEntryInit(r);
+        crqMshrEnqs <= crqMshrEnqs + 1;
         // send to pipeline
         pipeline.send(CRq (L1PipeRqIn {
             addr: r.addr,
@@ -398,7 +402,7 @@ endfunction
 
     (* descending_urgency = "pRsTransfer, cRqTransfer_retry, cRqTransfer_new, createPrefetchRq" *)
     (* descending_urgency = "pRqTransfer, cRqTransfer_retry, cRqTransfer_new, createPrefetchRq" *)
-    rule createPrefetchRq(flushDone);
+    rule createPrefetchRq(flushDone && crqMshrEnqs - crqMshrDeqs < 6);
         Addr addr <- prefetcher.getNextPrefetchAddr;
         procRqT r = ProcRq {
             id: ?, //Or maybe do 0 here
@@ -415,6 +419,7 @@ endfunction
             boundsVirtBase: ?
         };
         cRqIdxT n <- cRqMshr.cRqTransfer.getEmptyEntryInit(r);
+        crqMshrEnqs <= crqMshrEnqs + 1;
         // send to pipeline
         pipeline.send(CRq (L1PipeRqIn {
             addr: r.addr,
@@ -700,6 +705,7 @@ endfunction
             );
             // release MSHR entry
             cRqMshr.pipelineResp.releaseEntry(n);
+            crqMshrDeqs <= crqMshrDeqs + 1;
         end
         else begin
             processAmo <= Valid (AmoHitInfo {
@@ -762,6 +768,7 @@ endfunction
         );
         // release MSHR entry
         cRqMshr.pipelineResp.releaseEntry(n);
+        crqMshrDeqs <= crqMshrDeqs + 1;
         // reset state
         processAmo <= Invalid;
     endrule
@@ -803,6 +810,7 @@ endfunction
             end
             // release MSHR entry
             cRqMshr.pipelineResp.releaseEntry(n);
+            crqMshrDeqs <= crqMshrDeqs + 1;
            if (verbose)
             $display("%t L1 %m pipelineResp: Sc early fail func: ", $time,
                 fshow(resetOwner), " ; ",
