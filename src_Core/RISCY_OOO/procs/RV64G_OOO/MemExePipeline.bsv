@@ -237,8 +237,9 @@ module mkDTlbSynth(DTlbSynth);
        
 
     endfunction
+    function CapPipe getCap(MemExeToFinish inst) = inst.vaddr;
     
-    let m <- mkDTlb(getTlbReq, createReqForPrefetch);
+    let m <- mkDTlb(getTlbReq, createReqForPrefetch, getCap);
     return m;
 endmodule
 

@@ -69,6 +69,8 @@ import PerformanceMonitor::*;
 import StatCounters::*;
 import BlueUtils::*;
 `endif
+import CHERICC_Fat::*;
+import CHERICap::*;
 
 export L1CRqStuck(..);
 export L1PRqStuck(..);
@@ -403,7 +405,7 @@ endfunction
     (* descending_urgency = "pRsTransfer, cRqTransfer_retry, cRqTransfer_new, createPrefetchRq" *)
     (* descending_urgency = "pRqTransfer, cRqTransfer_retry, cRqTransfer_new, createPrefetchRq" *)
     rule createPrefetchRq(flushDone && crqMshrEnqs - crqMshrDeqs < 6);
-        Addr addr <- prefetcher.getNextPrefetchAddr;
+        let {addr, cap} <- prefetcher.getNextPrefetchAddr;
         procRqT r = ProcRq {
             id: ?, //Or maybe do 0 here
             addr: addr,
@@ -414,9 +416,9 @@ endfunction
             amoInst: ?,
             loadTags: ?,
             pcHash: ?,
-            boundsOffset: ?,
-            boundsLength: ?,
-            boundsVirtBase: ?
+            boundsOffset: getOffset(cap),
+            boundsLength: saturating_truncate(getLength(cap)),
+            boundsVirtBase: getBase(cap)
         };
         cRqIdxT n <- cRqMshr.cRqTransfer.getEmptyEntryInit(r);
         crqMshrEnqs <= crqMshrEnqs + 1;
@@ -535,7 +537,7 @@ endfunction
 
     (* descending_urgency = "sendRqToP, sendPrefetchRqToP" *)
     rule sendPrefetchRqToP;
-        let addr <- llcPrefetcher.getNextPrefetchAddr;
+        let {addr, cap} <- llcPrefetcher.getNextPrefetchAddr;
         cRqToPT cRqToP = CRqMsg {
             addr: addr,
             fromState: ?,
@@ -544,9 +546,9 @@ endfunction
             id: 0,
             child: ?,
             isPrefetchRq: True,
-            boundsOffset: ?,
-            boundsLength: ?,
-            boundsVirtBase: ?
+            boundsOffset: getOffset(cap),
+            boundsLength: saturating_truncate(getLength(cap)),
+            boundsVirtBase: getBase(cap)
 
         };
         rqToPQ.enq(cRqToP);

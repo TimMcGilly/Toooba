@@ -148,7 +148,8 @@ typedef union tagged {
 
 module mkDTlb#(
     function TlbReq getTlbReq(instT inst),
-    function DTlbReq#(instT) createReqForPrefetch(CapPipe vaddr))
+    function DTlbReq#(instT) createReqForPrefetch(CapPipe vaddr),
+    function CapPipe getCap(instT inst))
     (DTlb::DTlb#(instT)) provisos(Bits#(instT, a__), FShow#(instT));
     Bool verbose = True;
 
@@ -711,7 +712,8 @@ module mkDTlb#(
             return DTlbRespToPrefetcher {
                 paddr: tpl_1(resp),
                 haveException: isValid(tpl_2(resp)),
-                permsCheckPass: tpl_3(resp)
+                permsCheckPass: tpl_3(resp),
+                cap: getCap(pendInst[idx])
             };
         endmethod
     endinterface

@@ -227,6 +227,7 @@ typedef struct {
     Addr paddr;
     Bool haveException;
     Bool permsCheckPass;
+    CapPipe cap;
 } DTlbRespToPrefetcher deriving (Bits, Eq, FShow);
 
 interface DTlbToPrefetcher;

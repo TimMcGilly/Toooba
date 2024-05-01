@@ -144,9 +144,9 @@ module mkCheriPCPrefetcherAdapter#(module#(PCPrefetcher) mkPrefetcher)(CheriPCPr
     method Action reportCacheDataArrival(CLine lineWithTags, Addr accessAddr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
         Addr boundsVirtBase);
     endmethod
-    method ActionValue#(Addr) getNextPrefetchAddr;
-        let x <- p.getNextPrefetchAddr;
-        return x;
+    method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr;
+        let addr <- p.getNextPrefetchAddr;
+        return tuple2(addr, almightyCap);
     endmethod
 `ifdef PERFORMANCE_MONITORING
     method EventsPrefetcher events;
@@ -383,6 +383,7 @@ module mkL1DPrefetcher#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkSignaturePathPrefetcher(
             "./div_table.memhex",
             stSets, stWays, ptEntries, prefetchThreshold, useFilter)));
+        //let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkPrintPrefetcher));
     `elsif DATA_PREFETCHER_MEASURER
         let m <- mkPCCapMeasurer;
     `endif

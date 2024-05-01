@@ -98,12 +98,12 @@ module mkAllInCapPrefetcher#(Parameter#(maxCapSizeToPrefetch) _)(CheriPCPrefetch
         Addr boundsVirtBase);
     endmethod
 
-    method ActionValue#(Addr) getNextPrefetchAddr 
+    method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr
         if (prefetchNext <= prefetchEnd && prefetchNext != originalMiss);
         
         prefetchNext <= prefetchNext + 1;
         if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr %h", $time,Addr'{prefetchNext, '0});
-        return Addr'{prefetchNext, '0};
+        return tuple2(Addr'{prefetchNext, '0}, almightyCap);
 
     endmethod
 
@@ -318,13 +318,13 @@ provisos(
         Addr boundsVirtBase);
     endmethod
 
-    method ActionValue#(Addr) getNextPrefetchAddr;
+    method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr;
         EventsPrefetcher evt = unpack(0);
         evt.evt_4 = 1;
         perf_events[2] <= evt;
         if (`VERBOSE) $display("%t Stride Prefetcher getNextPrefetchAddr paddr %h", $time, addrToPrefetch.first);
         addrToPrefetch.deq;
-        return addrToPrefetch.first;
+        return tuple2(addrToPrefetch.first, almightyCap);
     endmethod
 
 `ifdef PERFORMANCE_MONITORING
@@ -575,9 +575,9 @@ module mkCapBitmapPrefetcherOld#(Parameter#(maxCapSizeToTrack) _, Parameter#(bit
         Addr boundsVirtBase);
     endmethod
 
-    method ActionValue#(Addr) getNextPrefetchAddr;
+    method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr;
         pfQueue.deq;
-        return {pfQueue.first, '0};
+        return tuple2({pfQueue.first, '0}, almightyCap);
     endmethod
 
 `ifdef PERFORMANCE_MONITORING
@@ -865,9 +865,9 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
         end
     endmethod
 
-    method ActionValue#(Addr) getNextPrefetchAddr;
+    method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr;
         pfQueue.deq;
-        return {pfQueue.first, '0};
+        return tuple2({pfQueue.first, '0}, almightyCap);
     endmethod
     method Action reportCacheDataArrival(CLine lineWithTags, Addr accessAddr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
         Addr boundsVirtBase);
@@ -947,7 +947,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
     Reg#(Vector#(4, Bool)) ptLookupUsedEntry <- mkReg(replicate(False));
 
     Fifo#(8, CapPipe) tlbLookupQueue <- mkOverflowPipelineFifo;
-    Fifo#(8, Addr) prefetchQueue <- mkOverflowBypassFifo;
+    Fifo#(8, Tuple2#(Addr, CapPipe)) prefetchQueue <- mkOverflowBypassFifo;
     Reg#(Bit#(8)) randomCounter <- mkConfigReg(0);
     Reg#(LineAddr) lastLookupLineAddr <- mkReg(0);
     Reg#(trainingTableIdxTagT) lastMatchedTit <- mkReg(0);
@@ -1127,7 +1127,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
         toTlb.deqPrefetcherResp;
         if (`VERBOSE) $display("%t Prefetcher got TLB response: ", $time, fshow(resp));
         if (!resp.haveException && resp.paddr != 0) begin
-            prefetchQueue.enq(resp.paddr);
+            prefetchQueue.enq(tuple2(resp.paddr, resp.cap));
             EventsPrefetcher evt = unpack(0);
             evt.evt_3 = 1;
             perf_events[3] <= evt;
@@ -1204,8 +1204,8 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
         end
     endmethod
 
-    method ActionValue#(Addr) getNextPrefetchAddr;
-        if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr %h", $time, prefetchQueue.first);
+    method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr;
+        if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr %h", $time, tpl_1(prefetchQueue.first));
         prefetchQueue.deq;
         return prefetchQueue.first;
     endmethod
@@ -1217,7 +1217,6 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
 `endif
 
 endmodule
-
 
 module mkCapPtrTestPrefetcher(CheriPCPrefetcher) provisos ();
     Fifo#(4, Addr) prefetchRq <- mkOverflowPipelineFifo;
@@ -1237,10 +1236,10 @@ module mkCapPtrTestPrefetcher(CheriPCPrefetcher) provisos ();
         if (`VERBOSE) $display("%t Prefetcher reportDataArrival %h boundslen %d prefetch %b", $time, addr, boundsLength, wasPrefetch, fshow(lineWithTags));
     endmethod
 
-    method ActionValue#(Addr) getNextPrefetchAddr;
+    method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr;
         if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr %h", $time, prefetchRq.first);
         prefetchRq.deq;
-        return prefetchRq.first;
+        return tuple2(prefetchRq.first, almightyCap);
     endmethod
 
 `ifdef PERFORMANCE_MONITORING
@@ -1254,10 +1253,11 @@ endmodule
 typedef struct {
     tagT tag; 
     Bit#(8) numLoads;
-    Bit#(32) lastBoundsLenHash;
-    Bit#(32) lastBoundsBaseHash;
+    Bit#(16) lastBoundsLenHash;
+    Bit#(16) lastBoundsBaseHash;
     Bool diffLenCounted;
     Bool diffBaseCounted;
+    Bool lruMostRecent;
 } MeasurmentTableEntry#(type tagT) deriving (Bits, Eq, FShow);
 
 module mkPCCapMeasurer(CheriPCPrefetcher) provisos (
@@ -1266,17 +1266,19 @@ module mkPCCapMeasurer(CheriPCPrefetcher) provisos (
     Alias#(mtTagT, Bit#(20)),
     Alias#(mtEntryT, MeasurmentTableEntry#(mtTagT))
 );
-    RWBramCore#(mtIdxT, mtEntryT) mt <- mkRWBramCore();
-    Fifo#(1, Tuple4#(mtIdxT, mtTagT, Bit#(32), Bit#(32))) mtRdFifo <- mkPipelineFifo;
+    RWBramCore#(mtIdxT, Vector#(2, mtEntryT)) mt <- mkRWBramCoreForwarded();
+    Fifo#(1, Tuple4#(mtIdxT, mtTagT, Bit#(16), Bit#(16))) mtRdFifo <- mkPipelineFifo;
     Array #(Reg #(EventsPrefetcher)) perf_events <- mkDRegOR (3, unpack (0));
 
     rule processMtRead;
-        mtEntryT mte = mt.rdResp;
+        Vector#(2, mtEntryT) mteVec = mt.rdResp;
         mt.deqRdResp;
         let {idx, tag, lengthHash, baseHash} = mtRdFifo.first;
         mtRdFifo.deq;
         EventsPrefetcher evt = unpack(0);
-        if (mte.tag == tag) begin
+
+        if (mteVec[0].tag == tag) begin
+            mtEntryT mte = mteVec[0];
             if (baseHash != mte.lastBoundsBaseHash && !mte.diffBaseCounted) begin
                 $display ("%t Prefetcher Found PC %h with different bounds bases! (%h and %h)", $time, {tag, idx}, mte.lastBoundsBaseHash, baseHash);
                 mte.diffBaseCounted = True;
@@ -1288,11 +1290,35 @@ module mkPCCapMeasurer(CheriPCPrefetcher) provisos (
                 evt.evt_2 = 1;
             end
             mte.numLoads = (mte.numLoads == 255) ? 255 : mte.numLoads + 1;
+            mte.lruMostRecent = True;
+            mteVec[1].lruMostRecent = False;
+            mteVec[0] = mte;
+        end
+        else if (mteVec[1].tag == tag) begin
+            mtEntryT mte = mteVec[1];
+            if (baseHash != mte.lastBoundsBaseHash && !mte.diffBaseCounted) begin
+                $display ("%t Prefetcher Found PC %h with different bounds bases! (%h and %h)", $time, {tag, idx}, mte.lastBoundsBaseHash, baseHash);
+                mte.diffBaseCounted = True;
+                evt.evt_1 = 1;
+            end
+            if (lengthHash != mte.lastBoundsLenHash && !mte.diffLenCounted) begin
+                $display ("%t Prefetcher Found PC %h with different bounds lengths! (%d and %d)", $time, {tag, idx}, mte.lastBoundsLenHash, lengthHash);
+                mte.diffLenCounted = True;
+                evt.evt_2 = 1;
+            end
+            mte.numLoads = (mte.numLoads == 255) ? 255 : mte.numLoads + 1;
+            mte.lruMostRecent = True;
+            mteVec[0].lruMostRecent = False;
+            mteVec[1] = mte;
         end
         else begin
+            Bit#(1) replaceIdx = 0;
+            if (mteVec[0].lruMostRecent) replaceIdx = 1;
+            else if (mteVec[1].lruMostRecent) replaceIdx = 0;
+            mtEntryT mte = mteVec[replaceIdx];
             evt.evt_0 = 1;
-            $display ("%t Prefetcher installing new MT entry", $time);
-            if (mte.diffBaseCounted) begin
+            $display ("%t Prefetcher installing new MT entry replaceIdx %d", $time, replaceIdx);
+            if (mte.numLoads > 4 && mte.diffBaseCounted) begin
                 evt.evt_3 = 1;
             end
             else if (mte.numLoads > 4) begin
@@ -1304,17 +1330,18 @@ module mkPCCapMeasurer(CheriPCPrefetcher) provisos (
             mte.diffLenCounted = False;
             mte.diffBaseCounted = False;
             mte.numLoads = 0;
+            mteVec[replaceIdx] = mte;
         end
         perf_events[1] <= evt;
-        mt.wrReq(idx, mte);
+        mt.wrReq(idx, mteVec);
     endrule
 
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
         mtIdxT idx = truncate(pcHash);
         mtTagT tag = truncateLSB(pcHash);
-        Bit#(32) lengthHash = hash(boundsLength);
-        Bit#(32) baseHash = hash(boundsVirtBase);
+        Bit#(16) lengthHash = hash(boundsLength);
+        Bit#(16) baseHash = hash(boundsVirtBase);
         mt.rdReq(idx);
         mtRdFifo.enq(tuple4(idx, tag, lengthHash, baseHash));
 
@@ -1326,7 +1353,7 @@ module mkPCCapMeasurer(CheriPCPrefetcher) provisos (
 
     endmethod
 
-    method ActionValue#(Addr) getNextPrefetchAddr if (False);
+    method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr if (False);
         return unpack(0);
     endmethod
 
@@ -1413,7 +1440,7 @@ module mkCapPCMeasurer(CheriPCPrefetcher) provisos (
 
     endmethod
 
-    method ActionValue#(Addr) getNextPrefetchAddr if (False);
+    method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr if (False);
         return unpack(0);
     endmethod
 

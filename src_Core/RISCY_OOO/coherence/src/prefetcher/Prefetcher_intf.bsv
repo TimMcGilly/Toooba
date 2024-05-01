@@ -24,6 +24,8 @@ import Types::*;
 import CCTypes::*;
 import ISA_Decls   :: *;
 import ProcTypes::*;
+import CHERICap::*;
+import CHERICC_Fat::*;
 
 typedef enum {
     HIT = 1'b0, MISS = 1'b1
@@ -60,7 +62,7 @@ interface CheriPCPrefetcher;
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, 
         Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
-    method ActionValue#(Addr) getNextPrefetchAddr();
+    method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr();
 `ifdef PERFORMANCE_MONITORING
     method EventsPrefetcher events();
 `endif
