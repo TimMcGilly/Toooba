@@ -1180,7 +1180,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
         end
 
             //Previous condition was wasMiss && !wasPrefetch
-            if (wasMiss && !wasPrefetch) begin
+            if (wasMiss) begin
             //TODO prevent runaway prefetching
         //Queue caps here for lookup in ptr table
             //Only do so on a cache miss to prevent too many prefetches
