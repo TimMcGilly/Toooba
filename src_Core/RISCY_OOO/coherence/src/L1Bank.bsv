@@ -632,7 +632,9 @@ endfunction
         if (ram.info.other.wasPrefetch && !cRqIsPrefetch[n] && req.op == Ld) begin
             //Hit on a prefetched cache line!
             $display ("%t L1 demand hit on prefetched cache line", $time);
+        `ifdef PERF_COUNT
             usedPrefetchCnt.incr(1);
+        `endif
             EventsL1D events = unpack (0);
             events.evt_LD = 1;
             perf_events[4] <= events;
