@@ -220,6 +220,7 @@ module mkL1Bank#(
     Count#(Data) stCnt <- mkCount(0);
     Count#(Data) amoCnt <- mkCount(0);
     Count#(Data) ldMissCnt <- mkCount(0);
+    Count#(Data) usedPrefetchCnt <- mkCount(0);
     Count#(Data) stMissCnt <- mkCount(0);
     Count#(Data) amoMissCnt <- mkCount(0);
     Count#(Data) ldMissLat <- mkCount(0);
