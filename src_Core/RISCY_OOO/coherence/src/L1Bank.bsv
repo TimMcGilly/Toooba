@@ -142,7 +142,7 @@ module mkL1Bank#(
     Alias#(pRqIdxT, Bit#(TLog#(pRqNum))),
     Alias#(cacheOwnerT, Maybe#(cRqIdxT)), // actually owner cannot be pRq
     Alias#(cacheInfoT, CacheInfo#(tagT, Msi, void, cacheOwnerT, void)),
-    Alias#(ramDataT, RamData#(tagT, Msi, void, cacheOwnerT, void, Line)),
+    Alias#(ramDataT, RamData#(tagT, Msi, void, cacheOwnerT, PrefetchInfo, Line)),
     Alias#(procRqT, ProcRq#(procRqIdT)),
     Alias#(cRqToPT, CRqMsg#(wayT, void)),
     Alias#(cRsToPT, CRsMsg#(void)),
@@ -151,7 +151,7 @@ module mkL1Bank#(
     Alias#(pRqRsFromPT, PRqRsMsg#(wayT, void)),
     Alias#(cRqSlotT, L1CRqSlot#(wayT, tagT)), // cRq MSHR slot
     Alias#(l1CmdT, L1Cmd#(indexT, cRqIdxT, pRqIdxT)),
-    Alias#(pipeOutT, PipeOut#(wayT, tagT, Msi, void, cacheOwnerT, void, RandRepInfo, Line, l1CmdT)),
+    Alias#(pipeOutT, PipeOut#(wayT, tagT, Msi, void, cacheOwnerT, PrefetchInfo, RandRepInfo, Line, l1CmdT)),
     // requirements
     Bits#(procRqIdT, _procRqIdT),
     FShow#(procRqIdT),
@@ -244,7 +244,7 @@ action
     EventsL1D events = unpack (0);
     case(op)
         Ld: begin 
-            events.evt_LD = 1;
+            //events.evt_LD = 1;
         end
         St: begin 
             //events.evt_ST = 1;
@@ -626,6 +626,16 @@ endfunction
         Line curLine = ram.line;
         Line newLine = curLine;
         LineMemDataOffset dataSel = getLineMemDataOffset(req.addr);
+        if (req.op == Ld)
+        $display ("%t prefetcher Ld crqhit wasMiss %d wasPrefetch %d addr %h", $time, wasMiss, cRqIsPrefetch[n], req.addr);
+        if (ram.info.other.wasPrefetch && !cRqIsPrefetch[n] && req.op == Ld) begin
+            //Hit on a prefetched cache line!
+            $display ("%t L1 demand hit on prefetched cache line", $time);
+            usedPrefetchCnt.incr(1);
+            EventsL1D events = unpack (0);
+            events.evt_LD = 1;
+            perf_events[4] <= events;
+        end
         case(req.op) matches
             Ld: begin
                 if (!cRqIsPrefetch[n]) begin
@@ -686,7 +696,7 @@ endfunction
                     cs: max(ram.info.cs, req.toState),
                     dir: ?,
                     owner: succ,
-                    other: ?
+                    other: PrefetchInfo {wasPrefetch: (req.op == Ld) ? (wasMiss && cRqIsPrefetch[n]) : ram.info.other.wasPrefetch}
                 },
                 line: newLine // write new data into cache
             }, True); // hit, so update rep info
@@ -758,7 +768,7 @@ endfunction
                 cs: M, // AMO always gets to M
                 dir: ?,
                 owner: succ,
-                other: ?
+                other: PrefetchInfo {wasPrefetch: False}
             },
             line: newLine // write new data into cache
         }, True); // hit, so update rep info
@@ -849,16 +859,18 @@ endfunction
                     cs: ram.info.cs,
                     dir: ?,
                     owner: Valid (n), // owner is req itself
-                    other: ?
+                    other: PrefetchInfo {wasPrefetch: False}
                 },
                 line: ram.line
             }, False);
             if (!cRqIsPrefetch[n] && procRq.op == Ld) begin
                 prefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength, procRq.boundsVirtBase);
                 llcPrefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength, procRq.boundsVirtBase);
+                /*
                 EventsL1D events = unpack(0);
                 events.evt_TLB = 1;
                 perf_events[4] <= events;
+                */
             end
         endaction
         endfunction
@@ -873,7 +885,7 @@ endfunction
                     cs: I,
                     dir: ?,
                     owner: Valid (n), // owner is req itself
-                    other: ?
+                    other: PrefetchInfo {wasPrefetch: False}
                 },
                 line: ? // data is no longer used
             }, False);
@@ -1088,7 +1100,7 @@ endfunction
                     cs: I, // downgraded to I
                     dir: ?,
                     owner: ram.info.owner, // keep owner to cRq
-                    other: ?
+                    other: PrefetchInfo {wasPrefetch: False}
                 },
                 line: ram.line
             }, False);
@@ -1119,7 +1131,7 @@ endfunction
                     cs: pRq.toState,
                     dir: ?,
                     owner: Invalid, // no successor
-                    other: ?
+                    other: PrefetchInfo {wasPrefetch: False}
                 },
                 line: ram.line
             }, False);
@@ -1172,7 +1184,7 @@ endfunction
                 cs: I, // downgraded to I
                 dir: ?,
                 owner: Invalid, // no successor
-                other: ?
+                other: PrefetchInfo {wasPrefetch: False}
             },
             line: ?
         }, False);

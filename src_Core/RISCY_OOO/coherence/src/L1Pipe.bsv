@@ -125,12 +125,12 @@ interface L1Pipe#(
     method PipeOut#(
         Bit#(TLog#(wayNum)),
         tagT, Msi, void, // no dir
-        Maybe#(cRqIdxT), void, RandRepInfo, // no other
+        Maybe#(cRqIdxT), PrefetchInfo, RandRepInfo, // no other
         Line, L1Cmd#(indexT, cRqIdxT, pRqIdxT)
     ) first;
     method Action deqWrite(
         Maybe#(cRqIdxT) swapRq,
-        RamData#(tagT, Msi, void, Maybe#(cRqIdxT), void, Line) wrRam, // always write BRAM
+        RamData#(tagT, Msi, void, Maybe#(cRqIdxT), PrefetchInfo, Line) wrRam, // always write BRAM
         Bool updateRep
     );
 endinterface
@@ -161,7 +161,7 @@ module mkL1Pipe(
     Alias#(wayT, Bit#(TLog#(wayNum))),
     Alias#(dirT, void), // no directory
     Alias#(ownerT, Maybe#(cRqIdxT)),
-    Alias#(otherT, void), // no other cache info
+    Alias#(otherT, PrefetchInfo), // no other cache info
     Alias#(repT, RandRepInfo), // use random replace
     Alias#(pipeInT, L1PipeIn#(wayT, indexT, cRqIdxT, pRqIdxT)),
     Alias#(pipeCmdT, L1PipeCmd#(wayT, indexT, cRqIdxT, pRqIdxT)),
@@ -201,7 +201,7 @@ module mkL1Pipe(
                 cs: I,
                 dir: ?,
                 owner: Invalid,
-                other: ?
+                other: PrefetchInfo {wasPrefetch: False}
             });
         end
         repRam.wrReq(initIndex, randRepInitInfo); // useless for random replace

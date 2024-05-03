@@ -126,7 +126,7 @@ module mkIBank#(
     Alias#(pRqIdxT, Bit#(TLog#(pRqNum))),
     Alias#(cacheOwnerT, Maybe#(cRqIdxT)), // owner cannot be pRq
     Alias#(cacheInfoT, CacheInfo#(tagT, Msi, void, cacheOwnerT, void)),
-    Alias#(ramDataT, RamData#(tagT, Msi, void, cacheOwnerT, void, Line)),
+    Alias#(ramDataT, RamData#(tagT, Msi, void, cacheOwnerT, PrefetchInfo, Line)),
     Alias#(procRqT, ProcRqToI),
     Alias#(cRqToPT, CRqMsg#(wayT, void)),
     Alias#(cRsToPT, CRsMsg#(void)),
@@ -135,7 +135,7 @@ module mkIBank#(
     Alias#(pRqRsFromPT, PRqRsMsg#(wayT, void)),
     Alias#(cRqSlotT, ICRqSlot#(wayT, tagT)), // cRq MSHR slot
     Alias#(l1CmdT, L1Cmd#(indexT, cRqIdxT, pRqIdxT)),
-    Alias#(pipeOutT, PipeOut#(wayT, tagT, Msi, void, cacheOwnerT, void, RandRepInfo, Line, l1CmdT)),
+    Alias#(pipeOutT, PipeOut#(wayT, tagT, Msi, void, cacheOwnerT, PrefetchInfo, RandRepInfo, Line, l1CmdT)),
     Mul#(2, supSz, supSzX2),
     Alias#(resultT, Vector#(supSzX2, Maybe#(Instruction16))),
     // requirements
