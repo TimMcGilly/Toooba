@@ -166,8 +166,8 @@ module mkLLBank#(
     Alias#(tagT, Bit#(tagSz)),
     Alias#(cRqIndexT, Bit#(TLog#(cRqNum))),
     Alias#(cacheOwnerT, Maybe#(CRqOwner#(cRqIndexT))),
-    Alias#(cacheInfoT, CacheInfo#(tagT, Msi, dirT, cacheOwnerT, void)),
-    Alias#(ramDataT, RamData#(tagT, Msi, dirT, cacheOwnerT, void, Line)),
+    Alias#(cacheInfoT, CacheInfo#(tagT, Msi, dirT, cacheOwnerT, PrefetchInfo)),
+    Alias#(ramDataT, RamData#(tagT, Msi, dirT, cacheOwnerT, PrefetchInfo, Line)),
     Alias#(cRqFromCT, CRqMsg#(cRqIdT, childT)),
     Alias#(cRsFromCT, CRsMsg#(childT)),
     Alias#(pRqRsToCT, PRqRsMsg#(cRqIdT, childT)),
@@ -180,7 +180,7 @@ module mkLLBank#(
     Alias#(cRqT, LLRq#(cRqIdT, dmaRqIdT, childT)),
     Alias#(cRqSlotT, LLCRqSlot#(wayT, tagT, Vector#(childNum, DirPend))), // cRq MSHR slot
     Alias#(llCmdT, LLCmd#(childT, cRqIndexT)),
-    Alias#(pipeOutT, PipeOut#(wayT, tagT, Msi, dirT, cacheOwnerT, void, RandRepInfo, Line, llCmdT)),
+    Alias#(pipeOutT, PipeOut#(wayT, tagT, Msi, dirT, cacheOwnerT, PrefetchInfo, RandRepInfo, Line, llCmdT)),
     // requirements
     Bits#(cRqIdT, _cRqIdSz),
     Bits#(dmaRqIdT, _dmaRqIdSz),
@@ -192,7 +192,7 @@ module mkLLBank#(
     Add#(TLog#(TDiv#(childNum,2)), c__, TLog#(childNum))
 );
 
-   Bool verbose = False;
+    Bool verbose = True;
 
     LLCRqMshr#(cRqNum, wayT, tagT, Vector#(childNum, DirPend), cRqT) cRqMshr <- mkLLMshr;
 
@@ -260,7 +260,7 @@ module mkLLBank#(
     Count#(Data) dmaStReqCnt <- mkCount(0);
 `endif
 `ifdef PERFORMANCE_MONITORING
-    Array #(Reg #(EventsLL)) perf_events <- mkDRegOR (3, unpack (0));
+    Array #(Reg #(EventsLL)) perf_events <- mkDRegOR (4, unpack (0));
 `endif
 function Action incrMissCnt(cRqT cRq, cRqIndexT idx, Bool isDma, Bool isInstructionAccess);
 action
@@ -986,7 +986,7 @@ endfunction
     cRqT pipeOutCRq = cRqMshr.pipelineResp.getRq(pipeOutCRqIdx);
 
     // function to process cRq hit (MSHR slot may have garbage)
-    function Action cRqFromCHit(cRqIndexT n, cRqT cRq, Bool isMRs);
+    function Action cRqFromCHit(cRqIndexT n, cRqT cRq, Bool isMRs, Bool wasMiss);
     action
        if (verbose)
         $display("%t LL %m pipelineResp: cRq from child Hit func: ", $time,
@@ -1001,6 +1001,14 @@ endfunction
             // tag has been written into cache before sending req to parent
             ("cRqHit but tag or cs incorrect")
         );
+        if (ram.info.other.wasPrefetch && !cRqIsPrefetch[n]) begin
+            if (verbose) $display("%t LL demand hit on prefetched cache line %h", $time, cRq.addr);
+        `ifdef PERFORMANCE_MONITORING
+            EventsLL evt = unpack(0);
+            evt.evt_ST = 1;
+            perf_events[3] <= evt;
+        `endif
+        end
         // decide upgrade state
         Msi toState = cRq.toState;
         // XXX Add auto update to S from T here
@@ -1041,7 +1049,7 @@ endfunction
                     });
                     default: return Invalid;
                 endcase),
-                other: ?
+                other: PrefetchInfo {wasPrefetch: (wasMiss && cRqIsPrefetch[n])}
             },
             line: ram.line // use line in ram
         }, True); // hit, so update rep info
@@ -1097,7 +1105,7 @@ endfunction
                     });
                     default: return Invalid;
                 endcase),
-                other: ?
+                other: ram.info.other
             },
             line: newLine // use new line
         }, True); // hit, so update rep info
@@ -1159,7 +1167,7 @@ endfunction
                     mshrIdx: n, // owner is current cRq
                     replacing: False // replacement is done right now
                 }),
-                other: ?
+                other: PrefetchInfo {wasPrefetch: False}
             },
             line: ? // data is no longer used
         }, False);
@@ -1246,7 +1254,7 @@ endfunction
                     cs: ram.info.cs,
                     dir: ram.info.dir,
                     owner: Valid (CRqOwner {mshrIdx: n, replacing: False}), // owner is req itself
-                    other: ?
+                    other: PrefetchInfo {wasPrefetch: False}
                 },
                 line: ram.line
             }, False);
@@ -1288,7 +1296,7 @@ endfunction
                     cs: ram.info.cs,
                     dir: ram.info.dir,
                     owner: Valid (CRqOwner {mshrIdx: n, replacing: False}), // owner is req itself
-                    other: ?
+                    other: ram.info.other
                 },
                 line: ram.line
             }, False);
@@ -1317,7 +1325,7 @@ endfunction
                             mshrIdx: n,
                             replacing: True // replacement is ongoing
                         }),
-                        other: ?
+                        other: ram.info.other
                     },
                     line: ram.line // keep data the same
                 }, False);
@@ -1401,7 +1409,7 @@ endfunction
                     if(dirPend == replicate(Invalid) && (cRq.toState == T || ram.info.cs >= S)) begin
                        if (verbose)
                         $display("%t LL %m pipelineResp: cRq from child: own by itself, hit", $time);
-                        cRqFromCHit(n, cRq, False);
+                        cRqFromCHit(n, cRq, False, False);
                     end
                     else begin
                        if (verbose)
@@ -1454,7 +1462,7 @@ endfunction
                         if(ram.info.cs > I && dirPend == replicate(Invalid) && (cRq.toState == T || ram.info.cs >= S)) begin
                            if (verbose)
                             $display("%t LL %m pipelineResp: cRq: no owner, hit", $time);
-                            cRqFromCHit(n, cRq, False);
+                            cRqFromCHit(n, cRq, False, False);
                         end
                         else begin
                            if (verbose)
@@ -1537,7 +1545,7 @@ endfunction
             "cRq that needs mRs should not have children to wait for"
         );
         // cRq hits since all children are I
-        cRqFromCHit(cOwner.mshrIdx, cRq, True);
+        cRqFromCHit(cOwner.mshrIdx, cRq, True, True);
     endrule
 
     // handle cRs
@@ -1625,7 +1633,7 @@ endfunction
                 // check hit or miss
                 if(newDirPend == replicate(Invalid)) begin
                     if(cRq.id matches tagged Child ._i) begin
-                        cRqFromCHit(cOwner.mshrIdx, cRq, False);
+                        cRqFromCHit(cOwner.mshrIdx, cRq, False, False);
                     end
                     else begin
                         cRqFromDmaHit(cOwner.mshrIdx, cRq);
