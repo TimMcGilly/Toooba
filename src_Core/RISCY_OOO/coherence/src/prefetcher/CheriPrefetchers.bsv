@@ -130,7 +130,9 @@ typedef struct {
 module mkCheriStridePrefetcher#(DTlbToPrefetcher toTlb, Parameter#(strideTableSize) _, Parameter#(cLinesAheadToPrefetch) __)(CheriPCPrefetcher)
 provisos(
     Alias#(strideTableIndexT, Bit#(TLog#(strideTableSize))),
-    Add#(a__, TLog#(strideTableSize), 16)
+    Add#(a__, TLog#(strideTableSize), 16),
+    Add#(1, c__, TDiv#(16, TLog#(strideTableSize))),
+    Add#(b__, 16, TMul#(TDiv#(16, TLog#(strideTableSize)), TLog#(strideTableSize)))
     );
     RWBramCore#(strideTableIndexT, StrideEntry) strideTable <- mkRWBramCoreForwarded;
     FIFOF#(Tuple5#(Addr, Bit#(16), HitOrMiss, Addr, Addr)) memAccesses <- mkSizedBypassFIFOF(16);
@@ -146,7 +148,7 @@ provisos(
     rule sendReadReq if (!holdReadReq);
         match {.addr, .boundsHash, .hitMiss, .bot, .top} = memAccesses.first;
         if (`VERBOSE) $display("%t Sending read req for %h!", $time, boundsHash);
-        strideTable.rdReq(truncate(boundsHash));
+        strideTable.rdReq(hash(boundsHash));
         rdRespEntry <= memAccesses.first;
         memAccesses.deq;
     endrule
@@ -160,7 +162,7 @@ provisos(
         //    also put last_prefetched
         //if stride wrong, move to transit
         match {.addr, .boundsHash, .hitMiss, .bot, .top} = rdRespEntry;
-        strideTableIndexT index = truncate(boundsHash);
+        strideTableIndexT index = hash(boundsHash);
         StrideEntry se = strideTable.rdResp;
         strideTable.deqRdResp;
         StrideEntry seNext = se;
@@ -253,12 +255,13 @@ provisos(
         if (se.state == STEADY && 
             cLinesPrefetched != 
             fromInteger(valueof(cLinesAheadToPrefetch)) &&
-            //reqAddr[63:12] == addr[63:12] && //Check if same page
+            reqAddr[63:12] == addr[63:12] && //Check if same page
             True /*isInCapBounds*/
         ) begin
             //can prefetch
 
-            vaddrToTlb.enq(reqAddr);
+            //vaddrToTlb.enq(reqAddr);
+            addrToPrefetch.enq(reqAddr);
             EventsPrefetcher evt = unpack(0);
             //evt.evt_0 = (bot+top >= 4096) ? 1 : 0;
             evt.evt_2 = 1;
@@ -270,24 +273,26 @@ provisos(
             // so hold off any potential read requests until we do a writeback
             holdReadReq.send();
             cLinesPrefetchedLatest <= Valid(cLinesPrefetched + 1);
-            if (`VERBOSE) $display("%t Stride Prefetcher getNextPrefetchAddr DTLB request vaddr %h for entry %h", $time, reqAddr, boundsHash[7:0]);
+            if (`VERBOSE) $display("%t Stride Prefetcher DTLB request vaddr %h for entry %h", $time, reqAddr, strideTableIndexT'(hash(boundsHash)));
         end
         else begin
             //cant prefetch
-            if (`VERBOSE) $display("%t Stride Prefetcher no possible prefetch for entry %h", $time, strideTableIndexT'(truncate(boundsHash)));
+            if (`VERBOSE) $display("%t Stride Prefetcher no possible prefetch for entry %h", $time, strideTableIndexT'(hash(boundsHash)));
             strideEntryForPrefetch.deq;
             se.cLinesPrefetched = cLinesPrefetched;
             cLinesPrefetchedLatest <= Invalid;
-            strideTable.wrReq(truncate(boundsHash), se);
+            strideTable.wrReq(hash(boundsHash), se);
         end
     endrule
 
-    rule doTlbLookup;
+    /*
+    rule doTlbLookup if (True);
         let vaddr = vaddrToTlb.first;
         vaddrToTlb.deq;
         CapPipe start = almightyCap;
         let cp = setAddr(start, vaddr);
         toTlb.prefetcherReq(cp.value);
+        sendTlbReq <= sendTlbReq + 1;
     endrule
 
     rule getTlbResp;
@@ -301,17 +306,17 @@ provisos(
             addrToPrefetch.enq(resp.paddr);
         end
     endrule
+    */
 
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
-        Bit#(16) lenHash = hash(boundsLength);
-        Bit#(16) boundsHash = hash(pcHash);
+        Bit#(16) finalHash = 0;
+        //finalHash = finalHash ^ hash(boundsVirtBase);
+        //finalHash = finalHash ^ hash(boundsLength);
+        finalHash = finalHash ^ hash(pcHash);
         Addr topCapGap = (boundsLength == 0) ? -1 : boundsLength-boundsOffset-1;
         Addr vaddr = boundsVirtBase+boundsOffset;
-        //Bit#(8) boundsHash = hash(boundsVirtBase ^ boundsLength) ^ pcHash[7:0] ^ pcHash[15:8];
-        //if (boundsHash == 0)
-            //hashIsSmall.send();
-        if (`VERBOSE) $display("%t Prefetcher reportAccess %h %h, hash: %h", $time, boundsLength, boundsVirtBase, boundsHash);
-        memAccesses.enq(tuple5 (vaddr, boundsHash, hitMiss, boundsOffset, topCapGap));
+        if (`VERBOSE) $display("%t Prefetcher reportAccess %h %h %h, hash: %h", $time, addr, boundsLength, boundsVirtBase, finalHash);
+        memAccesses.enq(tuple5 (addr, finalHash, hitMiss, boundsOffset, topCapGap));
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
