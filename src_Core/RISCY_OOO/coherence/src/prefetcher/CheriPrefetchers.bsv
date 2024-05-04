@@ -1113,7 +1113,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
                 pt.wrReq(truncate(pit), pte);
                 if (`VERBOSE) $display("%t Prefetcher processPtReadForLookup %h downgrading to ", $time, pit, fshow(pte.state));
             end
-            if (offset == 0) begin
+            if (offset <= 64) begin
                 EventsPrefetcher evt = unpack(0);
                 evt.evt_2 = 1;
                 perf_events[2] <= evt;
