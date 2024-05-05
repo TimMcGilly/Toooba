@@ -427,7 +427,7 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
 `ifdef PERFORMANCE_MONITORING
             EventsCore events = unpack(0);
             events.evt_LOAD_WAIT = saturating_truncate(lat);
-            events.evt_MEM_CAP_LOAD_TAG_SET = (d.tag) ? 1 : 0;
+            //events.evt_MEM_CAP_LOAD_TAG_SET = (d.tag) ? 1 : 0;
             events_reg[1] <= events;
 `endif
         endmethod
