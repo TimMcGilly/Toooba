@@ -264,7 +264,8 @@ provisos(
             //vaddrToTlb.enq(reqAddr);
             addrToPrefetch.enq(reqAddr);
             EventsPrefetcher evt = unpack(0);
-            //evt.evt_0 = (bot+top >= 4096) ? 1 : 0;
+            evt.evt_0 = (bot+top >= 4096) ? 1 : 0;
+            evt.evt_1 = (bot+top >= 131072) ? 1 : 0;
             evt.evt_2 = 1;
             if (isInCapBounds) begin
                 evt.evt_3 = 1;
@@ -314,7 +315,7 @@ provisos(
         finalHash = finalHash ^ hash(boundsVirtBase);
         finalHash = finalHash ^ hash(boundsLength);
         //finalHash = finalHash ^ hash(capPerms);
-        finalHash = finalHash ^ hash(pcHash);
+        //finalHash = finalHash ^ hash(pcHash);
         Addr topCapGap = (boundsLength == 0) ? -1 : boundsLength-boundsOffset-1;
         Addr vaddr = boundsVirtBase+boundsOffset;
         if (trainOnLineAddr) addr = {addr[63:6], 6'b0}; //zero LSBs if training on lineAddresses
