@@ -257,7 +257,7 @@ provisos(
             cLinesPrefetched != 
             fromInteger(valueof(cLinesAheadToPrefetch)) &&
             reqAddr[63:12] == addr[63:12] && //Check if same page
-            True /*isInCapBounds*/
+            isInCapBounds
         ) begin
             //can prefetch
 
@@ -312,10 +312,10 @@ provisos(
 
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
         Bit#(16) finalHash = 0;
-        finalHash = finalHash ^ hash(boundsVirtBase);
-        finalHash = finalHash ^ hash(boundsLength);
+        //finalHash = finalHash ^ hash(boundsVirtBase);
+        //finalHash = finalHash ^ hash(boundsLength);
         //finalHash = finalHash ^ hash(capPerms);
-        //finalHash = finalHash ^ hash(pcHash);
+        finalHash = finalHash ^ hash(pcHash);
         Addr topCapGap = (boundsLength == 0) ? -1 : boundsLength-boundsOffset-1;
         Addr vaddr = boundsVirtBase+boundsOffset;
         if (trainOnLineAddr) addr = {addr[63:6], 6'b0}; //zero LSBs if training on lineAddresses
