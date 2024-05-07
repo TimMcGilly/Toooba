@@ -138,11 +138,11 @@ endmodule
 module mkCheriPCPrefetcherAdapter#(module#(PCPrefetcher) mkPrefetcher)(CheriPCPrefetcher);
     let p <- mkPrefetcher;
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
         p.reportAccess(addr, hash(pcHash), hitMiss);
     endmethod
-    method Action reportCacheDataArrival(CLine lineWithTags, Addr accessAddr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
-        Addr boundsVirtBase);
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr accessAddr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
     endmethod
     method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr;
         let addr <- p.getNextPrefetchAddr;
@@ -359,7 +359,7 @@ module mkL1DPrefetcher#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         let m <- mkAllInCapPrefetcher(maxCapSizeToPrefetch);
     `elsif DATA_PREFETCHER_CHERI_STRIDE
         Parameter#(512) strideTableSize <- mkParameter;
-        Parameter#(1) cLinesAheadToPrefetch <- mkParameter;
+        Parameter#(2) cLinesAheadToPrefetch <- mkParameter;
         let m <- mkCheriStridePrefetcher(toTlb, strideTableSize, cLinesAheadToPrefetch);
         //let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));
         //let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkAlwaysRequestTlbPrefetcher(toTlb)));

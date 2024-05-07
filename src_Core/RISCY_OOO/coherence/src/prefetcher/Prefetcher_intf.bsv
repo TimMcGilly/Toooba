@@ -59,9 +59,9 @@ endinterface
 
 interface CheriPCPrefetcher;
     (* always_ready *)
-    method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
+    method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, 
-        Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
+        Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
     method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr();
 `ifdef PERFORMANCE_MONITORING
     method EventsPrefetcher events();

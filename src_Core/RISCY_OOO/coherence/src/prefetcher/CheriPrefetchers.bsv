@@ -57,7 +57,7 @@ module mkAllInCapPrefetcher#(Parameter#(maxCapSizeToPrefetch) _)(CheriPCPrefetch
         prefetchNext <= prefetchNext + 1;
     endrule
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
         if (hitMiss == MISS && boundsLength != 0) begin
             EventsPrefetcher evt = unpack(0);
             evt.evt_0 = 1;
@@ -94,8 +94,8 @@ module mkAllInCapPrefetcher#(Parameter#(maxCapSizeToPrefetch) _)(CheriPCPrefetch
             if (`VERBOSE) $display("%t Prefetcher report HIT %h", $time, addr);
     endmethod
 
-    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
-        Addr boundsVirtBase);
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
     endmethod
 
     method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr
@@ -257,7 +257,7 @@ provisos(
             cLinesPrefetched != 
             fromInteger(valueof(cLinesAheadToPrefetch)) &&
             reqAddr[63:12] == addr[63:12] && //Check if same page
-            isInCapBounds
+            True /*isInCapBounds*/
         ) begin
             //can prefetch
 
@@ -310,29 +310,32 @@ provisos(
     endrule
     */
 
-    method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
+    method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
         Bit#(16) finalHash = 0;
-        //finalHash = finalHash ^ hash(boundsVirtBase);
-        //finalHash = finalHash ^ hash(boundsLength);
-        //finalHash = finalHash ^ hash(capPerms);
-        finalHash = finalHash ^ hash(pcHash);
+        finalHash = finalHash ^ hash(boundsVirtBase);
+        finalHash = finalHash ^ hash(boundsLength);
+        finalHash = finalHash ^ hash(capPerms);
+        //finalHash = finalHash ^ hash(pcHash);
         Addr topCapGap = (boundsLength == 0) ? -1 : boundsLength-boundsOffset-1;
         Addr vaddr = boundsVirtBase+boundsOffset;
+        if (`VERBOSE) $display("%t Prefetcher reportAccess %h %h %h perms: %h, hash: %h", $time, addr, boundsLength, boundsVirtBase, capPerms, finalHash);
         if (trainOnLineAddr) addr = {addr[63:6], 6'b0}; //zero LSBs if training on lineAddresses
         memAccesses.enq(tuple5 (addr, finalHash, hitMiss, boundsOffset, topCapGap));
     endmethod
 
-    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
-        Addr boundsVirtBase);
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
     endmethod
 
     method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr;
         EventsPrefetcher evt = unpack(0);
         evt.evt_4 = 1;
         perf_events[2] <= evt;
-        if (`VERBOSE) $display("%t Stride Prefetcher getNextPrefetchAddr paddr %h", $time, addrToPrefetch.first);
         addrToPrefetch.deq;
-        return tuple2(addrToPrefetch.first, almightyCap);
+        let addr = addrToPrefetch.first;
+        if (`VERBOSE) $display("%t Stride Prefetcher getNextPrefetchAddr paddr %h", $time, addr);
+        return tuple2(addr, almightyCap);
     endmethod
 
 `ifdef PERFORMANCE_MONITORING
@@ -558,7 +561,7 @@ module mkCapBitmapPrefetcherOld#(Parameter#(maxCapSizeToTrack) _, Parameter#(bit
     endrule
 
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
         if (boundsLength > 64 && boundsLength <= fromInteger(valueOf(maxCapSizeToTrack))) begin
             $display("%t prefetcher:reportAccess %h with bounds length %d base %h offset %d", $time, addr, boundsLength, boundsVirtBase, boundsOffset);
             //Not all objects are aligned in the same way, so we separate the training bitmaps for objects that are aligned differently
@@ -579,8 +582,8 @@ module mkCapBitmapPrefetcherOld#(Parameter#(maxCapSizeToTrack) _, Parameter#(bit
         end
     endmethod
 
-    method Action reportCacheDataArrival(CLine lineWithTags, Addr accessAddr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
-        Addr boundsVirtBase);
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
     endmethod
 
     method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr;
@@ -837,7 +840,7 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
     endrule
 
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
         if (boundsLength > 64 && boundsLength <= fromInteger(valueOf(maxCapSizeToTrack))) begin
             //$display("%t prefetcher:reportAccess %h with bounds length %d base %h offset %d", $time, addr, boundsLength, boundsVirtBase, boundsOffset);
             //Not all objects are aligned in the same way, so we separate the training bitmaps for objects that are aligned differently
@@ -877,8 +880,8 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
         pfQueue.deq;
         return tuple2({pfQueue.first, '0}, almightyCap);
     endmethod
-    method Action reportCacheDataArrival(CLine lineWithTags, Addr accessAddr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
-        Addr boundsVirtBase);
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
     endmethod
     
 
@@ -1047,9 +1050,11 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
             pte.state = upgrade(pte.state);
             pte.lastUsedOffset = boundsOffset;
             if (`VERBOSE) $display("%t Prefetcher processPtReadUpgrade pit %h set lastUsedOffset to %d, upgrading to ", $time, pit, boundsOffset, fshow(pte.state));
+            /*
             EventsPrefetcher evt = unpack(0);
             evt.evt_1 = 1;
             perf_events[1] <= evt;
+            */
         end
         else begin
             pte.state = USED1;
@@ -1116,11 +1121,12 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
                 pt.wrReq(truncate(pit), pte);
                 if (`VERBOSE) $display("%t Prefetcher processPtReadForLookup %h downgrading to ", $time, pit, fshow(pte.state));
             end
+            EventsPrefetcher evt = unpack(0);
+            evt.evt_1 = 1;
             if (offset <= 64) begin
-                EventsPrefetcher evt = unpack(0);
                 evt.evt_2 = 1;
-                perf_events[2] <= evt;
             end
+            perf_events[2] <= evt;
         end
     endrule
         
@@ -1144,68 +1150,68 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
     
 
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
         //Lookup addr in training table, if get a hit, update ptrTable
         if (boundsLength <= 32768) begin
-        Addr vaddr = boundsVirtBase + boundsOffset;
-        trainingTableIdxTagT tit = getTrainingIdxTag(vaddr, boundsVirtBase, boundsLength);
-        Bit#(24) usedOffset = truncate(boundsOffset);
-        if (`VERBOSE) $display("%t Prefetcher reportAccess %h offset %h boundslen %d lineoffset %d tit %h", $time, addr, boundsOffset, boundsLength, usedOffset, tit, fshow(hitMiss));
-        dataForTtRead.enq(tuple2(tit, usedOffset));
-        tt.rdReq(truncate(tit));
+            Addr vaddr = boundsVirtBase + boundsOffset;
+            trainingTableIdxTagT tit = getTrainingIdxTag(vaddr, boundsVirtBase, boundsLength);
+            Bit#(24) usedOffset = truncate(boundsOffset);
+            if (`VERBOSE) $display("%t Prefetcher reportAccess %h offset %h boundslen %d lineoffset %d tit %h", $time, addr, boundsOffset, boundsLength, usedOffset, tit, fshow(hitMiss));
+            dataForTtRead.enq(tuple2(tit, usedOffset));
+            tt.rdReq(truncate(tit));
         end
     endmethod
 
-    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, Bool wasMiss, 
-        Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
         if (boundsLength <= 32768) begin
-        $display ("%t Prefetcher reportCacheDataArrival wasMiss %d", $time, wasMiss, fshow(lineWithTags));
+            $display ("%t Prefetcher reportCacheDataArrival wasMiss %d wasPrefetch %d ", $time, wasMiss, wasPrefetch, fshow(lineWithTags));
 
-        //Add accessed cap to training table in case we dereference it later.
-        if (addr[3:0] == 0) begin
-            //addr targeted a multiple of 16 bytes -- so potentially a capability
-            let offset = getLineMemDataOffset(addr);
-            MemTaggedData d = getTaggedDataAt(lineWithTags, offset);
-            CapPipe cap = fromMem(unpack(pack(d)));
+            //Add accessed cap to training table in case we dereference it later.
+            if (addr[3:0] == 0) begin
+                //addr targeted a multiple of 16 bytes -- so potentially a capability
+                let offset = getLineMemDataOffset(addr);
+                MemTaggedData d = getTaggedDataAt(lineWithTags, offset);
+                CapPipe cap = fromMem(unpack(pack(d)));
                 if (d.tag && boundsVirtBase != getBase(cap)) begin
-                //install ptr addr of cap in training table
-                ptrTableIdxTagT pit = getIdxTag(boundsLength, boundsOffset);
-                trainingTableIdxTagT tit = getTrainingIdxTag(getAddr(cap), saturating_truncate(getBase(cap)), saturating_truncate(getLength(cap)));
-                trainingTableTagT tTag = truncateLSB(tit);
-                trainingTableIdxT tIdx = truncate(tit);
-                trainingTableEntryT te;
-                if (`VERBOSE) $display("%t Prefetcher reportDataArrival adding training table entry! access addr %h boundslen %d prefetch %b ptraddress %h tit %h pit %h", 
-                    $time, addr, boundsLength, wasPrefetch, getAddr(cap), tit, pit);
-                te.tag = tTag;
-                te.ptrTableIdxTag = pit;
-                installTtEntry.enq(tuple2(tIdx, te));
-                tt.wrReq(tIdx, te);
+                    //install ptr addr of cap in training table
+                    ptrTableIdxTagT pit = getIdxTag(boundsLength, boundsOffset);
+                    trainingTableIdxTagT tit = getTrainingIdxTag(getAddr(cap), saturating_truncate(getBase(cap)), saturating_truncate(getLength(cap)));
+                    trainingTableTagT tTag = truncateLSB(tit);
+                    trainingTableIdxT tIdx = truncate(tit);
+                    trainingTableEntryT te;
+                    if (`VERBOSE) $display("%t Prefetcher reportDataArrival adding training table entry! access addr %h boundslen %d prefetch %b ptraddress %h tit %h pit %h", 
+                        $time, addr, boundsLength, wasPrefetch, getAddr(cap), tit, pit);
+                    te.tag = tTag;
+                    te.ptrTableIdxTag = pit;
+                    installTtEntry.enq(tuple2(tIdx, te));
+                    tt.wrReq(tIdx, te);
 
-                EventsPrefetcher evt = unpack(0);
-                evt.evt_4 = 1;
-                perf_events[4] <= evt;
+                    EventsPrefetcher evt = unpack(0);
+                    evt.evt_4 = 1;
+                    perf_events[4] <= evt;
+                end
             end
-        end
 
             //Previous condition was wasMiss && !wasPrefetch
             if (wasMiss) begin
-            //TODO prevent runaway prefetching
-        //Queue caps here for lookup in ptr table
-            //Only do so on a cache miss to prevent too many prefetches
-            Vector#(4, potentialPrefetchT) v;
-            Bool foundOneCap = False;
-        for (Integer i = 0; i < 4; i = i + 1) begin
-            MemTaggedData d = getTaggedDataAt(lineWithTags, fromInteger(i));
-            CapPipe cap = fromMem(unpack(pack(d)));
-            Addr clineStartOffset = (boundsOffset-extend(addr[5:0]));
-            ptrTableIdxTagT pit = getIdxTag(boundsLength, clineStartOffset+fromInteger(i)*16);
-                v[i] = tuple3(pit, cap, d.tag);
-                foundOneCap = foundOneCap || d.tag;
-            end
-            if (foundOneCap) begin
-            if (`VERBOSE) $display("%t Prefetcher reportDataArrival addr %h prefetech %b adding %d caps for prefetch lookups ", 
-                    $time, addr, wasPrefetch, countElem(True, map(tpl_3, v)), fshow(v));
-                ptLookupQueue.enq(v);
+                //TODO prevent runaway prefetching
+                //Queue caps here for lookup in ptr table
+                //Only do so on a cache miss to prevent too many prefetches
+                Vector#(4, potentialPrefetchT) v;
+                Bool foundOneCap = False;
+                for (Integer i = 0; i < 4; i = i + 1) begin
+                    MemTaggedData d = getTaggedDataAt(lineWithTags, fromInteger(i));
+                    CapPipe cap = fromMem(unpack(pack(d)));
+                    Addr clineStartOffset = (boundsOffset-extend(addr[5:0]));
+                    ptrTableIdxTagT pit = getIdxTag(boundsLength, clineStartOffset+fromInteger(i)*16);
+                    v[i] = tuple3(pit, cap, d.tag);
+                    foundOneCap = foundOneCap || d.tag;
+                end
+                if (foundOneCap) begin
+                    if (`VERBOSE) $display("%t Prefetcher reportDataArrival addr %h prefetech %b adding %d caps for prefetch lookups ", 
+                        $time, addr, wasPrefetch, countElem(True, map(tpl_3, v)), fshow(v));
+                    ptLookupQueue.enq(v);
                     lastLookupLineAddr <= getLineAddr(addr);
                 end
             end
@@ -1229,12 +1235,12 @@ endmodule
 module mkCapPtrTestPrefetcher(CheriPCPrefetcher) provisos ();
     Fifo#(4, Addr) prefetchRq <- mkOverflowPipelineFifo;
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
         if (`VERBOSE) $display("%t Prefetcher reportAccess %h boundslen %d", $time, addr, boundsLength, fshow(hitMiss));
     endmethod
 
-    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, 
-        Addr boundsVirtBase);
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
         MemTaggedData d = getTaggedDataAt(lineWithTags, 0);
         CapPipe cap = fromMem(unpack(pack(d)));
         if (d.tag) begin
@@ -1325,11 +1331,11 @@ module mkPCCapMeasurer(CheriPCPrefetcher) provisos (
             else if (mteVec[1].lruMostRecent) replaceIdx = 0;
             mtEntryT mte = mteVec[replaceIdx];
             evt.evt_0 = 1;
-            $display ("%t Prefetcher installing new MT entry replaceIdx %d", $time, replaceIdx);
+            $display ("%t Prefetcher installing new MT entry idx %h replaceIdx %d ", $time, idx, replaceIdx, fshow(mteVec));
             if (mte.numLoads > 4 && mte.diffBaseCounted) begin
                 evt.evt_3 = 1;
             end
-            else if (mte.numLoads > 4) begin
+            if (mte.numLoads > 4) begin
                 evt.evt_4 = 1;
             end
             mte.tag = tag;
@@ -1338,6 +1344,8 @@ module mkPCCapMeasurer(CheriPCPrefetcher) provisos (
             mte.diffLenCounted = False;
             mte.diffBaseCounted = False;
             mte.numLoads = 0;
+            mte.lruMostRecent = True;
+            mteVec[(replaceIdx == 0) ? 1 : 0].lruMostRecent = False;
             mteVec[replaceIdx] = mte;
         end
         perf_events[1] <= evt;
@@ -1345,19 +1353,20 @@ module mkPCCapMeasurer(CheriPCPrefetcher) provisos (
     endrule
 
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
-        mtIdxT idx = truncate(pcHash);
-        mtTagT tag = truncateLSB(pcHash);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
+        PCHash rotated = rotateBitsBy(pcHash, 31);
+        mtIdxT idx = truncate(rotated);
+        mtTagT tag = truncateLSB(rotated);
         Bit#(16) lengthHash = hash(boundsLength);
         Bit#(16) baseHash = hash(boundsVirtBase);
         mt.rdReq(idx);
         mtRdFifo.enq(tuple4(idx, tag, lengthHash, baseHash));
 
-        if (`VERBOSE) $display("%t Prefetcher reportAccess %h pcHash %h boundslen %d boundsBase %h", $time, addr, pcHash, boundsLength, boundsVirtBase, fshow(hitMiss));
+        if (`VERBOSE) $display("%t Prefetcher reportAccess %h pcHash %h rotatedpc %h boundslen %d boundsBase %h", $time, addr, pcHash, rotated, boundsLength, boundsVirtBase, fshow(hitMiss));
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
 
     endmethod
 
@@ -1432,7 +1441,7 @@ module mkCapPCMeasurer(CheriPCPrefetcher) provisos (
     endrule
 
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
         Bit#(32) lenHash = hash(boundsLength);
         mtIdxT idx = truncate(lenHash);
         mtTagT tag = truncateLSB(lenHash);
@@ -1444,7 +1453,7 @@ module mkCapPCMeasurer(CheriPCPrefetcher) provisos (
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
 
     endmethod
 

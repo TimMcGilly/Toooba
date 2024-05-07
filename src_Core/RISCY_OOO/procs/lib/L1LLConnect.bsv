@@ -49,8 +49,8 @@ module mkL1LLConnect#(
                 isPrefetchRq: r.isPrefetchRq,
                 boundsOffset: r.boundsOffset,
                 boundsLength: r.boundsLength,
-                boundsVirtBase: r.boundsVirtBase
-
+                boundsVirtBase: r.boundsVirtBase,
+                capPerms: r.capPerms
             }
         };
     endfunction

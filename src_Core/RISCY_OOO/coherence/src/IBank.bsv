@@ -146,7 +146,7 @@ module mkIBank#(
     Add#(TAdd#(tagSz, indexSz), TAdd#(lgBankNum, LgLineSzBytes), AddrSz)
 );
 
-    Bool verbose = True;
+    Bool verbose = False;
 
     ICRqMshr#(cRqNum, wayT, tagT, procRqT, resultT) cRqMshr <- mkICRqMshrLocal;
 
@@ -435,7 +435,8 @@ module mkIBank#(
             isPrefetchRq: True,
             boundsOffset: 0,
             boundsLength: 0,
-            boundsVirtBase: 0
+            boundsVirtBase: 0,
+            capPerms: 0
         };
         rqToPQ.enq(cRqToP);
         if (verbose)
@@ -459,7 +460,8 @@ module mkIBank#(
             isPrefetchRq: False,
             boundsOffset: 0,
             boundsLength: 0,
-            boundsVirtBase: 0
+            boundsVirtBase: 0,
+            capPerms: 0
         };
         rqToPQ.enq(cRqToP);
        if (verbose)

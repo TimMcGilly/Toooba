@@ -169,6 +169,7 @@ typedef struct {
     Addr boundsOffset;
     Addr boundsLength;
     Addr boundsVirtBase;
+    Bit#(31) capPerms;
 } ReqLdQEntry deriving (Bits, Eq, FShow);
 
 typedef struct {
@@ -177,6 +178,7 @@ typedef struct {
     Addr boundsOffset;
     Addr boundsLength;
     Addr boundsVirtBase;
+    Bit#(31) capPerms;
 `ifndef TSO_MM
     SBIndex sbIdx;
 `endif
@@ -801,9 +803,10 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
         Addr boundsOffset = getOffset(x.vaddr);
         Addr boundsLength = saturating_truncate(getLength(x.vaddr));
         Addr boundsVirtBase = saturating_truncate(getBase(x.vaddr));
+        Bit#(31) capPerms = getPerms(x.vaddr);
         // update LSQ
         LSQUpdateAddrResult updRes <- lsq.updateAddr(
-            x.ldstq_tag, cause, x.allowCapLoad && allowCapPTE, paddr, isMMIO, x.shiftedBE, boundsOffset, boundsLength, boundsVirtBase
+            x.ldstq_tag, cause, x.allowCapLoad && allowCapPTE, paddr, isMMIO, x.shiftedBE, boundsOffset, boundsLength, boundsVirtBase, capPerms
         );
 
         // issue non-MMIO Ld which has no exception and is not waiting for
@@ -825,7 +828,8 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
                 pcHash: hash(getAddr(pc)),
                 boundsOffset: boundsOffset,
                 boundsLength: boundsLength,
-                boundsVirtBase: boundsVirtBase
+                boundsVirtBase: boundsVirtBase,
+                capPerms: capPerms
             });
         end
 
@@ -883,7 +887,7 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
         else if(issRes == ToCache) begin
             reqLdQ.enq(ReqLdQEntry {tag: zeroExtend(info.tag), paddr: info.paddr, 
                 loadTags: info.shiftedBE == TagMemAccess, pcHash: info.pcHash,
-                boundsOffset: info.boundsOffset, boundsLength: info.boundsLength, boundsVirtBase: info.boundsVirtBase});
+                boundsOffset: info.boundsOffset, boundsLength: info.boundsLength, boundsVirtBase: info.boundsVirtBase, capPerms: info.capPerms});
             // perf: load mem latency
             ldMemLatTimer.start(info.tag);
         end
@@ -1062,7 +1066,8 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
             pcHash: ?,
             boundsOffset: ?,
             boundsLength: ?,
-            boundsVirtBase: ?
+            boundsVirtBase: ?,
+            capPerms: ?
         };
         reqLrScAmoQ.enq(req);
         if(verbose) $display("[doDeqLdQ_Lr_issue] ", fshow(lsqDeqLd), "; ", fshow(req));
@@ -1280,7 +1285,7 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
         // send to mem
         Addr addr = lsqDeqSt.paddr;
         reqStQ.enq(ReqStQEntry{paddr: addr, pcHash: lsqDeqSt.pcHash, 
-            boundsOffset: lsqDeqSt.boundsOffset, boundsLength: lsqDeqSt.boundsLength, boundsVirtBase: lsqDeqSt.boundsVirtBase});
+            boundsOffset: lsqDeqSt.boundsOffset, boundsLength: lsqDeqSt.boundsLength, boundsVirtBase: lsqDeqSt.boundsVirtBase, capPerms: lsqDeqSt.capPerms});
         // record waiting for store resp
         waitStRespQ.enq(WaitStResp {
             offset: getLineMemDataOffset(addr),
@@ -1304,7 +1309,7 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
     );
         lsq.deqSt;
         // send to SB
-        stb.enq(sbIdx, lsqDeqSt.paddr, lsqDeqSt.shiftedBE, lsqDeqSt.stData, lsqDeqSt.pcHash, lsqDeqSt.boundsOffset, lsqDeqSt.boundsLength, lsqDeqSt.boundsVirtBase);
+        stb.enq(sbIdx, lsqDeqSt.paddr, lsqDeqSt.shiftedBE, lsqDeqSt.stData, lsqDeqSt.pcHash, lsqDeqSt.boundsOffset, lsqDeqSt.boundsLength, lsqDeqSt.boundsVirtBase, lsqDeqSt.capPerms);
         // ROB should have already been set to executed
         if(verbose) $display("[doDeqStQ_St] ", fshow(lsqDeqSt));
         // normal store should not have .rl, so no need to check SB empty
@@ -1315,7 +1320,7 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
     rule doIssueSB;
         let {sbIdx, en} <- stb.issue;
         reqStQ.enq(ReqStQEntry(sbIdx: sbIdx, paddr: {en.addr, 0}, pcHash: en.pcHash, 
-            boundsOffset: en.boundsOffset, boundsLength: en.boundsLength, boundsVirtBase: en.boundsVirtBase));
+            boundsOffset: en.boundsOffset, boundsLength: en.boundsLength, boundsVirtBase: en.boundsVirtBase, capPerms: en.capPerms));
         // perf: store mem latency
         stMemLatTimer.start(sbIdx);
     endrule
@@ -1413,7 +1418,8 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
             pcHash: ?,
             boundsOffset: ?,
             boundsLength: ?,
-            boundsVirtBase: ?
+            boundsVirtBase: ?,
+            capPerms: ?
         };
         reqLrScAmoQ.enq(req);
         if(verbose) $display("[doDeqStQ_ScAmo_issue] ", fshow(lsqDeqSt), "; ", fshow(req));
@@ -1640,7 +1646,8 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
             pcHash: rq.pcHash,
             boundsOffset: rq.boundsOffset,
             boundsLength: rq.boundsLength,
-            boundsVirtBase: rq.boundsVirtBase
+            boundsVirtBase: rq.boundsVirtBase,
+            capPerms: rq.capPerms
         });
     endrule
     (* descending_urgency = "sendLdToMem, sendStToMem" *) // prioritize Ld over St
@@ -1664,7 +1671,8 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
             pcHash: rq.pcHash,
             boundsOffset: rq.boundsOffset,
             boundsLength: rq.boundsLength,
-            boundsVirtBase: rq.boundsVirtBase
+            boundsVirtBase: rq.boundsVirtBase,
+            capPerms: rq.capPerms
         });
     endrule
     (* descending_urgency = "sendLrScAmoToMem, sendStToMem" *) // prioritize Lr/Sc/Amo over St

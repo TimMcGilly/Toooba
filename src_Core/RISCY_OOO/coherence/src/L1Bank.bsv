@@ -427,7 +427,8 @@ endfunction
             pcHash: ?,
             boundsOffset: getOffset(cap),
             boundsLength: saturating_truncate(getLength(cap)),
-            boundsVirtBase: getBase(cap)
+            boundsVirtBase: getBase(cap),
+            capPerms: getPerms(cap)
         };
         cRqIdxT n <- cRqMshr.cRqTransfer.getEmptyEntryInit(r);
         crqMshrEnqs <= crqMshrEnqs + 1;
@@ -557,7 +558,8 @@ endfunction
             isPrefetchRq: True,
             boundsOffset: getOffset(cap),
             boundsLength: saturating_truncate(getLength(cap)),
-            boundsVirtBase: getBase(cap)
+            boundsVirtBase: getBase(cap),
+            capPerms: getPerms(cap)
 
         };
         rqToPQ.enq(cRqToP);
@@ -581,7 +583,8 @@ endfunction
             isPrefetchRq: False,
             boundsOffset: req.boundsOffset,
             boundsLength: req.boundsLength,
-            boundsVirtBase: req.boundsVirtBase
+            boundsVirtBase: req.boundsVirtBase,
+            capPerms: req.capPerms
         };
         rqToPQ.enq(cRqToP);
        if (verbose)
@@ -712,14 +715,14 @@ endfunction
                 line: newLine // write new data into cache
             }, True); // hit, so update rep info
             if (!cRqIsPrefetch[n] && req.op == Ld) begin
-                prefetcher.reportAccess(req.addr, req.pcHash, HIT, req.boundsOffset, req.boundsLength, req.boundsVirtBase);
-                llcPrefetcher.reportAccess(req.addr, req.pcHash, HIT, req.boundsOffset, req.boundsLength, req.boundsVirtBase);
+                prefetcher.reportAccess(req.addr, req.pcHash, HIT, req.boundsOffset, req.boundsLength, req.boundsVirtBase, req.capPerms);
+                llcPrefetcher.reportAccess(req.addr, req.pcHash, HIT, req.boundsOffset, req.boundsLength, req.boundsVirtBase, req.capPerms);
             end
             if (req.op == Ld) begin
                 //TODO with this llcPrefetcher only sees arrival of non-prefetched lines
                 //TODO also would be good to provide whether this was a MISS to avoid triggering too many prefetches.
-                prefetcher.reportCacheDataArrival(curLine, req.addr, req.pcHash, wasMiss, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase);
-                llcPrefetcher.reportCacheDataArrival(curLine, req.addr, req.pcHash, wasMiss, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase);
+                prefetcher.reportCacheDataArrival(curLine, req.addr, req.pcHash, wasMiss, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase, req.capPerms);
+                llcPrefetcher.reportCacheDataArrival(curLine, req.addr, req.pcHash, wasMiss, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase, req.capPerms);
             end
            if (verbose)
             $display("%t L1 %m pipelineResp: Hit func: update ram: ", $time,
@@ -875,8 +878,8 @@ endfunction
                 line: ram.line
             }, False);
             if (!cRqIsPrefetch[n] && procRq.op == Ld) begin
-                prefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength, procRq.boundsVirtBase);
-                llcPrefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength, procRq.boundsVirtBase);
+                prefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength, procRq.boundsVirtBase, procRq.capPerms);
+                llcPrefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength, procRq.boundsVirtBase, procRq.capPerms);
                 /*
                 EventsL1D events = unpack(0);
                 events.evt_TLB = 1;
@@ -909,8 +912,8 @@ endfunction
             });
             cRqMshr.pipelineResp.setData(n, ram.info.cs == M ? Valid (ram.line) : Invalid);
             if (!cRqIsPrefetch[n] && procRq.op == Ld) begin
-                prefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength, procRq.boundsVirtBase);
-                llcPrefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength, procRq.boundsVirtBase);
+                prefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength, procRq.boundsVirtBase, procRq.capPerms);
+                llcPrefetcher.reportAccess(procRq.addr, procRq.pcHash, MISS, procRq.boundsOffset, procRq.boundsLength, procRq.boundsVirtBase, procRq.capPerms);
             end
             // send replacement resp to parent
             rsToPIndexQ.enq(CRq (n));

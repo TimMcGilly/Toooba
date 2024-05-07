@@ -413,7 +413,8 @@ endfunction
             id: Child (r.id),
             boundsOffset: r.boundsOffset,
             boundsLength: r.boundsLength,
-            boundsVirtBase: r.boundsVirtBase
+            boundsVirtBase: r.boundsVirtBase,
+            capPerms: r.capPerms
         };
         // setup new MSHR entry
         cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, Invalid);
@@ -450,7 +451,8 @@ endfunction
             id: Child (?),
             boundsOffset: ?,
             boundsLength: ?,
-            boundsVirtBase: ?
+            boundsVirtBase: ?,
+            capPerms: ?
         };
         // setup new MSHR entry
         cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, Invalid);
@@ -486,7 +488,8 @@ endfunction
             id: Child (?),
             boundsOffset: ?,
             boundsLength: ?,
-            boundsVirtBase: ?
+            boundsVirtBase: ?,
+            capPerms: ?
         };
         // setup new MSHR entry
         cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, Invalid);
@@ -521,7 +524,8 @@ endfunction
             id: Child (r.id),
             boundsOffset: r.boundsOffset,
             boundsLength: r.boundsLength,
-            boundsVirtBase: r.boundsVirtBase
+            boundsVirtBase: r.boundsVirtBase,
+            capPerms: r.capPerms
         };
         if(!cRqMshr.transfer.hasEmptyEntry(cRq)) begin
             mshrBlocks.incr(1);
@@ -544,7 +548,8 @@ endfunction
             id: Dma (r.id),
             boundsOffset: ?,
             boundsLength: ?,
-            boundsVirtBase: ?
+            boundsVirtBase: ?,
+            capPerms: ?
         };
         // setup new MSHR entry and data
         cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, write ? Valid (r.data) : Invalid);
@@ -591,7 +596,8 @@ endfunction
             id: Dma (r.id),
             boundsOffset: ?,
             boundsLength: ?,
-            boundsVirtBase: ?
+            boundsVirtBase: ?,
+            capPerms: ?
         };
         if(!cRqMshr.transfer.hasEmptyEntry(cRq)) begin
             mshrBlocks.incr(1);
