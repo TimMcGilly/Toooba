@@ -138,7 +138,7 @@ provisos(
     FIFOF#(Tuple5#(Addr, Bit#(16), HitOrMiss, Addr, Addr)) memAccesses <- mkSizedBypassFIFOF(16);
     Reg#(Tuple5#(Addr, Bit#(16), HitOrMiss, Addr, Addr)) rdRespEntry <- mkReg(?);
 
-    Bool trainOnLineAddr = True;
+    Bool trainOnLineAddr = False;
     Fifo#(8, Addr) vaddrToTlb <- mkOverflowPipelineFifo;
     Fifo#(8, Addr) addrToPrefetch <- mkOverflowPipelineFifo;
     FIFO#(Tuple5#(StrideEntry, Addr, Bit#(16), Addr, Addr)) strideEntryForPrefetch <- mkBypassFIFO();
