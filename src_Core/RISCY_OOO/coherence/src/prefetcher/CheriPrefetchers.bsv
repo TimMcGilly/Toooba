@@ -138,7 +138,7 @@ provisos(
     FIFOF#(Tuple5#(Addr, Bit#(16), HitOrMiss, Addr, Addr)) memAccesses <- mkSizedBypassFIFOF(16);
     Reg#(Tuple5#(Addr, Bit#(16), HitOrMiss, Addr, Addr)) rdRespEntry <- mkReg(?);
 
-    Bool trainOnLineAddr = False;
+    Bool trainOnLineAddr = True;
     Fifo#(8, Addr) vaddrToTlb <- mkOverflowPipelineFifo;
     Fifo#(8, Addr) addrToPrefetch <- mkOverflowPipelineFifo;
     FIFO#(Tuple5#(StrideEntry, Addr, Bit#(16), Addr, Addr)) strideEntryForPrefetch <- mkBypassFIFO();
@@ -313,13 +313,13 @@ provisos(
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
         Bit#(16) finalHash = 0;
-        finalHash = finalHash ^ hash(boundsVirtBase);
-        finalHash = finalHash ^ hash(boundsLength);
-        finalHash = finalHash ^ hash(capPerms);
-        //finalHash = finalHash ^ hash(pcHash);
+        //finalHash = finalHash ^ hash(boundsVirtBase);
+        //finalHash = finalHash ^ hash(boundsLength);
+        //finalHash = finalHash ^ hash(capPerms);
+        finalHash = finalHash ^ hash(pcHash);
         Addr topCapGap = (boundsLength == 0) ? -1 : boundsLength-boundsOffset-1;
         Addr vaddr = boundsVirtBase+boundsOffset;
-        if (`VERBOSE) $display("%t Prefetcher reportAccess %h %h %h perms: %h, hash: %h", $time, addr, boundsLength, boundsVirtBase, capPerms, finalHash);
+        if (`VERBOSE) $display("%t Prefetcher reportAccess %h %h %h perms: %h, hash: %h pchash: %h", $time, addr, boundsLength, boundsVirtBase, capPerms, finalHash, pcHash);
         if (trainOnLineAddr) addr = {addr[63:6], 6'b0}; //zero LSBs if training on lineAddresses
         memAccesses.enq(tuple5 (addr, finalHash, hitMiss, boundsOffset, topCapGap));
     endmethod
