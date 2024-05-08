@@ -314,10 +314,10 @@ provisos(
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
         Bit#(16) finalHash = 0;
-        //finalHash = finalHash ^ hash(boundsVirtBase);
-        //finalHash = finalHash ^ hash(boundsLength);
-        //finalHash = finalHash ^ hash(capPerms);
-        finalHash = finalHash ^ hash(pcHash);
+        finalHash = finalHash ^ hash(boundsVirtBase);
+        finalHash = finalHash ^ hash(boundsLength);
+        finalHash = finalHash ^ hash(capPerms);
+        //finalHash = finalHash ^ hash(pcHash);
         Addr topCapGap = (boundsLength == 0) ? -1 : boundsLength-boundsOffset-1;
         Addr vaddr = boundsVirtBase+boundsOffset;
         if (`VERBOSE) $display("%t Prefetcher reportAccess %h %h %h perms: %h, hash: %h pchash: %h", $time, addr, boundsLength, boundsVirtBase, capPerms, finalHash, pcHash);
