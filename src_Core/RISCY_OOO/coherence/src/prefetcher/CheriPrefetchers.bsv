@@ -138,7 +138,7 @@ provisos(
     FIFOF#(Tuple5#(Addr, Bit#(16), HitOrMiss, Addr, Addr)) memAccesses <- mkSizedBypassFIFOF(16);
     Reg#(Tuple5#(Addr, Bit#(16), HitOrMiss, Addr, Addr)) rdRespEntry <- mkReg(?);
 
-    Bool trainOnLineAddr = False;
+    Bool trainOnLineAddr = True;
     Fifo#(8, Addr) vaddrToTlb <- mkOverflowPipelineFifo;
     Fifo#(8, Addr) addrToPrefetch <- mkOverflowPipelineFifo;
     FIFO#(Tuple5#(StrideEntry, Addr, Bit#(16), Addr, Addr)) strideEntryForPrefetch <- mkBypassFIFO();
@@ -257,7 +257,7 @@ provisos(
             cLinesPrefetched != 
             fromInteger(valueof(cLinesAheadToPrefetch)) &&
             reqAddr[63:12] == addr[63:12] && //Check if same page
-            True /*isInCapBounds*/
+            isInCapBounds
         ) begin
             //can prefetch
 
@@ -267,7 +267,8 @@ provisos(
             evt.evt_0 = (bot+top >= 4096) ? 1 : 0;
             evt.evt_1 = (bot+top >= 131072) ? 1 : 0;
             evt.evt_2 = 1;
-            if (isInCapBounds) begin
+            //if (isInCapBounds) begin
+            if (bot+top >= 131072*16) begin
                 evt.evt_3 = 1;
             end
             perf_events[0] <= evt;
