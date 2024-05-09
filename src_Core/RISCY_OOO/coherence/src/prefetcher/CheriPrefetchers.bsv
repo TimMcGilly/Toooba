@@ -127,7 +127,8 @@ typedef struct {
 } StrideEntry deriving (Bits, Eq, FShow);
 
 //Use virtual base of bounds to index into table 
-module mkCheriStridePrefetcher#(DTlbToPrefetcher toTlb, Parameter#(strideTableSize) _, Parameter#(cLinesAheadToPrefetch) __)(CheriPCPrefetcher)
+module mkCheriStridePrefetcher#(DTlbToPrefetcher toTlb, Parameter#(strideTableSize) _, Parameter#(cLinesAheadToPrefetch) __, 
+    Parameter#(pcInHash) ___, Parameter#(boundsInHash) ____)(CheriPCPrefetcher)
 provisos(
     Alias#(strideTableIndexT, Bit#(TLog#(strideTableSize))),
     Add#(a__, TLog#(strideTableSize), 16),
@@ -314,10 +315,13 @@ provisos(
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
         Bit#(16) finalHash = 0;
-        //finalHash = finalHash ^ hash(boundsVirtBase);
-        //finalHash = finalHash ^ hash(boundsLength);
-        //finalHash = finalHash ^ hash(capPerms);
-        finalHash = finalHash ^ hash(pcHash);
+        if (valueOf(boundsInHash)==1) begin
+            finalHash = finalHash ^ hash(boundsVirtBase);
+            finalHash = finalHash ^ hash(boundsLength);
+            finalHash = finalHash ^ hash(capPerms);
+        end
+        if (valueOf(pcInHash)==1)
+            finalHash = finalHash ^ hash(pcHash);
         Addr topCapGap = (boundsLength == 0) ? -1 : boundsLength-boundsOffset-1;
         Addr vaddr = boundsVirtBase+boundsOffset;
         if (`VERBOSE) $display("%t Prefetcher reportAccess %h %h %h perms: %h, hash: %h pchash: %h", $time, addr, boundsLength, boundsVirtBase, capPerms, finalHash, pcHash);
