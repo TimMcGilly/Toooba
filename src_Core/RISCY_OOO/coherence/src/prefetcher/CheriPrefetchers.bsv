@@ -139,7 +139,7 @@ provisos(
     FIFOF#(Tuple5#(Addr, Bit#(16), HitOrMiss, Addr, Addr)) memAccesses <- mkSizedBypassFIFOF(16);
     Reg#(Tuple5#(Addr, Bit#(16), HitOrMiss, Addr, Addr)) rdRespEntry <- mkReg(?);
 
-    Bool trainOnLineAddr = False;
+    Bool trainOnLineAddr = True;
     Fifo#(8, Addr) vaddrToTlb <- mkOverflowPipelineFifo;
     Fifo#(8, Addr) addrToPrefetch <- mkOverflowPipelineFifo;
     FIFO#(Tuple5#(StrideEntry, Addr, Bit#(16), Addr, Addr)) strideEntryForPrefetch <- mkBypassFIFO();
@@ -316,9 +316,9 @@ provisos(
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
         Bit#(16) finalHash = 0;
         if (valueOf(boundsInHash)==1) begin
-            finalHash = finalHash ^ hash(boundsVirtBase);
+            //finalHash = finalHash ^ hash(boundsVirtBase);
             finalHash = finalHash ^ hash(boundsLength);
-            finalHash = finalHash ^ hash(capPerms);
+            //finalHash = finalHash ^ hash(capPerms);
         end
         if (valueOf(pcInHash)==1)
             finalHash = finalHash ^ hash(pcHash);
