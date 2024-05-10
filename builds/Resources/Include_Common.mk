@@ -35,17 +35,17 @@ all: compile  simulator
 # ================================================================
 # Path to RISCY-OOO sources
 
-RISCY_HOME ?= ../../src_Core/RISCY_OOO
+#RISCY_HOME ?= ../../src_Core/RISCY_OOO
 # RISCY_HOME ?= $(HOME)/Projects/RISCV/MIT-riscy/riscy-OOO
 
-RISCY_DIRS = $(RISCY_HOME)/procs/RV64G_OOO:$(RISCY_HOME)/procs/lib:$(RISCY_HOME)/coherence/src:$(RISCY_HOME)/coherence/src/prefetcher:$(RISCY_HOME)/fpgautils/lib
+#RISCY_DIRS = $(RISCY_HOME)/procs/RV64G_OOO:$(RISCY_HOME)/procs/lib:$(RISCY_HOME)/coherence/src:$(RISCY_HOME)/coherence/src/prefetcher:$(RISCY_HOME)/fpgautils/lib
 
-CONNECTAL_DIRS = $(RISCY_HOME)/connectal/bsv:$(RISCY_HOME)/connectal/tests/spi:$(RISCY_HOME)/connectal/lib/bsv
+#CONNECTAL_DIRS = $(RISCY_HOME)/connectal/bsv:$(RISCY_HOME)/connectal/tests/spi:$(RISCY_HOME)/connectal/lib/bsv
 
-CHERI_DIRS = $(RISCY_HOME)/../../libs/cheri-cap-lib
+#CHERI_DIRS = $(RISCY_HOME)/../../libs/cheri-cap-lib
 
 # ALL_RISCY_DIRS = $(RISCY_DIRS)
-ALL_RISCY_DIRS = $(EXTRA_DIRS):$(RISCY_DIRS):$(CONNECTAL_DIRS):$(CHERI_DIRS)
+#ALL_RISCY_DIRS = :$(RISCY_DIRS):$(CONNECTAL_DIRS):$(CHERI_DIRS)
 
 # ================================================================
 # Search path for bsc for .bsv files
