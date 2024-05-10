@@ -258,7 +258,7 @@ provisos(
             cLinesPrefetched != 
             fromInteger(valueof(cLinesAheadToPrefetch)) &&
             reqAddr[63:12] == addr[63:12] && //Check if same page
-            True //isInCapBounds
+            isInCapBounds
         ) begin
             //can prefetch
 
@@ -316,9 +316,9 @@ provisos(
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
         Bit#(16) finalHash = 0;
         if (valueOf(boundsInHash)==1) begin
-            //finalHash = finalHash ^ hash(boundsVirtBase);
+            finalHash = finalHash ^ hash(boundsVirtBase);
             finalHash = finalHash ^ hash(boundsLength);
-            //finalHash = finalHash ^ hash(capPerms);
+            finalHash = finalHash ^ hash(capPerms);
         end
         if (valueOf(pcInHash)==1)
             finalHash = finalHash ^ hash(pcHash);
