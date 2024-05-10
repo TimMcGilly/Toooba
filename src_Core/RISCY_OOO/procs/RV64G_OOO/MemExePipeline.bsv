@@ -1319,8 +1319,8 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
     // send store to mem
     rule doIssueSB;
         let {sbIdx, en} <- stb.issue;
-        reqStQ.enq(ReqStQEntry(sbIdx: sbIdx, paddr: {en.addr, 0}, pcHash: en.pcHash, 
-            boundsOffset: en.boundsOffset, boundsLength: en.boundsLength, boundsVirtBase: en.boundsVirtBase, capPerms: en.capPerms));
+        reqStQ.enq(ReqStQEntry{sbIdx: sbIdx, paddr: {en.addr, 0}, pcHash: en.pcHash, 
+            boundsOffset: en.boundsOffset, boundsLength: en.boundsLength, boundsVirtBase: en.boundsVirtBase, capPerms: en.capPerms});
         // perf: store mem latency
         stMemLatTimer.start(sbIdx);
     endrule
