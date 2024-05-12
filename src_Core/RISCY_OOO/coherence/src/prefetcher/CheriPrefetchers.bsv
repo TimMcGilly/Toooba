@@ -258,7 +258,7 @@ provisos(
             cLinesPrefetched != 
             fromInteger(valueof(cLinesAheadToPrefetch)) &&
             reqAddr[63:12] == addr[63:12] && //Check if same page
-            True //isInCapBounds
+            isInCapBounds
         ) begin
             //can prefetch
 
