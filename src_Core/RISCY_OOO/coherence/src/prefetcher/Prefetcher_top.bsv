@@ -507,7 +507,7 @@ module mkLLDPrefetcherInL1D#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         Parameter#(2097152) maxCapSizeToTrack <- mkParameter;
         Parameter#(1024) bitmapTableSize <- mkParameter;
         Parameter#(128) filterTableSize <- mkParameter;
-        Parameter#(128) inverseDecayChance <- mkParameter;
+        Parameter#(256) inverseDecayChance <- mkParameter;
         let m <- mkCapBitmapPrefetcher(maxCapSizeToTrack, bitmapTableSize, filterTableSize, inverseDecayChance);
     `elsif DATA_PREFETCHER_CAP_PTR
         Parameter#(1024) ptrTableSize <- mkParameter; 
