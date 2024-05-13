@@ -654,7 +654,7 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
     Fifo#(4, Tuple3#(Vector#(linesInPage, Bool), pageAddressT, UInt#(8))) issuePrefetchesQueue <- mkBypassFifo;
     Reg#(Tuple2#(pageAddressT, UInt#(8))) dataForIssuePrefetches <- mkConfigReg(?);
     Reg#(Vector#(linesInPage, Bool)) canPrefetch <- mkConfigReg(replicate(False));
-    Reg#(Bit#(8)) randomCounter <- mkConfigReg(0);
+    Reg#(Bit#(12)) randomCounter <- mkConfigReg(0);
 
     function LineState upgrade(LineState st) = 
         case (st)
