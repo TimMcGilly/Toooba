@@ -702,7 +702,7 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
         doAssert(pageStartBitmapIdx < 64, "Page start should always be in first half of bitmap");
         Bit#(7) pageEndBitmapIdx = pageStartBitmapIdx + 64;
         Bool accessInFirstBitmapGroup = (accessIdx < 64);
-        if (/*hitMiss == MISS &&*/ (ftTag != fte.tag || fte.prefetched == False)) begin
+        if (hitMiss == MISS && (ftTag != fte.tag || fte.prefetched == False)) begin
             
             //Update filter table
             fte.tag = ftTag;
@@ -881,7 +881,8 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
         end
     endmethod
 
-    method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr;
+    method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr if (randomCounter[2:0] == 3'b0);
+        $display ("%t prefetcher:getNextPrefetchAddr %h", $time, Addr'{pfQueue.first, '0});
         pfQueue.deq;
         return tuple2({pfQueue.first, '0}, almightyCap);
     endmethod
