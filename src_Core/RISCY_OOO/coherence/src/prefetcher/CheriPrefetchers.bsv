@@ -702,7 +702,7 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
         doAssert(pageStartBitmapIdx < 64, "Page start should always be in first half of bitmap");
         Bit#(7) pageEndBitmapIdx = pageStartBitmapIdx + 64;
         Bool accessInFirstBitmapGroup = (accessIdx < 64);
-        if (hitMiss == MISS && (ftTag != fte.tag || fte.prefetched == False)) begin
+        if (/*hitMiss == MISS &&*/ (ftTag != fte.tag || fte.prefetched == False)) begin
             
             //Update filter table
             fte.tag = ftTag;
