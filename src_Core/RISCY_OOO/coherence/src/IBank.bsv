@@ -216,7 +216,7 @@ module mkIBank#(
 `endif
 `ifdef PERFORMANCE_MONITORING
         EventsL1I events = unpack (0);
-        events.evt_LD = 1;
+        //events.evt_LD = 1;
         perf_events[0] <= events;
 `endif
         noAction;

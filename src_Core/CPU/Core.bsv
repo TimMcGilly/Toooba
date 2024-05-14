@@ -1202,6 +1202,7 @@ module mkCore#(CoreId coreId)(Core);
      tgc_evts.evt_EVICT = dmem_evts.evt_EVICT;
      dmem_evts.evt_TLB = llmem_evts.evt_EVICT;
      core_evts.evt_MEM_CAP_LOAD_TAG_SET = llmem_evts.evt_ST;
+     imem_evts.evt_LD = llmem_evts.evt_ST;
      Maybe#(EventsTransExe) mab_trans_exe = tagged Invalid;
 
 
