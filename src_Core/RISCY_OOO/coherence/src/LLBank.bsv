@@ -242,6 +242,9 @@ module mkLLBank#(
     PrefetcherVector#(TDiv#(childNum, 2)) dataPrefetchers <- mkPrefetcherVector(mkLLDPrefetcher);
     PrefetcherVector#(TDiv#(childNum, 2)) instrPrefetchers <- mkPrefetcherVector(mkLLIPrefetcher);
 
+    Reg#(Bit#(64)) crqMshrEnqs <- mkReg(0);
+    Reg#(Bit#(64)) crqMshrDeqs <- mkReg(0);
+
 `ifdef PERF_COUNT
     Reg#(Bool) doStats <- mkConfigReg(True);
     Count#(Data) dmaMemLdCnt <- mkCount(0);
@@ -416,22 +419,28 @@ endfunction
             boundsVirtBase: r.boundsVirtBase,
             capPerms: r.capPerms
         };
-        // setup new MSHR entry
-        cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, Invalid);
-        // send to pipeline
-        pipeline.send(CRq (LLPipeCRqIn {
-            addr: cRq.addr,
-            mshrIdx: n
-        }));
-        cRqIsPrefetch[n] <= r.isPrefetchRq;
-        // change round robin
-        flipPriorNewCRqSrc;
-       if (verbose)
-        $display("%t LL %m cRqTransfer_new_child: ", $time,
-            fshow(n), " ; ",
-            fshow(r), " ; ",
-            fshow(cRq)
-        );
+        if (!r.isPrefetchRq || (crqMshrEnqs - crqMshrDeqs < 12)) begin
+            // setup new MSHR entry
+            cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, Invalid);
+            crqMshrEnqs <= crqMshrEnqs + 1;
+            // send to pipeline
+            pipeline.send(CRq (LLPipeCRqIn {
+                addr: cRq.addr,
+                mshrIdx: n
+            }));
+            cRqIsPrefetch[n] <= r.isPrefetchRq;
+            // change round robin
+            flipPriorNewCRqSrc;
+        if (verbose)
+            $display("%t LL %m cRqTransfer_new_child: ", $time,
+                fshow(n), " ; ",
+                fshow(r), " ; ",
+                fshow(cRq)
+            );
+        end
+        else begin
+            $display ("%t LL crqTransfer_new_child: dropping prefetch rq, mshr entries: %d", crqMshrEnqs - crqMshrDeqs);
+        end
     endrule
 
     // create new request from data prefetcher and send to pipeline
@@ -456,6 +465,7 @@ endfunction
         };
         // setup new MSHR entry
         cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, Invalid);
+        crqMshrEnqs <= crqMshrEnqs + 1;
         // send to pipeline
         pipeline.send(CRq (LLPipeCRqIn {
             addr: cRq.addr,
@@ -493,6 +503,7 @@ endfunction
         };
         // setup new MSHR entry
         cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, Invalid);
+        crqMshrEnqs <= crqMshrEnqs + 1;
         // send to pipeline
         pipeline.send(CRq (LLPipeCRqIn {
             addr: cRq.addr,
@@ -553,6 +564,7 @@ endfunction
         };
         // setup new MSHR entry and data
         cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, write ? Valid (r.data) : Invalid);
+        crqMshrEnqs <= crqMshrEnqs + 1;
         // send to pipeline
         cRqIsPrefetch[n] <= False;
         pipeline.send(CRq (LLPipeCRqIn {
@@ -627,6 +639,7 @@ endfunction
         $display("%t LL %m discardPrefetchRqResult: ", $time, fshow(n));
         rsToCIndexQ.deq;
         cRqMshr.sendRsToDmaC.releaseEntry(n);
+        crqMshrDeqs <= crqMshrDeqs + 1;
     endrule
 
     // mem resp for child req, will refill cache, send it to pipeline
@@ -823,6 +836,7 @@ endfunction
         });
         // release MSHR entry
         cRqMshr.sendRsToDmaC.releaseEntry(n);
+        crqMshrDeqs <= crqMshrDeqs + 1;
     endrule
 
     rule sendRsStToDma;
@@ -843,6 +857,7 @@ endfunction
         rsStToDmaQ.enq(dmaId);
         // release MSHR entry
         cRqMshr.sendRsToDmaC.releaseEntry(n);
+        crqMshrDeqs <= crqMshrDeqs + 1;
     endrule
 
     // send upgrade resp to child
@@ -872,6 +887,7 @@ endfunction
         }));
         // release MSHR entry
         cRqMshr.sendRsToDmaC.releaseEntry(n);
+        crqMshrDeqs <= crqMshrDeqs + 1;
 `ifdef PERF_COUNT
         if(doStats) begin
             upRespCnt.incr(1);
