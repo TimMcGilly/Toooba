@@ -735,14 +735,14 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
 
             issuePrefetchesQueue.enq(tuple3(canPrefetchVec, pa, unpack(truncate(accessLineAddr - pageStartAddr))));
 
-            /*
+            
             EventsPrefetcher evt = unpack(0);
             evt.evt_0 = 1;
-            evt.evt_2 = (boundsLength <= 1024) ? 0 : extend(pack(countElem(True, canPrefetchVec)));
+            evt.evt_2 = (boundsLength <= 131072) ? 0 : extend(pack(countElem(True, canPrefetchVec)));
             evt.evt_1 = extend(pack(countElem(True, canPrefetchVec)));
             //evt.evt_2 = extend(pack(countElem(True, canPrefetchVec)));
             perf_events[1] <= evt;
-            */
+            
             
             
         end
@@ -849,6 +849,7 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
         if (boundsLength > 64 && boundsLength <= fromInteger(valueOf(maxCapSizeToTrack))) begin
+            /*
             //Measure bounds alignment
             EventsPrefetcher evt = unpack(0);
             evt.evt_0 = 1;
@@ -856,6 +857,7 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
             evt.evt_1 = (boundsVirtBase[3:0] == 0) ? 1 : 0;
             //evt.evt_2 = extend(pack(countElem(True, canPrefetchVec)));
             perf_events[1] <= evt;
+            */
 
             //$display("%t prefetcher:reportAccess %h with bounds length %d base %h offset %d", $time, addr, boundsLength, boundsVirtBase, boundsOffset);
             //Not all objects are aligned in the same way, so we separate the training bitmaps for objects that are aligned differently
