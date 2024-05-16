@@ -419,28 +419,28 @@ endfunction
             boundsVirtBase: r.boundsVirtBase,
             capPerms: r.capPerms
         };
-        if (!r.isPrefetchRq || (crqMshrEnqs - crqMshrDeqs < 12)) begin
+        //if (!r.isPrefetchRq || (crqMshrEnqs - crqMshrDeqs < 12)) begin
             // setup new MSHR entry
-            cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, Invalid);
-            crqMshrEnqs <= crqMshrEnqs + 1;
-            // send to pipeline
-            pipeline.send(CRq (LLPipeCRqIn {
-                addr: cRq.addr,
-                mshrIdx: n
-            }));
-            cRqIsPrefetch[n] <= r.isPrefetchRq;
-            // change round robin
-            flipPriorNewCRqSrc;
+        cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, Invalid);
+        crqMshrEnqs <= crqMshrEnqs + 1;
+        // send to pipeline
+        pipeline.send(CRq (LLPipeCRqIn {
+            addr: cRq.addr,
+            mshrIdx: n
+        }));
+        cRqIsPrefetch[n] <= r.isPrefetchRq;
+        // change round robin
+        flipPriorNewCRqSrc;
         if (verbose)
             $display("%t LL %m cRqTransfer_new_child: ", $time,
                 fshow(n), " ; ",
                 fshow(r), " ; ",
                 fshow(cRq)
             );
-        end
-        else begin
-            $display ("%t LL crqTransfer_new_child: dropping prefetch rq, mshr entries: %d", crqMshrEnqs - crqMshrDeqs);
-        end
+        //end
+        //else begin
+            //$display ("%t LL crqTransfer_new_child: dropping prefetch rq, mshr entries: %d", crqMshrEnqs - crqMshrDeqs);
+        //end
     endrule
 
     // create new request from data prefetcher and send to pipeline
