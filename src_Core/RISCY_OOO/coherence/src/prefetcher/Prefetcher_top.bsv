@@ -453,10 +453,10 @@ module mkL1DPrefetcher#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         let m <- mkPCCapMeasurer;
     `endif
 `else 
-    let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));
-    //Parameter#(512) strideTableSize <- mkParameter;
-    //Parameter#(1) cLinesAheadToPrefetch <- mkParameter;
-    //let m <- mkCheriPCPrefetcherAdapter(mkStride2PCPrefetcher(strideTableSize, cLinesAheadToPrefetch));
+    //let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));
+    Parameter#(512) strideTableSize <- mkParameter;
+    Parameter#(1) cLinesAheadToPrefetch <- mkParameter;
+    let m <- mkCheriPCPrefetcherAdapter(mkStride2PCPrefetcher(strideTableSize, cLinesAheadToPrefetch));
 `endif
     return m;
 endmodule
@@ -504,10 +504,10 @@ module mkLLDPrefetcherInL1D#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         let m <- mkCheriStridePrefetcher(toTlb, strideTableSize, cLinesAheadToPrefetch, pcInHash, boundsInHash);
         //let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));
     `elsif DATA_PREFETCHER_CAP_BITMAP
-        Parameter#(2097152) maxCapSizeToTrack <- mkParameter;
+        Parameter#(131072) maxCapSizeToTrack <- mkParameter;
         Parameter#(2048) bitmapTableSize <- mkParameter;
         Parameter#(128) filterTableSize <- mkParameter;
-        Parameter#(256) inverseDecayChance <- mkParameter;
+        Parameter#(64) inverseDecayChance <- mkParameter;
         let m <- mkCapBitmapPrefetcher(maxCapSizeToTrack, bitmapTableSize, filterTableSize, inverseDecayChance);
     `elsif DATA_PREFETCHER_CAP_PTR
         Parameter#(1024) ptrTableSize <- mkParameter; 
