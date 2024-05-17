@@ -241,9 +241,10 @@ module mkLLBank#(
     Vector#(cRqNum, Reg#(Bool)) cRqIsPrefetch <- replicateM(mkReg(?));
     PrefetcherVector#(TDiv#(childNum, 2)) dataPrefetchers <- mkPrefetcherVector(mkLLDPrefetcher);
     PrefetcherVector#(TDiv#(childNum, 2)) instrPrefetchers <- mkPrefetcherVector(mkLLIPrefetcher);
+    Fifo#(32, Tuple2#(Addr, childT)) overflowPrefetchQueue <- mkOverflowBypassFifo;
 
-    Reg#(Bit#(64)) crqMshrEnqs <- mkReg(0);
-    Reg#(Bit#(64)) crqMshrDeqs <- mkReg(0);
+    Reg#(Bit#(64)) crqMshrEnqs <- mkConfigReg(0);
+    Reg#(Bit#(64)) crqMshrDeqs <- mkConfigReg(0);
 
 `ifdef PERF_COUNT
     Reg#(Bool) doStats <- mkConfigReg(True);
@@ -419,8 +420,49 @@ endfunction
             boundsVirtBase: r.boundsVirtBase,
             capPerms: r.capPerms
         };
-        //if (!r.isPrefetchRq || (crqMshrEnqs - crqMshrDeqs < 12)) begin
+        if (!r.isPrefetchRq || (crqMshrEnqs - crqMshrDeqs < 12)) begin
             // setup new MSHR entry
+            cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, Invalid);
+            crqMshrEnqs <= crqMshrEnqs + 1;
+            // send to pipeline
+            pipeline.send(CRq (LLPipeCRqIn {
+                addr: cRq.addr,
+                mshrIdx: n
+            }));
+            cRqIsPrefetch[n] <= r.isPrefetchRq;
+            // change round robin
+            flipPriorNewCRqSrc;
+            if (verbose)
+                $display("%t LL %m cRqTransfer_new_child: ", $time,
+                    fshow(n), " ; ",
+                    fshow(r), " ; ",
+                    fshow(cRq)
+                );
+        end
+        else begin
+            $display ("%t LL crqTransfer_new_child: postponing prefetch rq, mshr entries: %d", crqMshrEnqs - crqMshrDeqs);
+            overflowPrefetchQueue.enq(tuple2(r.addr, r.child));
+        end
+    endrule
+
+    rule createDataPrefetchRqFromQueue if (crqMshrEnqs - crqMshrDeqs < 12);
+        overflowPrefetchQueue.deq;
+        match {.addr, .child} = overflowPrefetchQueue.first;
+        //Request from L1D of cacheIdx-th core
+        cRqT cRq = LLRq {
+            addr: addr,
+            fromState: I,
+            toState: S,
+            canUpToE: True,
+            child: child,
+            byteEn: ?,
+            id: Child (?),
+            boundsOffset: ?,
+            boundsLength: ?,
+            boundsVirtBase: ?,
+            capPerms: ?
+        };
+        // setup new MSHR entry
         cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, Invalid);
         crqMshrEnqs <= crqMshrEnqs + 1;
         // send to pipeline
@@ -428,19 +470,14 @@ endfunction
             addr: cRq.addr,
             mshrIdx: n
         }));
-        cRqIsPrefetch[n] <= r.isPrefetchRq;
+        cRqIsPrefetch[n] <= True;
         // change round robin
-        flipPriorNewCRqSrc;
-        if (verbose)
-            $display("%t LL %m cRqTransfer_new_child: ", $time,
-                fshow(n), " ; ",
-                fshow(r), " ; ",
-                fshow(cRq)
-            );
-        //end
-        //else begin
-            //$display ("%t LL crqTransfer_new_child: dropping prefetch rq, mshr entries: %d", crqMshrEnqs - crqMshrDeqs);
-        //end
+        //flipPriorNewCRqSrc;
+       if (verbose)
+        $display("%t LL %m createDataPrefetchRqFromQueue: ", $time,
+            fshow(n), " ; ",
+            fshow(cRq)
+        );
     endrule
 
     // create new request from data prefetcher and send to pipeline
@@ -643,7 +680,7 @@ endfunction
     endrule
 
     // mem resp for child req, will refill cache, send it to pipeline
-    (* descending_urgency = "mRsTransfer, cRsTransfer, discardPrefetchRqResult, cRqTransfer_retry, cRqTransfer_new_child, cRqTransfer_new_dma, createInstrPrefetchRq, createDataPrefetchRq" *)
+    (* descending_urgency = "mRsTransfer, cRsTransfer, discardPrefetchRqResult, cRqTransfer_retry, cRqTransfer_new_child, cRqTransfer_new_dma, createInstrPrefetchRq, createDataPrefetchRq, createDataPrefetchRqFromQueue" *)
 `ifdef PERF_COUNT
     // stop mshr block stats when other higher priority req is being sent to
     // pipeline
