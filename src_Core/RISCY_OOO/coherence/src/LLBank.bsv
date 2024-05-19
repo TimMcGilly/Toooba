@@ -241,7 +241,7 @@ module mkLLBank#(
     Vector#(cRqNum, Reg#(Bool)) cRqIsPrefetch <- replicateM(mkReg(?));
     PrefetcherVector#(TDiv#(childNum, 2)) dataPrefetchers <- mkPrefetcherVector(mkLLDPrefetcher);
     PrefetcherVector#(TDiv#(childNum, 2)) instrPrefetchers <- mkPrefetcherVector(mkLLIPrefetcher);
-    Fifo#(32, Tuple2#(Addr, childT)) overflowPrefetchQueue <- mkOverflowBypassFifo;
+    Fifo#(32, Tuple5#(Addr, childT, Addr, Addr, Addr)) overflowPrefetchQueue <- mkOverflowBypassFifo;
 
     Reg#(Bit#(64)) crqMshrEnqs <- mkConfigReg(0);
     Reg#(Bit#(64)) crqMshrDeqs <- mkConfigReg(0);
@@ -440,14 +440,14 @@ endfunction
                 );
         end
         else begin
-            $display ("%t LL crqTransfer_new_child: postponing prefetch rq, mshr entries: %d", crqMshrEnqs - crqMshrDeqs);
-            overflowPrefetchQueue.enq(tuple2(r.addr, r.child));
+            $display ("%t LL crqTransfer_new_child: postponing prefetch rq, mshr entries: %d", $time, crqMshrEnqs - crqMshrDeqs);
+            overflowPrefetchQueue.enq(tuple5(r.addr, r.child, r.boundsOffset, r.boundsLength, r.boundsVirtBase));
         end
     endrule
 
     rule createDataPrefetchRqFromQueue if (crqMshrEnqs - crqMshrDeqs < 12);
         overflowPrefetchQueue.deq;
-        match {.addr, .child} = overflowPrefetchQueue.first;
+        match {.addr, .child, .boundsOffset, .boundsLength, .boundsVirtBase} = overflowPrefetchQueue.first;
         //Request from L1D of cacheIdx-th core
         cRqT cRq = LLRq {
             addr: addr,
@@ -457,9 +457,9 @@ endfunction
             child: child,
             byteEn: ?,
             id: Child (?),
-            boundsOffset: ?,
-            boundsLength: ?,
-            boundsVirtBase: ?,
+            boundsOffset: boundsOffset,
+            boundsLength: boundsLength,
+            boundsVirtBase: boundsVirtBase,
             capPerms: ?
         };
         // setup new MSHR entry
@@ -671,6 +671,7 @@ endfunction
 `endif
     endrule
 
+    /*
     rule discardPrefetchRqResult(rsToCIndexQ.notEmpty && cRqIsPrefetch[rsToCIndexQ.first.cRqId]);
         let n = rsToCIndexQ.first.cRqId;
         $display("%t LL %m discardPrefetchRqResult: ", $time, fshow(n));
@@ -678,9 +679,10 @@ endfunction
         cRqMshr.sendRsToDmaC.releaseEntry(n);
         crqMshrDeqs <= crqMshrDeqs + 1;
     endrule
+    */
 
     // mem resp for child req, will refill cache, send it to pipeline
-    (* descending_urgency = "mRsTransfer, cRsTransfer, discardPrefetchRqResult, cRqTransfer_retry, cRqTransfer_new_child, cRqTransfer_new_dma, createInstrPrefetchRq, createDataPrefetchRq, createDataPrefetchRqFromQueue" *)
+    (* descending_urgency = "mRsTransfer, cRsTransfer, cRqTransfer_retry, cRqTransfer_new_child, cRqTransfer_new_dma, createInstrPrefetchRq, createDataPrefetchRq, createDataPrefetchRqFromQueue" *)
 `ifdef PERF_COUNT
     // stop mshr block stats when other higher priority req is being sent to
     // pipeline
@@ -898,7 +900,7 @@ endfunction
     endrule
 
     // send upgrade resp to child
-    rule sendRsToC(rsToCIndexQ.notEmpty && !cRqIsPrefetch[rsToCIndexQ.first.cRqId]);
+    rule sendRsToC(rsToCIndexQ.notEmpty);
         // send upgrade resp to child
         rsToCIndexQ.deq;
         cRqIndexT n = rsToCIndexQ.first.cRqId;
@@ -920,7 +922,11 @@ endfunction
             toState: toState, // we may upgrade to E for req S, don't use toState in cRq
             child: cRq.child,
             data: rsData,
-            id: cRqId
+            id: cRqId,
+            cameFromPrefetch: cRqIsPrefetch[n],
+            boundsOffset: cRq.boundsOffset,
+            boundsLength: cRq.boundsLength,
+            boundsVirtBase: cRq.boundsVirtBase
         }));
         // release MSHR entry
         cRqMshr.sendRsToDmaC.releaseEntry(n);

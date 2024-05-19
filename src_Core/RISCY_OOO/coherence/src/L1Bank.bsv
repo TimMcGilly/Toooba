@@ -400,12 +400,17 @@ endfunction
     (* descending_urgency = "pRsTransfer, cRqTransfer_retry, cRqTransfer_new" *)
     rule pRsTransfer(fromPQ.first matches tagged PRs .resp);
         fromPQ.deq;
+        if (!resp.cameFromPrefetch) begin
         pipeline.send(PRs (L1PipePRsIn {
             addr: resp.addr,
             toState: resp.toState,
             data: resp.data,
             way: resp.id
         }));
+        end
+        if (resp.data matches tagged Valid .data)
+            llcPrefetcher.reportCacheDataArrival(data, resp.addr, /*pcHash:*/0, 
+                True, resp.cameFromPrefetch, resp.boundsOffset, resp.boundsLength, resp.boundsVirtBase, /*capPerms:*/unpack(0));
        if (verbose)
         $display("%t L1 %m pRsTransfer: ", $time, fshow(resp));
     endrule
@@ -719,10 +724,7 @@ endfunction
                 llcPrefetcher.reportAccess(req.addr, req.pcHash, HIT, req.boundsOffset, req.boundsLength, req.boundsVirtBase, req.capPerms);
             end
             if (req.op == Ld) begin
-                //TODO with this llcPrefetcher only sees arrival of non-prefetched lines
-                //TODO also would be good to provide whether this was a MISS to avoid triggering too many prefetches.
                 prefetcher.reportCacheDataArrival(curLine, req.addr, req.pcHash, wasMiss, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase, req.capPerms);
-                llcPrefetcher.reportCacheDataArrival(curLine, req.addr, req.pcHash, wasMiss, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase, req.capPerms);
             end
            if (verbose)
             $display("%t L1 %m pipelineResp: Hit func: update ram: ", $time,

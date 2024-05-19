@@ -302,6 +302,10 @@ typedef struct {
     childT child; // to which child
     Maybe#(Line) data;
     idT id; // slot id in cache
+    Bool cameFromPrefetch;
+    Addr boundsOffset;
+    Addr boundsLength;
+    Addr boundsVirtBase;
 } PRsMsg#(type idT, type childT) deriving(Bits, Eq, FShow);
 
 typedef union tagged {

@@ -89,7 +89,12 @@ module mkL1LLConnect#(
                 toState: rs.toState,
                 child: ?,
                 data: rs.data,
-                id: rs.id
+                id: rs.id,
+                cameFromPrefetch: rs.cameFromPrefetch,
+                boundsOffset: rs.boundsOffset,
+                boundsLength: rs.boundsLength,
+                boundsVirtBase: rs.boundsVirtBase
+
             }));
         endrule
     end
