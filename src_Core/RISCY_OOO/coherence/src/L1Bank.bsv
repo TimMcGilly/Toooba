@@ -725,6 +725,10 @@ endfunction
             end
             if (req.op == Ld) begin
                 prefetcher.reportCacheDataArrival(curLine, req.addr, req.pcHash, wasMiss, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase, req.capPerms);
+                if (wasMiss == False) begin
+                    llcPrefetcher.reportCacheDataArrival(curLine, req.addr, req.pcHash, 
+                        False, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase, req.capPerms);
+                end
             end
            if (verbose)
             $display("%t L1 %m pipelineResp: Hit func: update ram: ", $time,
