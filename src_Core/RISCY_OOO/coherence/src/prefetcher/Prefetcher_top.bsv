@@ -468,7 +468,7 @@ module mkLLDPrefetcherInL1D#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkBlockPrefetcher(numLinesEachWay)));
     `elsif DATA_PREFETCHER_STRIDE
         Parameter#(512) strideTableSize <- mkParameter;
-        Parameter#(1) cLinesAheadToPrefetch <- mkParameter;
+        Parameter#(2) cLinesAheadToPrefetch <- mkParameter;
         let m <- mkCheriPCPrefetcherAdapter(mkStride2PCPrefetcher(strideTableSize, cLinesAheadToPrefetch));
     `elsif DATA_PREFETCHER_STRIDE_ADAPTIVE
         Parameter#(512) strideTableSize <- mkParameter;
