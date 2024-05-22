@@ -1005,8 +1005,8 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
     endfunction
 
     function trainingTableIdxTagT getTrainingIdxTag(Addr vaddr, Addr boundsVirtBase, Addr boundsLength) =
-        //hash(boundsVirtBase ^ boundsLength);
-        hash(getLineAddr(vaddr));
+        hash(boundsVirtBase ^ boundsLength);
+        //hash(getLineAddr(vaddr));
 
     function LineState upgrade(LineState st) = 
         case (st)
@@ -1146,8 +1146,8 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
         if (prefetchIdx matches tagged Valid .idx) begin
             let pte = pteVec[idx];
             let pit = tpl_1(ppVec[idx]);
-            //Addr offset = extend(pte.lastUsedOffset);
-            Addr offset = 0;
+            Addr offset = extend(pte.lastUsedOffset);
+            //Addr offset = 0;
             let cap = setOffset(tpl_2(ppVec[idx]), offset).value;
             if (`VERBOSE) $display("%t Prefetcher processPtReadForLookup canprefetch pit %h table tag %h read tag %h target vaddr %h offset %h", $time, pit, pte.tag, ptrTableTagT'{truncateLSB(pit)}, getAddr(cap), offset);
             tlbLookupQueue.enq(cap);
@@ -1211,7 +1211,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
                 let offset = getLineMemDataOffset(addr);
                 MemTaggedData d = getTaggedDataAt(lineWithTags, offset);
                 CapPipe cap = fromMem(unpack(pack(d)));
-                if (d.tag /*&& boundsVirtBase != getBase(cap)*/) begin
+                if (d.tag && boundsVirtBase != getBase(cap)) begin
                     //install ptr addr of cap in training table
                     ptrTableIdxTagT pit = getIdxTag(boundsLength, boundsOffset);
                     trainingTableIdxTagT tit = getTrainingIdxTag(getAddr(cap), saturating_truncate(getBase(cap)), saturating_truncate(getLength(cap)));
