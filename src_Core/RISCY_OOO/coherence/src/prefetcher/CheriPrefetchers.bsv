@@ -854,8 +854,8 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
     endrule
 
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
-        if (boundsLength > 64 && boundsLength <= fromInteger(valueOf(maxCapSizeToTrack))) begin
+        Addr boundsOffset1, Addr boundsLength1, Addr boundsVirtBase1, Bit#(31) capPerms);
+        if (boundsLength1 > 64 && boundsLength1 <= fromInteger(valueOf(maxCapSizeToTrack))) begin
             /*
             //Measure bounds alignment
             EventsPrefetcher evt = unpack(0);
@@ -871,10 +871,16 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
             //Otherwise, one 8-byte field in different objects might land in 2 different cache lines, 
             //meaning both cache lines would be prefetched every time.
             //As this reduces the amount of training data, this is done partially, grouping objects with same 16byte alignment together
-            Bit#(2) capStart16byteOffset = boundsVirtBase[5:4]; 
-            Bit#(6) offsetInLine = truncate(boundsVirtBase);
+
             pageAddressT pa = truncateLSB(addr);
             Bit#(6) accessLineInPage = addr[11:6];
+            //replacing bounds with non cheri info. pretend each page is a cap
+            Addr boundsOffset = extend(addr[11:0]);
+            Addr boundsLength = 4096;
+            Addr boundsVirtBase = {pa, '0};
+
+            Bit#(2) capStart16byteOffset = boundsVirtBase[5:4]; 
+            Bit#(6) offsetInLine = truncate(boundsVirtBase);
             Addr pageStartBoundsOffset = boundsOffset - extend(addr[11:0]);
             //boundsOffset2 tracks the idx of the cache line in the capability.
             LineAddr boundsOffset2 = truncateLSB(boundsOffset+extend(offsetInLine));
@@ -887,7 +893,7 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
             Bit#(7) accessIdxInBitmap = {1'b0, boundsOffset2[5:0]} + ((cacheLineGroup == cacheLineGroupPageStart) ? 0 : 64);
             Bool ignoreFirstPage = (cacheLineGroupPageStart == -1); //page starts before cap starts
             Bool ignoreSecondPage = (cacheLineGroupPageStart == numLineGroupsInCap-1); //Page starts in last line group of cap
-            Bit#(TSub#(TLog#(bitmapTableSize), 1)) ogHash = (hash(boundsLength) /*^ hash(boundsVirtBase)*/ ^ extend(capStart16byteOffset));
+            Bit#(TSub#(TLog#(bitmapTableSize), 1)) ogHash = (hash(boundsLength) ^ hash(boundsVirtBase) ^ extend(capStart16byteOffset));
             bitmapTableIdxT bidx =       {ogHash, 1'b0} + signExtend(cacheLineGroupPageStart);
             bitmapTableIdxT write_bidx = {ogHash, 1'b0} + signExtend(cacheLineGroup);
             doAssert(bidx == write_bidx || bidx + 1 == write_bidx, "");
