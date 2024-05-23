@@ -874,10 +874,15 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
 
             pageAddressT pa = truncateLSB(addr);
             Bit#(6) accessLineInPage = addr[11:6];
+            /*
             //replacing bounds with non cheri info. pretend each page is a cap
             Addr boundsOffset = extend(addr[11:0]);
             Addr boundsLength = 4096;
             Addr boundsVirtBase = {pa, '0};
+            */
+            Addr boundsOffset = boundsOffset1;
+            Addr boundsLength = boundsLength1;
+            Addr boundsVirtBase = boundsVirtBase1;
 
             Bit#(2) capStart16byteOffset = boundsVirtBase[5:4]; 
             Bit#(6) offsetInLine = truncate(boundsVirtBase);
@@ -893,7 +898,7 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
             Bit#(7) accessIdxInBitmap = {1'b0, boundsOffset2[5:0]} + ((cacheLineGroup == cacheLineGroupPageStart) ? 0 : 64);
             Bool ignoreFirstPage = (cacheLineGroupPageStart == -1); //page starts before cap starts
             Bool ignoreSecondPage = (cacheLineGroupPageStart == numLineGroupsInCap-1); //Page starts in last line group of cap
-            Bit#(TSub#(TLog#(bitmapTableSize), 1)) ogHash = (hash(boundsLength) ^ hash(boundsVirtBase) ^ extend(capStart16byteOffset));
+            Bit#(TSub#(TLog#(bitmapTableSize), 1)) ogHash = (hash(boundsLength) /*^ hash(boundsVirtBase)*/ ^ extend(capStart16byteOffset));
             bitmapTableIdxT bidx =       {ogHash, 1'b0} + signExtend(cacheLineGroupPageStart);
             bitmapTableIdxT write_bidx = {ogHash, 1'b0} + signExtend(cacheLineGroup);
             doAssert(bidx == write_bidx || bidx + 1 == write_bidx, "");
