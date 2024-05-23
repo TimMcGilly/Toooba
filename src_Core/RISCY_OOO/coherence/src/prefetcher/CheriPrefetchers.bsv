@@ -1007,11 +1007,11 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
     Reg#(trainingTableIdxTagT) lastMatchedTit <- mkReg(0);
 
     
-    function ptrTableIdxTagT getIdxTag(Addr boundsLength, Addr boundsOffset);
+    function ptrTableIdxTagT getIdxTag(Addr boundsLength, Addr boundsOffset, Addr boundsVirtBase);
         //boundsOffset should be an offset of a cap, so 16 byte aligned, so drop its lowest 4 bits
         //but also, need lowest 2 bits to be sequential and determined by boundsOffset
          //{hash(boundsLength) ^ hash(boundsOffset[63:6]), boundsOffset[5:4]};
-        ptrTableIdxT lenHash = hash(boundsLength);
+        ptrTableIdxT lenHash = hash(boundsLength) ^ hash(boundsVirtBase);
         return truncate(extend(lenHash) + boundsOffset[63:4]);
     endfunction
 
@@ -1224,7 +1224,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
                 CapPipe cap = fromMem(unpack(pack(d)));
                 if (d.tag && boundsVirtBase != getBase(cap)) begin
                     //install ptr addr of cap in training table
-                    ptrTableIdxTagT pit = getIdxTag(boundsLength, boundsOffset);
+                    ptrTableIdxTagT pit = getIdxTag(boundsLength, boundsOffset, boundsVirtBase);
                     trainingTableIdxTagT tit = getTrainingIdxTag(getAddr(cap), saturating_truncate(getBase(cap)), saturating_truncate(getLength(cap)));
                     trainingTableTagT tTag = truncateLSB(tit);
                     trainingTableIdxT tIdx = truncate(tit);
@@ -1256,7 +1256,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
                 for (Integer i = 0; i < 4; i = i + 1) begin
                     MemTaggedData d = getTaggedDataAt(lineWithTags, fromInteger(i));
                     CapPipe cap = fromMem(unpack(pack(d)));
-                    ptrTableIdxTagT pit = getIdxTag(boundsLength, clineStartOffset+fromInteger(i)*16);
+                    ptrTableIdxTagT pit = getIdxTag(boundsLength, clineStartOffset+fromInteger(i)*16, boundsVirtBase);
                     v[i] = tuple3(pit, cap, d.tag);
                     foundOneCap = foundOneCap || d.tag;
                 end
