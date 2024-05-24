@@ -1191,9 +1191,9 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
         if (`VERBOSE) $display("%t Prefetcher got TLB response: ", $time, fshow(resp));
         if (!resp.haveException && resp.paddr != 0) begin
             prefetchQueue.enq(tuple2(resp.paddr, resp.cap));
-            EventsPrefetcher evt = unpack(0);
-            evt.evt_3 = 1;
-            perf_events[3] <= evt;
+            // EventsPrefetcher evt = unpack(0);
+            // evt.evt_3 = 1;
+            // perf_events[3] <= evt;
         end
     endrule
     
@@ -1239,7 +1239,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
                     EventsPrefetcher evt = unpack(0);
                     evt.evt_4 = 1;
                     if (boundsVirtBase != getBase(cap)) begin
-                        evt.evt_2 = 1;
+                        //evt.evt_2 = 1;
                     end
                     perf_events[4] <= evt;
                 end
@@ -1264,6 +1264,12 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
                     if (`VERBOSE) $display("%t Prefetcher reportDataArrival addr %h prefetech %b adding %d caps for prefetch lookups (clinestartoffset %h)", 
                         $time, addr, wasPrefetch, countElem(True, map(tpl_3, v)), clineStartOffset, fshow(v));
                     ptLookupQueue.enq(v);
+                    EventsPrefetcher evt = unpack(0);
+                    evt.evt_3 = 1;
+                    if (wasPrefetch) begin
+                        evt.evt_2 = 1;
+                    end
+                    perf_events[3] <= evt;
                     lastLookupLineAddr <= getLineAddr(addr);
                 end
             end
