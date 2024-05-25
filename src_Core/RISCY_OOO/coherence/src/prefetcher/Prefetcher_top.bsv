@@ -504,7 +504,7 @@ module mkLLDPrefetcherInL1D#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         let m <- mkCheriStridePrefetcher(toTlb, strideTableSize, cLinesAheadToPrefetch, pcInHash, boundsInHash);
         //let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));
     `elsif DATA_PREFETCHER_CAP_SPATIAL
-        Parameter#(67108864) maxCapSizeToTrack <- mkParameter;
+        Parameter#(16777216) maxCapSizeToTrack <- mkParameter;
         Parameter#(2048) bitmapTableSize <- mkParameter;
         Parameter#(128) filterTableSize <- mkParameter;
         Parameter#(128) inverseDecayChance <- mkParameter;
