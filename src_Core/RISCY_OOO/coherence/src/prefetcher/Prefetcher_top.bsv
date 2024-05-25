@@ -517,7 +517,7 @@ module mkLLDPrefetcherInL1D#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
     `elsif DATA_PREFETCHER_CAP_SPATIAL_PTR
         Parameter#(4096) ptrTableSize <- mkParameter; 
         Parameter#(64) trainingTableSize <- mkParameter;
-        Parameter#(4) inverseDecayChance <- mkParameter;
+        Parameter#(4) inverseDecayChancePtr <- mkParameter;
         let m1 = mkCapPtrPrefetcher(toTlb, ptrTableSize, trainingTableSize, inverseDecayChancePtr);
 
         Parameter#(1048576) maxCapSizeToTrack <- mkParameter;
