@@ -515,13 +515,13 @@ module mkLLDPrefetcherInL1D#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         Parameter#(16) inverseDecayChance <- mkParameter;
         let m <- mkCapPtrPrefetcher(toTlb, ptrTableSize, trainingTableSize, inverseDecayChance);
     `elsif DATA_PREFETCHER_CAP_SPATIAL_PTR
-        Parameter#(1024) ptrTableSize <- mkParameter; 
+        Parameter#(4096) ptrTableSize <- mkParameter; 
         Parameter#(64) trainingTableSize <- mkParameter;
-        Parameter#(16) inverseDecayChancePtr <- mkParameter;
+        Parameter#(4) inverseDecayChance <- mkParameter;
         let m1 = mkCapPtrPrefetcher(toTlb, ptrTableSize, trainingTableSize, inverseDecayChancePtr);
 
-        Parameter#(131072) maxCapSizeToTrack <- mkParameter;
-        Parameter#(1024) bitmapTableSize <- mkParameter;
+        Parameter#(1048576) maxCapSizeToTrack <- mkParameter;
+        Parameter#(2048) bitmapTableSize <- mkParameter;
         Parameter#(128) filterTableSize <- mkParameter;
         Parameter#(128) inverseDecayChanceSpatial <- mkParameter;
         let m2 = mkCapBitmapPrefetcher(maxCapSizeToTrack, bitmapTableSize, filterTableSize, inverseDecayChanceSpatial);
