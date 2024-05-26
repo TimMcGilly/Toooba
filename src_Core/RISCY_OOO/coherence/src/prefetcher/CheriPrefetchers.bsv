@@ -855,7 +855,7 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
 
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, 
         Addr boundsOffset1, Addr boundsLength1, Addr boundsVirtBase1, Bit#(31) capPerms);
-        if (boundsLength1 > 64 /*&& boundsLength1 <= fromInteger(valueOf(maxCapSizeToTrack))*/) begin
+        if (boundsLength1 > 64 && boundsLength1 <= fromInteger(valueOf(maxCapSizeToTrack))) begin
             /*
             //Measure bounds alignment
             EventsPrefetcher evt = unpack(0);
