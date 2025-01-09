@@ -451,6 +451,9 @@ module mkL1DPrefetcher#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         //let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkPrintPrefetcher));
     `elsif DATA_PREFETCHER_MEASURER
         let m <- mkPCCapMeasurer;
+    `elsif DATA_PREFETCHER_LOGGING
+        Parameter#(1) cacheLevel <- mkParameter;
+        let m <- mkCapLoggingPrefetcher();
     `endif
 `else 
     let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));
@@ -576,6 +579,9 @@ module mkLLDPrefetcher(Prefetcher);
         let m <- mkSignaturePathPrefetcher(
             "./div_table.memhex",
             stSets, stWays, ptEntries, prefetchThreshold, useFilter);
+    `elsif DATA_PREFETCHER_LOGGING
+        Parameter#(2) cacheLevel <- mkParameter;
+        let m <- mkCapLoggingPrefetcher();
     `endif
 `else 
     let m <- mkDoNothingPrefetcher;

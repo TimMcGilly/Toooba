@@ -1526,3 +1526,41 @@ module mkCapPCMeasurer(CheriPCPrefetcher) provisos (
 `endif
 
 endmodule
+
+
+module mkCapLoggingPrefetcher#(Parameter#(cacheLevel) _)(CheriPCPrefetcher) provisos ();
+    Fifo#(4, Addr) prefetchRq <- mkOverflowPipelineFifo;
+    method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
+        $display("%t log Prefetcher level %d reportAccess addr %h hitMiss %s boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %b", cacheLevel, addr, hitMiss, boundsOffset, boundsLength, boundsVirtBase, capPerms);
+    endmethod
+
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
+        MemTaggedData d1 = getTaggedDataAt(lineWithTags, 0);
+        MemTaggedData d2 = getTaggedDataAt(lineWithTags, 1);
+        MemTaggedData d3 = getTaggedDataAt(lineWithTags, 2);
+        MemTaggedData d4 = getTaggedDataAt(lineWithTags, 3);
+
+        CapPipe cap1 = fromMem(unpack(pack(d1)));
+        CapPipe cap2 = fromMem(unpack(pack(d2)));
+        CapPipe cap3 = fromMem(unpack(pack(d3)));
+        CapPipe cap4 = fromMem(unpack(pack(d4)));
+
+        $display("%t log Prefetcher level %d reportDataArrival tag1 %b addr1 %h tag2 %b addr2 %h tag3 %b addr3 %h tag4 %b addr4 %h wasMiss %b wasPrefetch %b boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %b", cacheLevel, d1.tag, getAddr(cap1), d2.tag, getAddr(cap2), d3.tag, getAddr(cap3), d4.tag, getAddr(cap4), wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms);
+
+    endmethod
+
+    method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr if (False);
+        if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr %h", $time, prefetchRq.first);
+        prefetchRq.deq;
+        return tuple2(prefetchRq.first, almightyCap);
+    endmethod
+
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return  unpack(0);
+    endmethod
+`endif
+
+endmodule
