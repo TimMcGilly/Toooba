@@ -453,7 +453,7 @@ module mkL1DPrefetcher#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         let m <- mkPCCapMeasurer;
     `elsif DATA_PREFETCHER_LOGGING
         Parameter#(1) cacheLevel <- mkParameter;
-        let m <- mkCapLoggingPrefetcher();
+        let m <- mkCapLoggingPrefetcher(cacheLevel);
     `endif
 `else 
     let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));

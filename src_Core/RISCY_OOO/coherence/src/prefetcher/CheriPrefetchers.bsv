@@ -1532,7 +1532,7 @@ module mkCapLoggingPrefetcher#(Parameter#(cacheLevel) _)(CheriPCPrefetcher) prov
     Fifo#(4, Addr) prefetchRq <- mkOverflowPipelineFifo;
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
-        $display("%t log Prefetcher level %d reportAccess addr %h hitMiss %s boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %b", cacheLevel, addr, hitMiss, boundsOffset, boundsLength, boundsVirtBase, capPerms);
+        $display("%t log Prefetcher level %d reportAccess addr %h hitMiss %s boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %b", valueof(cacheLevel), addr, hitMiss, boundsOffset, boundsLength, boundsVirtBase, capPerms);
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, 
@@ -1547,7 +1547,7 @@ module mkCapLoggingPrefetcher#(Parameter#(cacheLevel) _)(CheriPCPrefetcher) prov
         CapPipe cap3 = fromMem(unpack(pack(d3)));
         CapPipe cap4 = fromMem(unpack(pack(d4)));
 
-        $display("%t log Prefetcher level %d reportDataArrival tag1 %b addr1 %h tag2 %b addr2 %h tag3 %b addr3 %h tag4 %b addr4 %h wasMiss %b wasPrefetch %b boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %b", cacheLevel, d1.tag, getAddr(cap1), d2.tag, getAddr(cap2), d3.tag, getAddr(cap3), d4.tag, getAddr(cap4), wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms);
+        $display("%t log Prefetcher level %d reportDataArrival tag1 %b addr1 %h tag2 %b addr2 %h tag3 %b addr3 %h tag4 %b addr4 %h wasMiss %b wasPrefetch %b boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %b", valueof(cacheLevel), d1.tag, getAddr(cap1), d2.tag, getAddr(cap2), d3.tag, getAddr(cap3), d4.tag, getAddr(cap4), wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms);
 
     endmethod
 
