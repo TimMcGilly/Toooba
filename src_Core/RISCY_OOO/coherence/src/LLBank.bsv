@@ -56,6 +56,8 @@ import RandomReplace::*;
 import Prefetcher_intf::*;
 import Prefetcher_top::*;
 import ProcTypes::*;
+import MemoryTypes::*;
+
 `ifdef PERFORMANCE_MONITORING
 import PerformanceMonitor::*;
 import StatCounters::*;
@@ -1121,11 +1123,11 @@ endfunction
         if (!cRqIsPrefetch[n]) begin
             if (cRq.child[0] == 1) begin
                 instrPrefetchers.reportAccess(
-                        truncateLSB(cRq.child), cRq.addr, HIT);
+                        truncateLSB(cRq.child), cRq.addr, HIT, Ld);
             end
             else begin
                 dataPrefetchers.reportAccess(
-                        truncateLSB(cRq.child), cRq.addr, HIT);
+                        truncateLSB(cRq.child), cRq.addr, HIT, Ld);
             end
         end
     endaction
@@ -1326,11 +1328,11 @@ endfunction
             if (!cRqIsPrefetch[n]) begin
                 if (cRq.child[0] == 1) begin
                     instrPrefetchers.reportAccess(
-                            truncateLSB(cRq.child), cRq.addr, MISS);
+                            truncateLSB(cRq.child), cRq.addr, MISS, Ld);
                 end
                 else begin
                     dataPrefetchers.reportAccess(
-                            truncateLSB(cRq.child), cRq.addr, MISS);
+                            truncateLSB(cRq.child), cRq.addr, MISS, Ld);
                 end
             end
         endaction
@@ -1404,11 +1406,11 @@ endfunction
             if (!cRqIsPrefetch[n]) begin
                 if (cRq.child[0] == 1) begin
                     instrPrefetchers.reportAccess(
-                            truncateLSB(cRq.child), cRq.addr, MISS);
+                            truncateLSB(cRq.child), cRq.addr, MISS, Ld);
                 end
                 else begin
                     dataPrefetchers.reportAccess(
-                            truncateLSB(cRq.child), cRq.addr, MISS);
+                            truncateLSB(cRq.child), cRq.addr, MISS, Ld);
                 end
             end
         endaction

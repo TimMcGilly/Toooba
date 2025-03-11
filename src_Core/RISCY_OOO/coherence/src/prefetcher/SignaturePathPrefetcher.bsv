@@ -34,6 +34,7 @@ import GetPut::*;
 import RWBramCore::*;
 import FixedPoint::*;
 import SpecialRegs::*;
+import MemoryTypes::*;
 
 `include "div_table.bsvi"
 
@@ -822,7 +823,7 @@ Add#(1, d__, stWays)
         end
     endrule
 
-    method Action reportAccess(Addr addr, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss, MemOp op);
         if (verbose) $display("%t Prefetcher:reportAccess %x", $time, addr);
         st.reportAccess(truncateLSB(addr));
         filter.reportAccess(truncateLSB(addr), hitMiss);

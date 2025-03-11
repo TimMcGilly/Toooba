@@ -38,6 +38,7 @@ import BuildVector::*;
 import ProcTypes::*;
 import CHERICap::*;
 import CHERICC_Fat::*;
+import MemoryTypes::*;
 
 import Prefetcher_intf::*;
 import InstructionPrefetchers::*;
@@ -49,7 +50,7 @@ import SignaturePathPrefetcher::*;
 `define VERBOSE True
 
 module mkDoNothingPrefetcher(Prefetcher);
-    method Action reportAccess(Addr addr, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss, MemOp op);
     endmethod
     method ActionValue#(Addr) getNextPrefetchAddr if (False);
         return 64'h0;
@@ -62,7 +63,7 @@ module mkDoNothingPrefetcher(Prefetcher);
 endmodule
 
 module mkAlwaysRequestPrefetcher(Prefetcher);
-    method Action reportAccess(Addr addr, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss, MemOp op);
     endmethod
     method ActionValue#(Addr) getNextPrefetchAddr;
         return 64'h8000ff00;
@@ -85,7 +86,7 @@ module mkAlwaysRequestTlbPrefetcher#(DTlbToPrefetcher toTlb)(Prefetcher);
         $display ("%t Prefetcher tlb deqprefetcherresp", $time);
         toTlb.deqPrefetcherResp;
     endrule
-    method Action reportAccess(Addr addr, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss, MemOp op);
         $display ("%t Prefetcher reportAccess %h", $time, addr, fshow(hitMiss));
     endmethod
     method ActionValue#(Addr) getNextPrefetchAddr if (False);
@@ -101,7 +102,7 @@ module mkAlwaysRequestTlbPrefetcher#(DTlbToPrefetcher toTlb)(Prefetcher);
 endmodule
 
 module mkPrintPrefetcher(Prefetcher);
-    method Action reportAccess(Addr addr, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss, MemOp op);
         if (hitMiss == HIT) begin
             if (`VERBOSE) $display("%t PrintPrefetcher report HIT %h", $time, addr);
         end
@@ -122,8 +123,8 @@ endmodule
 
 module mkPCPrefetcherAdapter#(module#(Prefetcher) mkPrefetcher)(PCPrefetcher);
     let p <- mkPrefetcher;
-    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
-        p.reportAccess(addr, hitMiss);
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, MemOp op);
+        p.reportAccess(addr, hitMiss, op);
     endmethod
     method ActionValue#(Addr) getNextPrefetchAddr;
         let x <- p.getNextPrefetchAddr;
@@ -138,11 +139,11 @@ endmodule
 
 module mkCheriPCPrefetcherAdapter#(module#(PCPrefetcher) mkPrefetcher)(CheriPCPrefetcher);
     let p <- mkPrefetcher;
-    method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, 
+    method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, MemOp op, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
-        p.reportAccess(addr, hash(pcHash), hitMiss);
+        p.reportAccess(addr, hash(pcHash), hitMiss, op);
     endmethod
-    method Action reportCacheDataArrival(CLine lineWithTags, Addr accessAddr, PCHash pcHash, Bool wasMiss, Bool wasPrefetch, 
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr accessAddr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
     endmethod
     method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr;
@@ -157,7 +158,7 @@ module mkCheriPCPrefetcherAdapter#(module#(PCPrefetcher) mkPrefetcher)(CheriPCPr
 endmodule
 
 module mkDoNothingPCPrefetcher(PCPrefetcher);
-    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, MemOp op);
     endmethod
     method ActionValue#(Addr) getNextPrefetchAddr if (False);
         return 64'h0000000080000080;
@@ -170,7 +171,7 @@ module mkDoNothingPCPrefetcher(PCPrefetcher);
 endmodule
 
 module mkPrintPCPrefetcher(PCPrefetcher);
-    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, MemOp op);
         if (hitMiss == HIT)
             if (`VERBOSE) $display("%t PCPrefetcher report HIT %h", $time, addr);
         else
@@ -188,7 +189,7 @@ endmodule
 
 interface PrefetcherVector#(numeric type size);
     method ActionValue#(Tuple2#(Addr, Bit#(TLog#(size)))) getNextPrefetchAddr;
-    method Action reportAccess(Bit#(TLog#(size)) idx, Addr addr, HitOrMiss hitMiss);
+    method Action reportAccess(Bit#(TLog#(size)) idx, Addr addr, HitOrMiss hitMiss, MemOp op);
 `ifdef PERFORMANCE_MONITORING //Currently configured to return events from the 0th prefetcher
     method EventsPrefetcher events();
 `endif
@@ -217,8 +218,8 @@ module mkPrefetcherVector#(module#(Prefetcher) mkPrefetcher)
         return prefetchRq.first;
     endmethod
 
-    method Action reportAccess(idxT idx, Addr addr, HitOrMiss hitMiss);
-        prefetchers[idx].reportAccess(addr, hitMiss);
+    method Action reportAccess(idxT idx, Addr addr, HitOrMiss hitMiss, MemOp op);
+        prefetchers[idx].reportAccess(addr, hitMiss, op);
     endmethod
 
 `ifdef PERFORMANCE_MONITORING
@@ -258,18 +259,18 @@ provisos ();
         return prefetchRq.first;
     endmethod
 
-    method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, 
+    method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, MemOp op, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
 
-        p1.reportAccess(addr, pcHash, hitMiss, boundsOffset, boundsLength, boundsVirtBase, capPerms);
-        p2.reportAccess(addr, pcHash, hitMiss, boundsOffset, boundsLength, boundsVirtBase, capPerms);
+        p1.reportAccess(addr, pcHash, hitMiss, op, boundsOffset, boundsLength, boundsVirtBase, capPerms);
+        p2.reportAccess(addr, pcHash, hitMiss, op, boundsOffset, boundsLength, boundsVirtBase, capPerms);
     endmethod
 
-    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, 
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op,
         Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
 
-        p1.reportCacheDataArrival(lineWithTags, addr, pcHash, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms);
-        p2.reportCacheDataArrival(lineWithTags, addr, pcHash, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms);
+        p1.reportCacheDataArrival(lineWithTags, addr, pcHash, op, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms);
+        p2.reportCacheDataArrival(lineWithTags, addr, pcHash, op, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms);
     endmethod
 
 `ifdef PERFORMANCE_MONITORING

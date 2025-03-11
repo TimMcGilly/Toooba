@@ -34,6 +34,7 @@ import SpecialFIFOs :: *;
 import Ehr::*;
 import GetPut::*;
 import RWBramCore::*;
+import MemoryTypes::*;
 
 `define VERBOSE False
 
@@ -45,7 +46,7 @@ module mkNextLineOnMissPrefetcher#(Parameter#(nextLinesOnMiss) _)(Prefetcher)
     Reg#(Addr) lastMissAddr <- mkReg(0);
     Reg#(rqCntT) sentRequestCounter <- mkReg(fromInteger(valueOf(nextLinesOnMiss)));
 
-    method Action reportAccess(Addr addr, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss, MemOp op);
         if (hitMiss == HIT) begin
             if (`VERBOSE) $display("%t Prefetcher report HIT %h", $time, addr);
         end
@@ -79,7 +80,7 @@ module mkNextLineOnAllPrefetcher#(Parameter#(nextLinesOnAccess) _)(Prefetcher)
     Reg#(Addr) lastAccessAddr <- mkReg(0);
     Reg#(rqCntT) sentRequestCounter <- mkReg(fromInteger(valueOf(nextLinesOnAccess)));
 
-    method Action reportAccess(Addr addr, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss, MemOp op);
         if (hitMiss == HIT) begin
             if (`VERBOSE) $display("%t Prefetcher report HIT %h", $time, addr);
             lastAccessAddr <= addr;
@@ -112,7 +113,7 @@ module mkSingleWindowPrefetcher#(Parameter#(cacheLinesInRange) _)(Prefetcher);
     Integer cacheLinesInRange = valueOf(cacheLinesInRange);
     Reg#(LineAddr) rangeEnd <- mkReg(0); //Points to one CLine after end of range
     Reg#(LineAddr) nextToAsk <- mkReg(0);
-    method Action reportAccess(Addr addr, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss, MemOp op);
         let cl = getLineAddr(addr);
         if (hitMiss == HIT && 
             rangeEnd - fromInteger(cacheLinesInRange) - 1 < cl && 
@@ -147,7 +148,7 @@ module mkSingleWindowL1LLPrefetcher#(Parameter#(cacheLinesInRange) _)(Prefetcher
     Integer cacheLinesInRange = valueOf(cacheLinesInRange);
     Reg#(LineAddr) rangeEnd <- mkReg(0); //Points to one CLine after end of range
     Reg#(LineAddr) nextToAsk <- mkReg(0);
-    method Action reportAccess(Addr addr, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss, MemOp op);
         let cl = getLineAddr(addr);
         if (rangeEnd - fromInteger(cacheLinesInRange) - 1 <= cl && 
             cl < rangeEnd) begin
@@ -230,7 +231,7 @@ provisos(
         end
     endactionvalue;
 
-    method Action reportAccess(Addr addr, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss, MemOp op);
         //Check if any stream line matches request
         //If so, advance that stream line and advance LRU shift reg
         //Otherwise if miss, allocate new stream line, and shift LRU reg completely,
@@ -328,7 +329,7 @@ provisos(
         end
     endactionvalue;
 
-    method Action reportAccess(Addr addr, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss, MemOp op);
         //Check if any stream line matches request
         //If so, advance that stream line and advance LRU shift reg
         //Otherwise if miss, allocate new stream line, and shift LRU reg completely,

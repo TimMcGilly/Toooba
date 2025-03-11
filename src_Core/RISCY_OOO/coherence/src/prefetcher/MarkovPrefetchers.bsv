@@ -33,6 +33,7 @@ import SpecialFIFOs :: *;
 import Ehr::*;
 import GetPut::*;
 import RWBramCore::*;
+import MemoryTypes::*;
 
 `define VERBOSE False
 
@@ -361,7 +362,7 @@ module mkSingleWindowTargetPrefetcher#(Parameter#(numLastRequests) _, Parameter#
         end
     endrule
 
-    method Action reportAccess(Addr addr, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss, MemOp op);
         let cl = getLineAddr(addr);
         if (`VERBOSE) $display("%t prefecher reportAccess", $time);
         if (hitMiss == HIT && 
@@ -491,7 +492,7 @@ provisos(
         end
     endactionvalue;
 
-    method Action reportAccess(Addr addr, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss, MemOp op);
         //Check if any stream line matches request
         //If so, advance that stream line and advance LRU shift reg
         //Otherwise if miss, allocate new stream line, and shift LRU reg completely,
@@ -608,7 +609,7 @@ module mkMarkovPrefetcher#(Parameter#(maxChainLength) _, Parameter#(narrowEntrie
         return retAddr; 
     endmethod
 
-    method Action reportAccess(Addr addr, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss, MemOp op);
         let cl = getLineAddr(addr);
         if (hitMiss == MISS && cl != lastChildRequest) begin
             //Test only tracking misses, to avoid double noise of too many requests, many to the same location
@@ -677,7 +678,7 @@ module mkMarkovOnHitPrefetcher#(Parameter#(maxChainLength) _, Parameter#(numLast
         return retAddr; 
     endmethod
 
-    method Action reportAccess(Addr addr, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss, MemOp op);
         let cl = getLineAddr(addr);
         if (hitMiss == MISS && cl != lastChildRequest) begin
             //Test only tracking misses, to avoid double noise of too many requests, many to the same location
@@ -747,7 +748,7 @@ module mkMarkovOnHit2Prefetcher#(Parameter#(maxChainLength) _, Parameter#(numLas
         return retAddr; 
     endmethod
 
-    method Action reportAccess(Addr addr, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss, MemOp op);
         let cl = getLineAddr(addr);
         if (hitMiss == MISS)
             if (`VERBOSE) $display("%t Prefetcher report MISS %h", $time, addr);

@@ -34,6 +34,7 @@ import Ehr::*;
 import GetPut::*;
 import RWBramCore::*;
 import SpecialRegs::*;
+import MemoryTypes::*;
 
 `define VERBOSE False
 
@@ -44,7 +45,7 @@ module mkBlockPrefetcher#(Parameter#(numLinesEachWay) _)(Prefetcher) provisos (
     Reg#(Bool) nextIsForward <- mkReg(?);
     Reg#(LineAddr) prefetchAround <- mkReg(?);
     Reg#(lineCountT) linesEachWayPrefetched <- mkReg(fromInteger(valueOf(numLinesEachWay)));
-    method Action reportAccess(Addr addr, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss, MemOp op);
         if (hitMiss == MISS) begin
             if (`VERBOSE) $display("%t Prefetcher report MISS %h", $time, addr);
             nextIsForward <= True;
@@ -218,7 +219,7 @@ provisos(
         end
     endrule
 
-    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, MemOp op);
         memAccesses.enq(tuple3 (addr, pcHash, hitMiss));
     endmethod
 
@@ -391,7 +392,7 @@ provisos(
         end
     endrule
 
-    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, MemOp op);
         Bit#(16) pch = {8'h0, pcHash[15:8] ^ pcHash[7:0]};
         memAccesses.enq(tuple3 (addr, pcHash, hitMiss));
     endmethod
@@ -437,7 +438,7 @@ provisos(
     Reg#(Int#(13)) strideToPrefetch <- mkReg(0);
     Ehr#(2, Bit#(3)) prefetchesIssued <- mkEhr(fromInteger(valueOf(cLinesAheadToPrefetch)));
 
-    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, MemOp op);
         if (`VERBOSE) $display("%t reportAccess %x %x", $time, addr, pcHash);
         strideTableIndexT idx = truncate(pcHash);
         SimpleStrideEntry entry = strideTable[idx];
@@ -694,7 +695,7 @@ provisos(
         end
     endrule
 
-    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, MemOp op);
         memAccesses.enq(tuple3 (addr, pcHash, hitMiss));
     endmethod
 

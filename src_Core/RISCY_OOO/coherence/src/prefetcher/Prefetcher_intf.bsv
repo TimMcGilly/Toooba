@@ -26,6 +26,7 @@ import ISA_Decls   :: *;
 import ProcTypes::*;
 import CHERICap::*;
 import CHERICC_Fat::*;
+import MemoryTypes::*;
 
 typedef enum {
     HIT = 1'b0, MISS = 1'b1
@@ -41,7 +42,7 @@ typedef struct {
 
 interface Prefetcher;
     (* always_ready *)
-    method Action reportAccess(Addr addr, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss, MemOp op);
     method ActionValue#(Addr) getNextPrefetchAddr();
 `ifdef PERFORMANCE_MONITORING
     method EventsPrefetcher events();
@@ -50,7 +51,7 @@ endinterface
 
 interface PCPrefetcher;
     (* always_ready *)
-    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss);
+    method Action reportAccess(Addr addr, Bit#(16) pcHash, HitOrMiss hitMiss, MemOp op);
     method ActionValue#(Addr) getNextPrefetchAddr();
 `ifdef PERFORMANCE_MONITORING
     method EventsPrefetcher events();
@@ -59,8 +60,8 @@ endinterface
 
 interface CheriPCPrefetcher;
     (* always_ready *)
-    method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
-    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, 
+    method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, MemOp op, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op,
         Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
     method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr();
 `ifdef PERFORMANCE_MONITORING
