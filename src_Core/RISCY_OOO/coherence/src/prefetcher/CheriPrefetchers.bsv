@@ -1548,6 +1548,9 @@ module mkCapLoggingPrefetcher#(Parameter#(cacheLevel) _)(CheriPCPrefetcher) prov
         CapPipe cap3 = fromMem(unpack(pack(d3)));
         CapPipe cap4 = fromMem(unpack(pack(d4)));
 
+        LineMemDataOffset dataSel = getLineMemDataOffset(addr);
+        MemTaggedData current = getTaggedDataAt(lineWithTags, dataSel);
+        CapPipe selCap = fromMem(unpack(pack(current)));
 
 
         $display("%t Prefetcher logReportDataArrival level %d requestAddr %h pcHash %h wasMiss %b wasPrefetch %b boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h op %h", $time, valueof(cacheLevel), addr, pcHash, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms, op);
@@ -1555,6 +1558,7 @@ module mkCapLoggingPrefetcher#(Parameter#(cacheLevel) _)(CheriPCPrefetcher) prov
         $display("%t Preftecher logReportDataArrivalCap capIndex 2 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d2.tag, getAddr(cap2), getOffset(cap2), getLength(cap2), getBase(cap2), getPerms(cap2));
         $display("%t Preftecher logReportDataArrivalCap capIndex 3 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d3.tag, getAddr(cap3), getOffset(cap3), getLength(cap3), getBase(cap3), getPerms(cap3));
         $display("%t Preftecher logReportDataArrivalCap capIndex 4 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d4.tag, getAddr(cap4), getOffset(cap4), getLength(cap4), getBase(cap4), getPerms(cap4));
+        $display("%t Preftecher logReportDataArrivalSelectedCap capIndex %b tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, dataSel, current.tag, getAddr(selCap), getOffset(selCap), getLength(selCap), getBase(selCap), getPerms(selCap));
 
     endmethod
 
