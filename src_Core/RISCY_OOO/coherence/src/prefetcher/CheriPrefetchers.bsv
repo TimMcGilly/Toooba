@@ -1575,3 +1575,126 @@ module mkCapLoggingPrefetcher#(Parameter#(cacheLevel) _)(CheriPCPrefetcher) prov
 `endif
 
 endmodule
+
+typedef struct {
+    Addr parentVirtBase;
+    Bit#(offsetBits) parentOffset;
+    Bit#(tagBits) tag; 
+} BackwardsEntry #(numeric type tagBits, numeric type offsetBits) deriving (Bits, Eq, FShow);
+
+
+module mkCapPCBackwards#(Parameter#(backwardsTableSize) _)(CheriPCPrefetcher) provisos (
+    NumAlias#(backwardsTableIdxBits, TLog#(backwardsTableSize)),
+    NumAlias#(backwardsTableTagBits, TSub#(TSub#(64, 4), backwardsTableIdxBits)),
+    NumAlias#(backwardsTableOffsetBits, 64), // Could likely use a smaller number of bits for offset
+
+    Alias#(backwardsTableIdxT, Bit#(backwardsTableIdxBits)),
+    Alias#(backwardsTableTagT, Bit#(backwardsTableTagBits)),
+    Alias#(backwardsTableOffsetT, Bit#(backwardsTableOffsetBits)),
+    Alias#(backwardsTableEntryT, BackwardsEntry#(backwardsTableTagBits, backwardsTableOffsetBits)),
+
+    Add#(a__, TLog#(backwardsTableSize), 60)
+);
+    Fifo#(4, Addr) prefetchRq <- mkOverflowPipelineFifo;
+
+    Fifo#(1, Tuple3#(backwardsTableTagT, backwardsTableOffsetT, PCHash)) dataForBtRead <- mkPipelineFifo;
+    RWBramCore#(backwardsTableIdxT, backwardsTableEntryT) backwardsTable <- mkRWBramCoreForwarded;
+
+    function backwardsTableIdxT getBackwardsIdx(Addr childVirtBase) =
+        truncate(childVirtBase[63:4]);
+
+    function backwardsTableTagT getBackwardsTag(Addr childVirtBase) =
+        truncateLSB(childVirtBase);
+
+    rule processBtRead;
+        let {bTag, childOffset, pcHash} = dataForBtRead.first;
+        dataForBtRead.deq;
+        let bResp = backwardsTable.rdResp;
+
+        if (bResp.tag == bTag) begin
+            if (`VERBOSE) $display("%t Prefetcher backwards table hit tag %h parentVirtBase %h parentOffset %h childOffset", $time, bResp.tag, bResp.parentVirtBase, bResp.parentOffset, childOffset);
+        
+            // TODO: add logic handling timeliness table
+        end
+        else begin
+            if (`VERBOSE) $display("%t Prefetcher backwards table collision tableTag %h ourTag %h", $time, bResp.tag, bTag);
+        end
+    endrule
+
+    method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, MemOp op, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
+        $display("%t Prefetcher logReportAccess addr %h pcHash %h hitMiss %b boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h op %h", $time, addr, pcHash, hitMiss, boundsOffset, boundsLength, boundsVirtBase, capPerms, op);
+        if (hitMiss == MISS) begin 
+            backwardsTableIdxT bIdx = getBackwardsIdx(boundsVirtBase);
+            backwardsTableTagT bTag = getBackwardsTag(boundsVirtBase);
+            dataForBtRead.enq(tuple3(bTag, boundsOffset, pcHash));
+            backwardsTable.rdReq(bIdx);
+        end
+        
+    endmethod
+
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
+        
+        MemTaggedData d1 = getTaggedDataAt(lineWithTags, 0);
+        MemTaggedData d2 = getTaggedDataAt(lineWithTags, 1);
+        MemTaggedData d3 = getTaggedDataAt(lineWithTags, 2);
+        MemTaggedData d4 = getTaggedDataAt(lineWithTags, 3);
+
+        CapPipe cap1 = fromMem(unpack(pack(d1)));
+        CapPipe cap2 = fromMem(unpack(pack(d2)));
+        CapPipe cap3 = fromMem(unpack(pack(d3)));
+        CapPipe cap4 = fromMem(unpack(pack(d4)));
+
+        
+
+        // Check if addr is 16 byte aligned so may be capability. 
+        // Populate backwards table
+        if (addr[3:0] == 0) begin 
+            LineMemDataOffset dataSel = getLineMemDataOffset(addr);
+            MemTaggedData current = getTaggedDataAt(lineWithTags, dataSel);
+            CapPipe selCap = fromMem(unpack(pack(current)));
+
+            // Prefetching from node to node so avoiding same virtBase
+            if (current.tag && getBase(selCap) != boundsVirtBase) begin
+                    backwardsTableIdxT bIdx = getBackwardsIdx(getBase(selCap));
+                    backwardsTableTagT bTag = getBackwardsTag(getBase(selCap));
+
+                    backwardsTableEntryT be;
+                    be.parentVirtBase = boundsVirtBase;
+                    be.parentOffset = truncate(boundsOffset);
+                    be.tag = bTag;
+
+                    if (`VERBOSE) $display("%t Prefetcher Item added to backwards table parentVirtBase %h parentOffset %h childTag %h ", $time, be.parentVirtBase, be.parentOffset, be.tag);
+                    
+                    // TODO: should this be pulled out into seperate rule
+                    backwardsTable.wrReq(bIdx, be); 
+            end
+        end
+
+        if (`VERBOSE) begin
+            LineMemDataOffset dataSel = getLineMemDataOffset(addr);
+            MemTaggedData current = getTaggedDataAt(lineWithTags, dataSel);
+            CapPipe selCap = fromMem(unpack(pack(current)));
+            $display("%t Prefetcher logReportDataArrival requestAddr %h pcHash %h wasMiss %b wasPrefetch %b boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h op %h", $time, addr, pcHash, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms, op);
+            $display("%t Preftecher logReportDataArrivalCap capIndex 1 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d1.tag, getAddr(cap1), getOffset(cap1), getLength(cap1), getBase(cap1), getPerms(cap1));
+            $display("%t Preftecher logReportDataArrivalCap capIndex 2 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d2.tag, getAddr(cap2), getOffset(cap2), getLength(cap2), getBase(cap2), getPerms(cap2));
+            $display("%t Preftecher logReportDataArrivalCap capIndex 3 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d3.tag, getAddr(cap3), getOffset(cap3), getLength(cap3), getBase(cap3), getPerms(cap3));
+            $display("%t Preftecher logReportDataArrivalCap capIndex 4 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d4.tag, getAddr(cap4), getOffset(cap4), getLength(cap4), getBase(cap4), getPerms(cap4));
+            $display("%t Preftecher logReportDataArrivalSelectedCap capIndex %b tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, dataSel, current.tag, getAddr(selCap), getOffset(selCap), getLength(selCap), getBase(selCap), getPerms(selCap));
+        end
+    endmethod
+
+    method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr;
+        if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr %h", $time, prefetchRq.first);
+        prefetchRq.deq;
+        return tuple2(prefetchRq.first, almightyCap);
+    endmethod
+
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return  unpack(0);
+    endmethod
+`endif
+
+endmodule
