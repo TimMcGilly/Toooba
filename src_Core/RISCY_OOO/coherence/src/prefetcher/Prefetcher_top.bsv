@@ -456,8 +456,11 @@ module mkL1DPrefetcher#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         Parameter#(1) cacheLevel <- mkParameter;
         let m <- mkCapLoggingPrefetcher(cacheLevel);
     `elsif DATA_PREFETCHER_CAP_PC_BACKWARDS
-        Parameter#(256) backwardsTableSize <- mkParameter;
-        let m <- mkCapPCBackwards(backwardsTableSize);
+        Parameter#(128) backwardsTableSize <- mkParameter;
+        Parameter#(8) timelinessTableWays <- mkParameter;
+        Parameter#(128) timelinessTableSets <- mkParameter;
+
+        let m <- mkCapPCBackwards(backwardsTableSize, timelinessTableWays, timelinessTableSets);
     `endif
 `else 
     let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));

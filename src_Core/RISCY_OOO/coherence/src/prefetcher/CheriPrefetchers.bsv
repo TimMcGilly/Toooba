@@ -1577,13 +1577,156 @@ module mkCapLoggingPrefetcher#(Parameter#(cacheLevel) _)(CheriPCPrefetcher) prov
 endmodule
 
 typedef struct {
+    PCHash pcHash;
+} TimelinessEntry deriving (Bits, Eq, FShow);
+
+typedef struct {
+    Bool valid;
+    Bit#(tagBits) tag;
+    TimelinessEntry entry;
+} TimelinessSetAssocEntry #(numeric type tagBits) deriving (Bits, Eq, FShow);
+
+typedef Maybe#(TimelinessEntry) TimelinessTableResp;
+
+interface TimelinessTable#(
+    numeric type numOfWays,
+    numeric type numOfSets
+);
+    method Action wrReq (Addr virtBase, PCHash pcHash);
+    method Action rdReq (Addr virtBase);
+    method ActionValue#(TimelinessTableResp) rdResp;
+endinterface
+
+module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
+    NumAlias#(idxBits, TLog#(numOfSets)),
+    NumAlias#(tagBits, TSub#(TSub#(64, 4), idxBits)),
+
+    Alias#(wayT, Bit#(TLog#(numOfWays))),
+    Alias#(indexT, Bit#(idxBits)),
+    Alias#(tagT, Bit#(tagBits)),
+    Alias#(repInfoT, wayT),
+    
+    Alias#(timelinessEntryT, TimelinessEntry),
+    Alias#(timelinessSetAssocEntryT, TimelinessSetAssocEntry#(tagBits)),
+
+    Add#(1, a__, numOfWays),
+    Add#(b__, TLog#(numOfSets), 60)
+);
+    // See SetAssocTlb.bsv for basis of set associative data structure
+
+    Vector#(numOfWays, RWBramCore#(indexT, timelinessSetAssocEntryT)) tRam <- replicateM(mkRWBramCore);
+
+    // Stores overflowing counter for fifo replacement of ways
+    RWBramCore#(indexT, wayT) repBram <- mkRWBramCore;
+    
+    Fifo#(1, Tuple2#(Addr, PCHash)) writeQ <- mkPipelineFifo;
+
+    Fifo#(1, tagT) rdReqQ <- mkPipelineFifo; 
+
+    // Required to prevent to two replacment reads to same index reciving some value
+    Ehr#(2, Maybe#(indexT)) pendReq <- mkEhr(Invalid);
+    Reg#(Maybe#(indexT)) pendReq_deq = pendReq[0];
+    Reg#(Maybe#(indexT)) pendReq_enq = pendReq[1];
+    
+    function indexT getIndex(Addr virtBase) = truncate(virtBase[63:4]);
+    function tagT getTag(Addr virtBase) = truncateLSB(virtBase[63:4]);
+    
+    Wire#(Maybe#(indexT)) pendIndex <- mkBypassWire;
+    (* fire_when_enabled, no_implicit_conditions *)
+    rule setPendIndex;
+        if(pendReq_deq matches tagged Valid .idx) begin
+            pendIndex <= Valid (idx);
+        end
+        else begin
+            pendIndex <= Invalid;
+        end
+    endrule
+
+    function repInfoT nextReplacment(repInfoT current) =
+        (current == fromInteger(valueOf(numOfWays)) - 1) ? 0 : current + 1;
+
+    rule replacementResp(
+        pendReq_deq matches tagged Valid .idx
+    );
+        pendReq_deq <= Invalid;
+
+        let {virtBase, pcHash} = writeQ.first;
+        writeQ.deq;
+
+        let repResp = repBram.rdResp;
+        repBram.deqRdResp;
+
+        // Write new way and update fifo
+        indexT idx = getIndex(virtBase);
+        tagT tag = getTag(virtBase);
+
+        timelinessEntryT te;
+        te.pcHash = pcHash;
+
+        timelinessSetAssocEntryT tse;
+        tse.valid = True;
+        tse.tag = tag;
+        tse.entry = te;
+
+        tRam[repResp].wrReq(idx, tse);
+
+        repBram.wrReq(idx, nextReplacment(repResp));
+    endrule
+
+    method Action wrReq (Addr virtBase, PCHash pcHash) if(!isValid(pendReq_enq));
+        indexT idx = getIndex(virtBase);
+
+        // Implicit condition that there are no current in progress writes on idx
+        when(pendIndex != Valid (idx), noAction);
+
+        pendReq_enq <= Valid(idx);
+        
+        writeQ.enq(tuple2(virtBase, pcHash));
+        repBram.rdReq(getIndex(virtBase));
+    endmethod
+
+    method Action rdReq(Addr virtBase);
+        indexT idx = getIndex(virtBase);
+        tagT tag = getTag(virtBase);
+        for (Integer i = 0; i < valueof(numOfWays); i = i+1) begin
+            tRam[i].rdReq(idx);
+        end
+
+        rdReqQ.enq(tag);
+    endmethod
+
+    method ActionValue#(TimelinessTableResp) rdResp();
+        rdReqQ.deq;
+        tagT tag =  rdReqQ.first;
+        for(Integer i = 0; i < valueof(numOfWays); i = i+1) begin
+            tRam[i].deqRdResp;
+        end
+
+        Vector#(numOfWays, timelinessSetAssocEntryT) resps; 
+        for(Integer i = 0; i < valueof(numOfWays); i = i+1) begin
+            resps[i] = tRam[i].rdResp;
+        end
+        
+        function timelinessSetAssocEntryT oldestValid(timelinessSetAssocEntryT a, timelinessSetAssocEntryT b);
+            return (a.valid && a.tag == tag) ? a : b;
+        endfunction
+
+        let result = fold(oldestValid, resps);
+        return (result.valid && result.tag == tag) ? Valid (result.entry): Invalid;
+    endmethod
+
+
+endmodule
+
+typedef struct {
     Addr parentVirtBase;
     Bit#(offsetBits) parentOffset;
     Bit#(tagBits) tag; 
 } BackwardsEntry #(numeric type tagBits, numeric type offsetBits) deriving (Bits, Eq, FShow);
 
-
-module mkCapPCBackwards#(Parameter#(backwardsTableSize) _)(CheriPCPrefetcher) provisos (
+module mkCapPCBackwards#(Parameter#(backwardsTableSize) _, Parameter#(timelinessTableWays) __, 
+    Parameter#(timelinessTableSets) ___)(CheriPCPrefetcher) 
+provisos (
     NumAlias#(backwardsTableIdxBits, TLog#(backwardsTableSize)),
     NumAlias#(backwardsTableTagBits, TSub#(TSub#(64, 4), backwardsTableIdxBits)),
     NumAlias#(backwardsTableOffsetBits, 64), // Could likely use a smaller number of bits for offset
@@ -1593,12 +1736,20 @@ module mkCapPCBackwards#(Parameter#(backwardsTableSize) _)(CheriPCPrefetcher) pr
     Alias#(backwardsTableOffsetT, Bit#(backwardsTableOffsetBits)),
     Alias#(backwardsTableEntryT, BackwardsEntry#(backwardsTableTagBits, backwardsTableOffsetBits)),
 
-    Add#(a__, TLog#(backwardsTableSize), 60)
+    Alias#(timelinessTableT, TimelinessTable#(timelinessTableWays, timelinessTableSets)),
+    Alias#(timelinessTableEntryT, TimelinessEntry),
+
+    Add#(a__, TLog#(backwardsTableSize), 60),
+    Add#(1, b__, timelinessTableWays),
+    Add#(c__, TLog#(timelinessTableSets), 60)
 );
     Fifo#(4, Addr) prefetchRq <- mkOverflowPipelineFifo;
 
     Fifo#(1, Tuple3#(backwardsTableTagT, backwardsTableOffsetT, PCHash)) dataForBtRead <- mkPipelineFifo;
     RWBramCore#(backwardsTableIdxT, backwardsTableEntryT) backwardsTable <- mkRWBramCoreForwarded;
+    
+    Fifo#(1, Tuple3#(Addr, backwardsTableOffsetT, backwardsTableOffsetT)) dataForTtRead<- mkPipelineFifo;
+    timelinessTableT timelinessTable <- mkTimelinessTable;
 
     function backwardsTableIdxT getBackwardsIdx(Addr childVirtBase) =
         truncate(childVirtBase[63:4]);
@@ -1606,15 +1757,40 @@ module mkCapPCBackwards#(Parameter#(backwardsTableSize) _)(CheriPCPrefetcher) pr
     function backwardsTableTagT getBackwardsTag(Addr childVirtBase) =
         truncateLSB(childVirtBase);
 
-    rule processBtRead;
+    rule processTimelinessTableResp;
+        let {parentVirtBase, parentOffset, childOffset} = dataForTtRead.first;
+        dataForTtRead.deq;
+
+        let tResp <- timelinessTable.rdResp;
+        case (tResp) matches
+            tagged Valid .x:
+                // TODO: add to prediction table
+                noAction;
+            tagged Invalid:
+                // No ways with valid and tagged matching values
+                noAction;
+        endcase
+    endrule
+
+
+    rule processBtResp;
         let {bTag, childOffset, pcHash} = dataForBtRead.first;
         dataForBtRead.deq;
         let bResp = backwardsTable.rdResp;
+        backwardsTable.deqRdResp;
+
 
         if (bResp.tag == bTag) begin
             if (`VERBOSE) $display("%t Prefetcher backwards table hit tag %h parentVirtBase %h parentOffset %h childOffset", $time, bResp.tag, bResp.parentVirtBase, bResp.parentOffset, childOffset);
         
             // TODO: add logic handling timeliness table
+            // timelinessTableEntryT te;
+            // TimelinessSubEntry tse;
+            // tse.pcHash  = pcHash;
+            // te.subEntries = mkOverflowPipelineFifo;
+
+            dataForTtRead.enq(tuple3(bResp.parentVirtBase, bResp.parentOffset, childOffset));
+            timelinessTable.rdReq(bResp.parentVirtBase);
         end
         else begin
             if (`VERBOSE) $display("%t Prefetcher backwards table collision tableTag %h ourTag %h", $time, bResp.tag, bTag);
@@ -1630,24 +1806,14 @@ module mkCapPCBackwards#(Parameter#(backwardsTableSize) _)(CheriPCPrefetcher) pr
             dataForBtRead.enq(tuple3(bTag, boundsOffset, pcHash));
             backwardsTable.rdReq(bIdx);
         end
+
+        timelinessTable.wrReq(boundsVirtBase, pcHash);
         
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
         
-        MemTaggedData d1 = getTaggedDataAt(lineWithTags, 0);
-        MemTaggedData d2 = getTaggedDataAt(lineWithTags, 1);
-        MemTaggedData d3 = getTaggedDataAt(lineWithTags, 2);
-        MemTaggedData d4 = getTaggedDataAt(lineWithTags, 3);
-
-        CapPipe cap1 = fromMem(unpack(pack(d1)));
-        CapPipe cap2 = fromMem(unpack(pack(d2)));
-        CapPipe cap3 = fromMem(unpack(pack(d3)));
-        CapPipe cap4 = fromMem(unpack(pack(d4)));
-
-        
-
         // Check if addr is 16 byte aligned so may be capability. 
         // Populate backwards table
         if (addr[3:0] == 0) begin 
@@ -1673,6 +1839,17 @@ module mkCapPCBackwards#(Parameter#(backwardsTableSize) _)(CheriPCPrefetcher) pr
         end
 
         if (`VERBOSE) begin
+
+            MemTaggedData d1 = getTaggedDataAt(lineWithTags, 0);
+            MemTaggedData d2 = getTaggedDataAt(lineWithTags, 1);
+            MemTaggedData d3 = getTaggedDataAt(lineWithTags, 2);
+            MemTaggedData d4 = getTaggedDataAt(lineWithTags, 3);
+
+            CapPipe cap1 = fromMem(unpack(pack(d1)));
+            CapPipe cap2 = fromMem(unpack(pack(d2)));
+            CapPipe cap3 = fromMem(unpack(pack(d3)));
+            CapPipe cap4 = fromMem(unpack(pack(d4)));
+
             LineMemDataOffset dataSel = getLineMemDataOffset(addr);
             MemTaggedData current = getTaggedDataAt(lineWithTags, dataSel);
             CapPipe selCap = fromMem(unpack(pack(current)));
