@@ -1712,6 +1712,8 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
         endfunction
 
         let result = fold(oldestValid, resps);
+        if (`VERBOSE) $display("%t prefetcher timeliness table rdResp valid %b tag %h pcHash %h", $time, result.valid, result.tag, result.entry.pcHash);
+
         return (result.valid && result.tag == tag) ? Valid (result.entry): Invalid;
     endmethod
 
@@ -1752,10 +1754,10 @@ provisos (
     timelinessTableT timelinessTable <- mkTimelinessTable;
 
     function backwardsTableIdxT getBackwardsIdx(Addr childVirtBase) =
-        truncate(childVirtBase[63:4]);
+        truncate(childVirtBase >> 4);
 
     function backwardsTableTagT getBackwardsTag(Addr childVirtBase) =
-        truncateLSB(childVirtBase);
+        truncateLSB(childVirtBase >> 4);
 
     rule processTimelinessTableResp;
         let {parentVirtBase, parentOffset, childOffset} = dataForTtRead.first;
@@ -1764,11 +1766,11 @@ provisos (
         let tResp <- timelinessTable.rdResp;
         case (tResp) matches
             tagged Valid .x:
+                if (`VERBOSE) $display("$t Prefetcher timeliness table hit pcHash %h", $time, x.pcHash);
                 // TODO: add to prediction table
-                noAction;
             tagged Invalid:
+                if (`VERBOSE) $display("$t Prefetcher timeliness table miss", $time);
                 // No ways with valid and tagged matching values
-                noAction;
         endcase
     endrule
 
