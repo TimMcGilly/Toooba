@@ -1610,7 +1610,7 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
     Alias#(timelinessSetAssocEntryT, TimelinessSetAssocEntry#(tagBits)),
 
     Add#(1, a__, numOfWays),
-    Add#(b__, TLog#(numOfSets), 60)
+    Add#(b__, TLog#(numOfSets), 64)
 );
     // See SetAssocTlb.bsv for basis of set associative data structure
 
@@ -1628,8 +1628,8 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
     Reg#(Maybe#(indexT)) pendReq_deq = pendReq[0];
     Reg#(Maybe#(indexT)) pendReq_enq = pendReq[1];
     
-    function indexT getIndex(Addr virtBase) = truncate(virtBase[63:4]);
-    function tagT getTag(Addr virtBase) = truncateLSB(virtBase[63:4]);
+    function indexT getIndex(Addr virtBase) = truncate(virtBase >> 4);
+    function tagT getTag(Addr virtBase) = truncateLSB(virtBase >> 4);
     
     Wire#(Maybe#(indexT)) pendIndex <- mkBypassWire;
     (* fire_when_enabled, no_implicit_conditions *)
@@ -1731,7 +1731,7 @@ module mkCapPCBackwards#(Parameter#(backwardsTableSize) _, Parameter#(timeliness
 provisos (
     NumAlias#(backwardsTableIdxBits, TLog#(backwardsTableSize)),
     NumAlias#(backwardsTableTagBits, TSub#(TSub#(64, 4), backwardsTableIdxBits)),
-    NumAlias#(backwardsTableOffsetBits, 64), // Could likely use a smaller number of bits for offset
+    NumAlias#(offsetBits, 64), // Could likely use a smaller number of bits for offset
 
     Alias#(backwardsTableIdxT, Bit#(backwardsTableIdxBits)),
     Alias#(backwardsTableTagT, Bit#(backwardsTableTagBits)),
@@ -1741,9 +1741,9 @@ provisos (
     Alias#(timelinessTableT, TimelinessTable#(timelinessTableWays, timelinessTableSets)),
     Alias#(timelinessTableEntryT, TimelinessEntry),
 
-    Add#(a__, TLog#(backwardsTableSize), 60),
+    Add#(a__, TLog#(backwardsTableSize), 64),
     Add#(1, b__, timelinessTableWays),
-    Add#(c__, TLog#(timelinessTableSets), 60)
+    Add#(c__, TLog#(timelinessTableSets), 64)
 );
     Fifo#(4, Addr) prefetchRq <- mkOverflowPipelineFifo;
 
