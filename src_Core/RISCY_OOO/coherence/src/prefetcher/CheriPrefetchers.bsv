@@ -1643,7 +1643,7 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
     endrule
 
     function repInfoT nextReplacment(repInfoT current) =
-        (current == fromInteger(valueOf(numOfWays)) - 1) ? 0 : current + 1;
+        (current == fromInteger(valueOf(TSub#(numOfWays,1)))) ? 0 : current + 1;
 
     rule replacementResp(
         pendReq_deq matches tagged Valid .idx
