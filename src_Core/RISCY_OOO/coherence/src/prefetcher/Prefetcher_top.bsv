@@ -455,6 +455,9 @@ module mkL1DPrefetcher#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
     `elsif DATA_PREFETCHER_LOGGING
         Parameter#(1) cacheLevel <- mkParameter;
         let m <- mkCapLoggingPrefetcher(cacheLevel);
+    `elsif DATA_PREFETCHER_CAP_PC_BACKWARDS
+        Parameter#(256) backwardsTableSize <- mkParameter;
+        let m <- mkCapPCBackwards(backwardsTableSize);
     `endif
 `else 
     let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));
