@@ -1620,8 +1620,27 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
     RWBramCore#(indexT, wayT) repBram <- mkRWBramCoreForwarded;
     
     Fifo#(1, Tuple2#(Addr, PCHash)) writeQ <- mkPipelineFifo;
-
     Fifo#(1, tagT) rdReqQ <- mkPipelineFifo; 
+
+
+    // initialize BRAM
+    Reg#(Bool) initDone <- mkReg(False);
+    Reg#(indexT) initIndex <- mkReg(0);
+
+    rule doInit(!initDone);
+        for(Integer i = 0; i < valueOf(numOfWays); i = i+1) begin
+            tRam[i].wrReq(initIndex, TimelinessSetAssocEntry {
+                valid: False,
+                tag: 0,
+                entry: TimelinessEntry {pcHash: 0}
+            });
+        end
+        repBram.wrReq(initIndex, 0);
+        initIndex <= initIndex + 1;
+        if(initIndex == maxBound) begin
+            initDone <= True;
+        end
+    endrule
 
     // Required to prevent to two replacment reads to same index reciving some value
     Ehr#(2, Maybe#(indexT)) pendReq <- mkEhr(Invalid);
