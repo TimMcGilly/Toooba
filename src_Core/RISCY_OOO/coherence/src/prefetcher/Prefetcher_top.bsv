@@ -144,11 +144,11 @@ module mkCheriPCPrefetcherAdapter#(module#(PCPrefetcher) mkPrefetcher)(CheriPCPr
         p.reportAccess(addr, hash(pcHash), hitMiss, op);
     endmethod
     method Action reportCacheDataArrival(CLine lineWithTags, Addr accessAddr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo);
     endmethod
-    method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr;
+    method ActionValue#(Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) getNextPrefetchAddr;
         let addr <- p.getNextPrefetchAddr;
-        return tuple2(addr, almightyCap);
+        return tuple3(addr, almightyCap, ?);
     endmethod
 `ifdef PERFORMANCE_MONITORING
     method EventsPrefetcher events;
@@ -235,7 +235,7 @@ module mkPrefetcherDoubler#(module#(CheriPCPrefetcher) mkPrefetcher1, module#(Ch
 provisos ();
     CheriPCPrefetcher p1 <- mkPrefetcher1;
     CheriPCPrefetcher p2 <- mkPrefetcher2;
-    Fifo#(1, Tuple2#(Addr, CapPipe)) prefetchRq <- mkBypassFifo;
+    Fifo#(1, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) prefetchRq <- mkBypassFifo;
     Reg#(Addr) lastPrefetch <- mkConfigReg(0);
     Reg#(Addr) lastPrefetch2 <- mkConfigReg(0);
 
@@ -252,7 +252,7 @@ provisos ();
         end
     endrule
 
-    method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr;
+    method ActionValue#(Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) getNextPrefetchAddr;
         prefetchRq.deq;
         lastPrefetch2 <= lastPrefetch;
         lastPrefetch <= tpl_1(prefetchRq.first);
@@ -267,10 +267,10 @@ provisos ();
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op,
-        Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
+        Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo);
 
-        p1.reportCacheDataArrival(lineWithTags, addr, pcHash, op, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms);
-        p2.reportCacheDataArrival(lineWithTags, addr, pcHash, op, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms);
+        p1.reportCacheDataArrival(lineWithTags, addr, pcHash, op, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms, prefetchOtherInfo);
+        p2.reportCacheDataArrival(lineWithTags, addr, pcHash, op, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms, prefetchOtherInfo);
     endmethod
 
 `ifdef PERFORMANCE_MONITORING

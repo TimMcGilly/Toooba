@@ -199,6 +199,12 @@ typedef struct {
     Bool wasPrefetch;
 } PrefetchInfo deriving (Bits, Eq, FShow);
 
+typedef struct {
+    `ifdef DATA_PREFETCHER_CAP_PC_BACKWARDS
+        Maybe#(Bit#(64)) childOffset;
+    `endif
+} PrefetchOtherInfo deriving (Bits, Eq, FShow);
+
 // processor req/resp
 typedef struct {
     idT id;

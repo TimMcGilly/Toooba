@@ -62,8 +62,8 @@ interface CheriPCPrefetcher;
     (* always_ready *)
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, MemOp op, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op,
-        Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
-    method ActionValue#(Tuple2#(Addr, CapPipe)) getNextPrefetchAddr();
+        Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo);
+    method ActionValue#(Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) getNextPrefetchAddr();
 `ifdef PERFORMANCE_MONITORING
     method EventsPrefetcher events();
 `endif
