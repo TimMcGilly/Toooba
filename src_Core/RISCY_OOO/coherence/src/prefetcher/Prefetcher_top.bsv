@@ -456,16 +456,17 @@ module mkL1DPrefetcher#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         Parameter#(1) cacheLevel <- mkParameter;
         let m <- mkCapLoggingPrefetcher(cacheLevel);
     `elsif DATA_PREFETCHER_CAP_PC_BACKWARDS
-        Parameter#(128) backwardsTableSize <- mkParameter;
+        Parameter#(256) backwardsTableSize <- mkParameter;
         Parameter#(8) timelinessTableWays <- mkParameter;
-        Parameter#(128) timelinessTableSets <- mkParameter;
-        Parameter#(128) predictionTableSize <- mkParameter;
+        Parameter#(256) timelinessTableSets <- mkParameter;
+        Parameter#(256) predictionTableSize <- mkParameter;
+        Parameter#(32) confidenceUpdateTableSize <- mkParameter;
         Parameter#(3) confidenceBits <- mkParameter;
         Integer predictionReplacementConfidence = 1;
-        Integer predictionPrefetchConfidence = 1;
+        Integer predictionPrefetchConfidence = 2;
 
         let m <- mkCapPCBackwards(toTlb, backwardsTableSize, timelinessTableWays, timelinessTableSets,
-                                    predictionTableSize, confidenceBits, predictionReplacementConfidence, predictionPrefetchConfidence);
+                                    predictionTableSize, confidenceBits, confidenceUpdateTableSize, predictionReplacementConfidence, predictionPrefetchConfidence);
     `endif
 `else 
     let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));

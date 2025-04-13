@@ -1661,7 +1661,7 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
         end
     endrule
 
-    function repInfoT nextReplacment(repInfoT current) =
+    function repInfoT nextReplacement(repInfoT current) =
         (current == fromInteger(valueOf(TSub#(numOfWays,1)))) ? 0 : current + 1;
 
     rule replacementResp(
@@ -1687,9 +1687,11 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
         tse.tag = tag;
         tse.entry = te;
 
+        if (`VERBOSE) $display("%t Prefetcher timeliness replacement repResp %d nextReplacement %d idx %h tag %h pcHash %h", $time, repResp, nextReplacement(repResp), idx, tag, pcHash);
+
         tRam[repResp].wrReq(idx, tse);
 
-        repBram.wrReq(idx, nextReplacment(repResp));
+        repBram.wrReq(idx, nextReplacement(repResp));
     endrule
 
     method Action wrReq (Addr virtBase, PCHash pcHash) if(!isValid(pendReq_enq));
@@ -1744,7 +1746,7 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
         // function bool isMatch(timelinessSetAssocEntryT a)
 
         let result = fold(oldestValid, rotatedResp);
-        if (`VERBOSE) $display("%t prefetcher timeliness table rdResp valid %b tag %h pcHash %h", $time, result.valid, result.tag, result.entry.pcHash);
+        if (`VERBOSE) $display("%t prefetcher timeliness table rdResp valid %b tag %h pcHash %h repResp %d rotateNum %d fshow ", $time, result.valid, result.tag, result.entry.pcHash, repResp, rotateNum, fshow(resps), fshow(rotatedResp));
 
         return (result.valid && result.tag == tag) ? Valid (result.entry): Invalid;
     endmethod
@@ -1765,18 +1767,29 @@ typedef struct {
     Bit#(tagBits) tag; 
 } PredicitionEntry#(numeric type tagBits, numeric type offsetBits, numeric type confidenceBits) deriving (Bits, Eq, FShow);
 
+typedef struct {
+    PCHash pcHash;
+    Bit#(offsetBits) parentOffset;
+    Bit#(tagBits) tag; 
+}  ConfidenceUpdateEntry#(numeric type tagBits, numeric type offsetBits) deriving (Bits, Eq, FShow);
+
 module mkCapPCBackwards#(DTlbToPrefetcher toTlb, Parameter#(backwardsTableSize) _, Parameter#(timelinessTableWays) __, 
     Parameter#(timelinessTableSets) ___, Parameter#(predictionTableSize) ____, Parameter#(confidenceBits) _____, 
-    Integer predictionReplacementConfidence, Integer predictionPrefetchConfidence)(CheriPCPrefetcher) 
+    Parameter#(confidenceUpdateTableSize) ______, Integer predictionReplacementConfidence, 
+    Integer predictionPrefetchConfidence)(CheriPCPrefetcher) 
 provisos (
     NumAlias#(backwardsTableIdxBits, TLog#(backwardsTableSize)),
     NumAlias#(backwardsTableTagBits, TSub#(TSub#(64, 4), backwardsTableIdxBits)),
     NumAlias#(offsetBits, 64), // Could likely use a smaller number of bits for offset
     
     NumAlias#(predictionTableIdxBits, TLog#(predictionTableSize)),
-    NumAlias#(predictionTableTagBits, 16),
+    NumAlias#(predictionTableTagBits, 32),
     NumAlias#(predictionTableIdxTagBits, TAdd#(predictionTableIdxBits, predictionTableTagBits)),
 
+    NumAlias#(confidenceUpdateIdxBits, TLog#(confidenceUpdateTableSize)),
+    NumAlias#(confidenceUpdateTagBits, TSub#(TSub#(64, 4), backwardsTableIdxBits)),
+    NumAlias#(confidenceUpdateIdxTagBits, TAdd#(confidenceUpdateIdxBits, confidenceUpdateTagBits)),
+    
     Alias#(backwardsTableIdxT, Bit#(backwardsTableIdxBits)),
     Alias#(backwardsTableTagT, Bit#(backwardsTableTagBits)),
     Alias#(offsetT, Bit#(offsetBits)),
@@ -1789,6 +1802,11 @@ provisos (
     Alias#(predictionTableTagT, Bit#(predictionTableTagBits)),
     Alias#(predictionTableIdxTagT, Bit#(predictionTableIdxTagBits)),
     Alias#(predictionTableEntryT, PredicitionEntry#(predictionTableTagBits, offsetBits, confidenceBits)),
+
+    Alias#(confidenceUpdateIdxT, Bit#(confidenceUpdateIdxBits)),
+    Alias#(confidenceUpdateTagT, Bit#(confidenceUpdateTagBits)),
+    Alias#(confidenceUpdateTableIdxTagT, Bit#(confidenceUpdateIdxTagBits)),
+    Alias#(confidenceUpdateTableEntryT, ConfidenceUpdateEntry#(confidenceUpdateTagBits, offsetBits)),
 
     Add#(a__, backwardsTableIdxBits, 64),
     Add#(1, b__, timelinessTableWays),
@@ -1809,8 +1827,63 @@ provisos (
     Fifo#(1, Tuple3#(predictionTableIdxTagT, Addr, Addr)) dataForPredRd <- mkPipelineFifo;
     RWBramCore#(predictionTableIdxT, predictionTableEntryT) predictionTable <- mkRWBramCoreForwarded;
 
+    RWBramCore#(confidenceUpdateIdxT, confidenceUpdateTableEntryT) confidenceUpdateTable <- mkRWBramCoreForwarded;
+
     Fifo#(8, Tuple2#(CapPipe, Maybe#(offsetT))) tlbLookupQueue <- mkOverflowPipelineFifo;
     Fifo#(8, Maybe#(offsetT)) tlbRequestData <- mkPipelineFifo;
+
+    Reg#(Bool) initBackwardsDone <- mkReg(False);
+    Reg#(backwardsTableIdxT) initBackwardsIndex <- mkReg(0);
+
+    Reg#(Bool) initPredictionDone <- mkReg(False);
+    Reg#(predictionTableIdxT) initPredictionIndex <- mkReg(0);
+
+    Reg#(Bool) initConfidenceUpdateDone <- mkReg(False);
+    Reg#(confidenceUpdateIdxT) initConfidenceUpdateIndex <- mkReg(0);
+
+    rule doBackwardsTableInit(!initBackwardsDone);
+        backwardsTableEntryT be;
+        be.parentVirtBase = 0;
+        be.parentOffset = 0;
+        be.tag = 0;
+
+        backwardsTable.wrReq(initBackwardsIndex,  be);
+
+        initBackwardsIndex <= initBackwardsIndex + 1;
+        if(initBackwardsIndex == maxBound) begin
+            initBackwardsDone <= True;
+        end
+    endrule
+
+    rule doPredictionTableInit(!initPredictionDone);
+        predictionTableEntryT pe;
+        pe.parentOffset = 0;
+        pe.childOffset = 0;
+        pe.confidence = 0;
+        pe.tag = 0;
+        
+        predictionTable.wrReq(initPredictionIndex, pe);
+
+        initPredictionIndex <= initPredictionIndex + 1;
+        if(initPredictionIndex == maxBound) begin
+            initPredictionDone <= True;
+        end
+    endrule
+
+
+    rule doConfidenceUpdateTableInit(!initConfidenceUpdateDone);
+        confidenceUpdateTableEntryT ce;
+        ce.pcHash = 0;
+        ce.parentOffset = 0;
+        ce.tag = 0;
+
+        confidenceUpdateTable.wrReq(initConfidenceUpdateIndex,  ce);
+
+        initConfidenceUpdateIndex <= initConfidenceUpdateIndex + 1;
+        if(initConfidenceUpdateIndex == maxBound) begin
+            initConfidenceUpdateDone <= True;
+        end
+    endrule
 
     function backwardsTableIdxT getBackwardsIdx(Addr childVirtBase) =
         truncate(childVirtBase >> 4);
@@ -1830,6 +1903,8 @@ provisos (
 
         predictionTableEntryT pe = predictionTable.rdResp;
         predictionTable.deqRdResp;
+        
+        if (`VERBOSE) $display("%t Prefetcher processPredictionReplacementRd inital response predIdxTag %h parentOffset %h childOffset %h confidence %h", $time, predIdxTag, pe.parentOffset, pe.childOffset, pe.confidence);
 
 
         if (pe.tag == predTag && pe.parentOffset == parentOffset && pe.childOffset == childOffset) begin
@@ -1840,7 +1915,7 @@ provisos (
         else begin // Decrease confidence or replace
             if (pe.confidence < fromInteger(predictionReplacementConfidence)) begin
             if (`VERBOSE) $display("%t prefetecher processPredictionReplacementRd replacement idx %h tag %h newParentOffset %h newChildOffset %h oldParentOffset %h oldChildOffset %h", 
-                                        $time, pe.confidence, predIdx, predTag, parentOffset, childOffset, pe.parentOffset, pe.childOffset);
+                                        $time, predIdx, predTag, parentOffset, childOffset, pe.parentOffset, pe.childOffset);
                 // Replace
                 predictionTableEntryT peReplacement;
                 peReplacement.parentOffset = parentOffset;
@@ -1867,7 +1942,7 @@ provisos (
         let tResp <- timelinessTable.rdResp;
         case (tResp) matches
             tagged Valid .x: begin
-                if (`VERBOSE) $display("$t Prefetcher timeliness table hit pcHash %h", $time, x.pcHash);
+                if (`VERBOSE) $display("%t Prefetcher timeliness table hit pcHash %h", $time, x.pcHash);
 
                 predictionTableIdxTagT predIdxTag = getPredictionIdxTag(x.pcHash);
                 predictionTableIdxT predIdx = truncate(predIdxTag);
@@ -1876,11 +1951,9 @@ provisos (
                 // Read existing predicition as only replace if below confidence
                 dataForPredReplacmentRd.enq(tuple3(predIdxTag, parentOffset, childOffset));
                 predictionTable.rdReq(predIdx);
-
-                // TODO: add to prediction table
             end
             tagged Invalid:
-                if (`VERBOSE) $display("$t Prefetcher timeliness table miss", $time);
+                if (`VERBOSE) $display("%t Prefetcher timeliness table miss", $time);
                 // No ways with valid and tagged matching values
         endcase
     endrule
@@ -1894,7 +1967,7 @@ provisos (
 
 
         if (bResp.tag == bTag) begin
-            if (`VERBOSE) $display("%t Prefetcher backwards table hit tag %h parentVirtBase %h parentOffset %h childOffset", $time, bResp.tag, bResp.parentVirtBase, bResp.parentOffset, childOffset);
+            if (`VERBOSE) $display("%t Prefetcher backwards table hit tag %h parentVirtBase %h parentOffset %h childOffset %h", $time, bResp.tag, bResp.parentVirtBase, bResp.parentOffset, childOffset);
             dataForTtRead.enq(tuple3(bResp.parentVirtBase, bResp.parentOffset, childOffset));
 
             timelinessTable.rdReq(bResp.parentVirtBase);
@@ -1913,8 +1986,12 @@ provisos (
         predictionTable.deqRdResp;
         let predResp = predictionTable.rdResp;
 
+        if (`VERBOSE) $display("%t Prefetcher processPredictionResponse inital response predIdxTag %h parentOffset %h childOffset %h confidence %h", $time, predIdxTag, predResp.parentOffset, predResp.childOffset, predResp.confidence);
+
         if (predResp.tag == predTag && predResp.confidence >= fromInteger(predictionPrefetchConfidence)
              && predResp.parentOffset < boundsLength) begin // TODO: check if off by one on offset check
+            if (`VERBOSE) $display("%t Prefetcher processPredictionResponse tag match and valid offset predIdxTag %h parentOffset %h childOffset %h confidence %h virtBase %h", $time, predIdxTag, predResp.parentOffset, predResp.childOffset, predResp.confidence, boundsVirtBase);
+
             CapPipe cp = almightyCap;
             let cp1 = setAddr(cp, boundsVirtBase);
             let cp2 = setBounds(cp1.value, boundsLength);
@@ -1929,6 +2006,7 @@ provisos (
         tlbLookupQueue.deq;
         toTlb.prefetcherReq(cap);
         tlbRequestData.enq(childOffset);
+        if (`VERBOSE) $display("%t Prefetcher doTlbLookup boundsVirtBase %h boundsOffset %h boundsLength %h childOffset %h", getBase(cap), getOffset(cap), getLength(cap), childOffset);
     endrule
 
     rule getTlbResp;
@@ -1971,7 +2049,7 @@ provisos (
 
         // Check if addr is 16 byte aligned so may be capability. 
         // Populate backwards table
-        if (addr[3:0] == 0) begin 
+        if (!wasPrefetch && addr[3:0] == 0) begin 
             // Prefetching from node to node so avoiding same virtBase
             if (current.tag && getBase(selCap) != boundsVirtBase) begin
                     backwardsTableIdxT bIdx = getBackwardsIdx(getBase(selCap));
@@ -1982,17 +2060,17 @@ provisos (
                     be.parentOffset = truncate(boundsOffset);
                     be.tag = bTag;
 
-                    if (`VERBOSE) $display("%t Prefetcher Item added to backwards table parentVirtBase %h parentOffset %h childTag %h ", $time, be.parentVirtBase, be.parentOffset, be.tag);
+                    if (`VERBOSE) $display("%t Prefetcher Item added to backwards table parentVirtBase %h parentOffset %h idx %h childTag %h ", $time, be.parentVirtBase, be.parentOffset, bIdx, be.tag);
                     
                     // TODO: should this be pulled out into seperate rule
                     backwardsTable.wrReq(bIdx, be); 
             end
         end
 
-
+    
         if (prefetchOtherInfo matches tagged Valid .prefetchInfo) begin
             if (prefetchInfo.childOffset matches tagged Valid .childOffset) begin
-                if (childOffset < saturating_truncate(getLength(selCap))) begin
+                if (current.tag && childOffset < saturating_truncate(getLength(selCap))) begin
                     // Prefetch just loaded child cap at child offset. TODO: Validate saturating_truncate is valid
 
                     CapPipe cp = almightyCap;
@@ -2000,6 +2078,8 @@ provisos (
                     let cp2 = setBounds(cp1.value, saturating_truncate(getLength(selCap)));
                     let cp3 = setOffset(cp2.value, childOffset);
                     tlbLookupQueue.enq(tuple2(cp3.value, Invalid));
+                    if (`VERBOSE ) $display("%t Prefetch childPrefetch virtBase %h childOffset %h", $time, getBase(selCap), childOffset, fshow(prefetchOtherInfo));
+
                 end
             end
         end 
