@@ -1183,7 +1183,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
     rule doTlbLookup;
         let cap = tlbLookupQueue.first;
         tlbLookupQueue.deq;
-        toTlb.prefetcherReq(cap);
+        toTlb.prefetcherReq(cap, Invalid);
     endrule
 
     rule getTlbResp;
@@ -1829,8 +1829,7 @@ provisos (
 
     RWBramCore#(confidenceUpdateIdxT, confidenceUpdateTableEntryT) confidenceUpdateTable <- mkRWBramCoreForwarded;
 
-    Fifo#(8, Tuple2#(CapPipe, Maybe#(offsetT))) tlbLookupQueue <- mkOverflowPipelineFifo;
-    Fifo#(8, Maybe#(offsetT)) tlbRequestData <- mkPipelineFifo;
+    Fifo#(8, Tuple3#(CapPipe, Maybe#(offsetT), predictionTableIdxTagT)) tlbLookupQueue <- mkOverflowPipelineFifo;
 
     Reg#(Bool) initBackwardsDone <- mkReg(False);
     Reg#(backwardsTableIdxT) initBackwardsIndex <- mkReg(0);
@@ -1997,28 +1996,31 @@ provisos (
             let cp2 = setBounds(cp1.value, boundsLength);
             let cp3 = setOffset(cp2.value, predResp.parentOffset);
 
-            tlbLookupQueue.enq(tuple2(cp3.value, Valid (predResp.childOffset)));
+            tlbLookupQueue.enq(tuple3(cp3.value, Valid (predResp.childOffset), predIdxTag));
         end
     endrule
 
     rule doTlbLookup;
-        let {cap, childOffset} = tlbLookupQueue.first;
+        let {cap, childOffset, pcHash} = tlbLookupQueue.first;
         tlbLookupQueue.deq;
-        toTlb.prefetcherReq(cap);
-        tlbRequestData.enq(childOffset);
-        if (`VERBOSE) $display("%t Prefetcher doTlbLookup boundsVirtBase %h boundsOffset %h boundsLength %h childOffset %h", getBase(cap), getOffset(cap), getLength(cap), childOffset);
+
+        toTlb.prefetcherReq(cap, Valid(PrefetchOtherInfo {childOffset: childOffset, pcHash: pcHash}));
+        if (`VERBOSE) $display("%t Prefetcher doTlbLookup boundsVirtBase %h boundsOffset %h boundsLength %h childOffset %h", $time, getBase(cap), getOffset(cap), getLength(cap), childOffset);
     endrule
 
     rule getTlbResp;
         let resp = toTlb.prefetcherResp;
         toTlb.deqPrefetcherResp;
 
-        let childOffset = tlbRequestData.first;
-        tlbRequestData.deq;
-
         if (`VERBOSE) $display("%t Prefetcher got TLB response: ", $time, fshow(resp));
+
+        doAssert(isValid(resp.prefetchOtherInfo), "TLB response should have tagged prefetchOtherInfo");
+
         if (!resp.haveException && resp.paddr != 0) begin
-            prefetchQueue.enq(tuple3(resp.paddr, resp.cap, PrefetchOtherInfo {childOffset: childOffset}));
+            prefetchQueue.enq(tuple3(resp.paddr, resp.cap, fromMaybe(?, resp.prefetchOtherInfo)));
+        end
+    endrule
+
         end
     endrule
 

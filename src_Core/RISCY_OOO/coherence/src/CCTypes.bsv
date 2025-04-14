@@ -202,6 +202,7 @@ typedef struct {
 typedef struct {
     `ifdef DATA_PREFETCHER_CAP_PC_BACKWARDS
         Maybe#(Bit#(64)) childOffset;
+        Bit#(32) pcHash;
     `endif
 } PrefetchOtherInfo deriving (Bits, Eq, FShow);
 
@@ -239,10 +240,11 @@ typedef struct {
     Bool haveException;
     Bool permsCheckPass;
     CapPipe cap;
+    Maybe#(PrefetchOtherInfo) prefetchOtherInfo;
 } DTlbRespToPrefetcher deriving (Bits, Eq, FShow);
 
 interface DTlbToPrefetcher;
-    method Action prefetcherReq(CapPipe addr);
+    method Action prefetcherReq(CapPipe addr, Maybe#(PrefetchOtherInfo) prefetchOtherInfo);
     method DTlbRespToPrefetcher prefetcherResp;
     method Action deqPrefetcherResp;
 endinterface

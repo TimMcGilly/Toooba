@@ -134,6 +134,9 @@ typedef struct {
     Bool allowCapLoad;
     Maybe#(CSR_XCapCause) capException;
     Maybe#(BoundsCheck) check;
+    
+    Maybe#(PrefetchOtherInfo) prefetchOtherInfo;
+
 `ifdef KONATA
     Bit#(64) u_id;
 `endif
@@ -215,7 +218,7 @@ module mkDTlbSynth(DTlbSynth);
         };
     endfunction
     
-    function DTlbReq#(MemExeToFinish) createReqForPrefetch(CapPipe vaddr);
+    function DTlbReq#(MemExeToFinish) createReqForPrefetch(CapPipe vaddr, Maybe#(PrefetchOtherInfo) prefetchOtherInfo);
         //return unpack(0);
         return (DTlbReq {
             inst: MemExeToFinish {
@@ -228,6 +231,7 @@ module mkDTlbSynth(DTlbSynth);
                 store_data: unpack(0),
                 store_data_BE: unpack(0),
 `endif
+                prefetchOtherInfo: prefetchOtherInfo,
                 misaligned: unpack(0),
                 capStore: False,
                 allowCapLoad: False,
@@ -240,8 +244,9 @@ module mkDTlbSynth(DTlbSynth);
 
     endfunction
     function CapPipe getCap(MemExeToFinish inst) = inst.vaddr;
+    function Maybe#(PrefetchOtherInfo) getPrefetchOtherInfo(MemExeToFinish inst) = inst.prefetchOtherInfo;
     
-    let m <- mkDTlb(getTlbReq, createReqForPrefetch, getCap);
+    let m <- mkDTlb(getTlbReq, createReqForPrefetch, getCap, getPrefetchOtherInfo);
     return m;
 endmodule
 
@@ -683,7 +688,8 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
                 allowCapLoad: getHardPerms(x.rVal1).permitLoadCap && x.origBE == DataMemAccess(unpack(~0)),
                 capException: capChecksMem(x.rVal1, x.rVal2, x.cap_checks, x.mem_func, x.origBE),
                 check: prepareBoundsCheck(x.rVal1, x.rVal2, almightyCap/*ToDo: pcc*/,
-                                          ddc, getAddr(x.vaddr), accessByteCount, x.cap_checks)
+                                          ddc, getAddr(x.vaddr), accessByteCount, x.cap_checks),
+                prefetchOtherInfo: Invalid
 `ifdef KONATA
                 , u_id: x.u_id
 `endif

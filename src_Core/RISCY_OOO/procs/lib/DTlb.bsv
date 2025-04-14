@@ -148,8 +148,9 @@ typedef union tagged {
 
 module mkDTlb#(
     function TlbReq getTlbReq(instT inst),
-    function DTlbReq#(instT) createReqForPrefetch(CapPipe vaddr),
-    function CapPipe getCap(instT inst))
+    function DTlbReq#(instT) createReqForPrefetch(CapPipe vaddr, Maybe#(PrefetchOtherInfo) prefetchOtherInfo),
+    function CapPipe getCap(instT inst),
+    function Maybe#(PrefetchOtherInfo) getPrefetchOtherInfo(instT inst))
     (DTlb::DTlb#(instT)) provisos(Bits#(instT, a__), FShow#(instT));
     Bool verbose = True;
 
@@ -684,11 +685,11 @@ module mkDTlb#(
     endmethod
 
     interface DTlbToPrefetcher toPrefetcher;
-        method Action prefetcherReq(CapPipe vaddr) if(
+        method Action prefetcherReq(CapPipe vaddr, Maybe#(PrefetchOtherInfo) prefetchOtherInfo) if(
             !isValid(rqFromProc.wget) && !needFlush && !ldTransRsFromPQ.notEmpty && 
             rqToPQ.notFull && freeQInited && freeQ.notEmpty && !isValid(doingWrongSpec.wget) && (prefetchTimeout == 0) && (freeQEnqs-freeQDeqs >= 3)
         );
-            DTlbReq#(instT) req = createReqForPrefetch(vaddr);
+            DTlbReq#(instT) req = createReqForPrefetch(vaddr, prefetchOtherInfo);
             //wrongSpec_prefetcherReq_conflict.wset(?);
             $display ("%t DTlb prefetcherReq ", $time, fshow(req));
             rqFromPrefetcher.wset(req);
@@ -713,7 +714,8 @@ module mkDTlb#(
                 paddr: tpl_1(resp),
                 haveException: isValid(tpl_2(resp)),
                 permsCheckPass: tpl_3(resp),
-                cap: getCap(pendInst[idx])
+                cap: getCap(pendInst[idx]),
+                prefetchOtherInfo: getPrefetchOtherInfo(pendInst[idx])
             };
         endmethod
     endinterface
