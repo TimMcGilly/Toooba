@@ -321,7 +321,7 @@ interface MemExePipeline;
 endinterface
 
 module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
-    Bool verbose = True;
+    Bool verbose = False;
 
     // we change cache request in case of single core, becaues our MSI protocol
     // is not good with single core
@@ -576,7 +576,7 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
         if(x.regs.src1 matches tagged Valid .src1 &&& src1 != 0) begin
             rVal1 <- readRFBypass(src1, regsReady.src1, inIfc.rf_rd1(src1), bypassWire);
         end
-        if (x.ddc_offset) rVal1 = incOffset(ddc, getAddr(rVal1)).value;
+        if (x.ddc_offset) rVal1 = setAddr(ddc, getAddr(rVal1)).value;
 
         // get rVal2 (check bypass)
         CapPipe rVal2 = nullCap;
