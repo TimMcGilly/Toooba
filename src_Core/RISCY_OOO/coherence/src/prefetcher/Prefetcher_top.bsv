@@ -80,7 +80,7 @@ module mkAlwaysRequestTlbPrefetcher#(DTlbToPrefetcher toTlb)(Prefetcher);
         $display ("%t Prefetcher req to TLB", $time);
         CapPipe start = almightyCap;
         let cp = setAddr(start, 64'hc000dead);
-        toTlb.prefetcherReq(cp.value);
+        toTlb.prefetcherReq(cp.value, Invalid);
     endrule
     rule asd;
         $display ("%t Prefetcher tlb deqprefetcherresp", $time);
