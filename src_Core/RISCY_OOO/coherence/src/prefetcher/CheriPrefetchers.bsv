@@ -1906,7 +1906,7 @@ provisos (
     endrule
 
     function backwardsTableIdxTagT getBackwardsIdxTag(Addr childVirtBase) = 
-        truncate(childVirtBase >> 4);
+        hash(childVirtBase); 
 
     function predictionTableIdxTagT getPredictionIdxTag(PCHash pcHash) =
         hash(pcHash); 
@@ -2047,8 +2047,8 @@ provisos (
         $display("%t Prefetcher logReportAccess addr %h pcHash %h hitMiss %b boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h op %h", $time, addr, pcHash, hitMiss, boundsOffset, boundsLength, boundsVirtBase, capPerms, op);
         if (hitMiss == MISS) begin 
             backwardsTableIdxTagT bIdxTag = getBackwardsIdxTag(boundsVirtBase);
-            backwardsTableIdxT bIdx = truncate(boundsVirtBase);
-            backwardsTableTagT bTag = truncateLSB(boundsVirtBase);
+            backwardsTableIdxT bIdx = truncate(bIdxTag);
+            backwardsTableTagT bTag = truncateLSB(bIdxTag);
             dataForBtRead.enq(tuple3(bTag, boundsOffset, pcHash));
             backwardsTable.rdReq(bIdx);
         end
@@ -2074,8 +2074,8 @@ provisos (
             // Prefetching from node to node so avoiding same virtBase
             if (current.tag && getBase(selCap) != boundsVirtBase) begin
                     backwardsTableIdxTagT bIdxTag = getBackwardsIdxTag(getBase(selCap));
-                    backwardsTableIdxT bIdx = truncate(boundsVirtBase);
-                    backwardsTableTagT bTag = truncateLSB(boundsVirtBase);
+                    backwardsTableIdxT bIdx = truncate(bIdxTag);
+                    backwardsTableTagT bTag = truncateLSB(bIdxTag);
 
                     backwardsTableEntryT be;
                     be.valid = True;
