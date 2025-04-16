@@ -1755,6 +1755,7 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
 endmodule
 
 typedef struct {
+    Bool valid;
     Addr parentVirtBase;
     Bit#(offsetBits) parentOffset;
     Bit#(tagBits) tag; 
@@ -1842,6 +1843,7 @@ provisos (
 
     rule doBackwardsTableInit(!initBackwardsDone);
         backwardsTableEntryT be;
+        be.valid = False;
         be.parentVirtBase = 0;
         be.parentOffset = 0;
         be.tag = 0;
@@ -1965,14 +1967,14 @@ provisos (
         backwardsTable.deqRdResp;
 
 
-        if (bResp.tag == bTag) begin
+        if (bResp.tag == bTag && bResp.valid) begin
             if (`VERBOSE) $display("%t Prefetcher backwards table hit tag %h parentVirtBase %h parentOffset %h childOffset %h", $time, bResp.tag, bResp.parentVirtBase, bResp.parentOffset, childOffset);
             dataForTtRead.enq(tuple3(bResp.parentVirtBase, bResp.parentOffset, childOffset));
 
             timelinessTable.rdReq(bResp.parentVirtBase);
         end
         else begin
-            if (`VERBOSE) $display("%t Prefetcher backwards table collision tableTag %h ourTag %h", $time, bResp.tag, bTag);
+            if (`VERBOSE) $display("%t Prefetcher backwards table collision or invalid tableTag %h ourTag %h valid %h", $time, bResp.tag, bTag, bResp.valid);
         end
     endrule
 
@@ -2058,6 +2060,7 @@ provisos (
                     backwardsTableTagT bTag = getBackwardsTag(getBase(selCap));
 
                     backwardsTableEntryT be;
+                    be.valid = True;
                     be.parentVirtBase = boundsVirtBase;
                     be.parentOffset = truncate(boundsOffset);
                     be.tag = bTag;
