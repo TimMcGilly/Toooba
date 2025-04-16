@@ -1599,18 +1599,22 @@ endinterface
 
 module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
     NumAlias#(idxBits, TLog#(numOfSets)),
-    NumAlias#(tagBits, TSub#(TSub#(64, 4), idxBits)),
+    NumAlias#(tagBits, TSub#(64, idxBits)),
+    NumAlias#(idxTagBits, TAdd#(idxBits, tagBits)),
 
     Alias#(wayT, Bit#(TLog#(numOfWays))),
     Alias#(indexT, Bit#(idxBits)),
     Alias#(tagT, Bit#(tagBits)),
+    Alias#(indexTagT, Bit#(idxTagBits)),
     Alias#(repInfoT, wayT),
     
     Alias#(timelinessEntryT, TimelinessEntry),
     Alias#(timelinessSetAssocEntryT, TimelinessSetAssocEntry#(tagBits)),
 
     Add#(1, a__, numOfWays),
-    Add#(b__, idxBits, 64)
+    Add#(b__, idxBits, 64),
+    Add#(1, c__, TDiv#(64, idxTagBits)),
+    Add#(d__, 64, TMul#(TDiv#(64, idxTagBits), idxTagBits))
 );
     // See SetAssocTlb.bsv for basis of set associative data structure
 
@@ -1647,8 +1651,7 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
     Reg#(Maybe#(indexT)) pendReq_deq = pendReq[0];
     Reg#(Maybe#(indexT)) pendReq_enq = pendReq[1];
     
-    function indexT getIndex(Addr virtBase) = truncate(virtBase >> 4);
-    function tagT getTag(Addr virtBase) = truncateLSB(virtBase >> 4);
+    function indexTagT getIndexTag(Addr virtBase) = hash(virtBase);
     
     Wire#(Maybe#(indexT)) pendIndex <- mkBypassWire;
     (* fire_when_enabled, no_implicit_conditions *)
@@ -1676,8 +1679,9 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
         repBram.deqRdResp;
 
         // Write new way and update fifo
-        indexT idx = getIndex(virtBase);
-        tagT tag = getTag(virtBase);
+        indexTagT idxTag = getIndexTag(virtBase);
+        indexT idx = truncate(idxTag);
+        tagT tag = truncateLSB(idxTag);
 
         timelinessEntryT te;
         te.pcHash = pcHash;
@@ -1695,7 +1699,9 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
     endrule
 
     method Action wrReq (Addr virtBase, PCHash pcHash) if(!isValid(pendReq_enq));
-        indexT idx = getIndex(virtBase);
+        indexTagT idxTag = getIndexTag(virtBase);
+        indexT idx = truncate(idxTag);
+        tagT tag = truncateLSB(idxTag);
 
         // Implicit condition that there are no current in progress writes on idx
         when(pendIndex != Valid (idx), noAction);
@@ -1703,12 +1709,14 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
         pendReq_enq <= Valid(idx);
         
         writeQ.enq(tuple2(virtBase, pcHash));
-        repBram.rdReq(getIndex(virtBase));
+        repBram.rdReq(idx);
     endmethod
 
     method Action rdReq(Addr virtBase);
-        indexT idx = getIndex(virtBase);
-        tagT tag = getTag(virtBase);
+        indexTagT idxTag = getIndexTag(virtBase);
+        indexT idx = truncate(idxTag);
+        tagT tag = truncateLSB(idxTag);
+
         for (Integer i = 0; i < valueof(numOfWays); i = i+1) begin
             tRam[i].rdReq(idx);
         end
@@ -1780,8 +1788,13 @@ module mkCapPCBackwards#(DTlbToPrefetcher toTlb, Parameter#(backwardsTableSize) 
     Integer predictionPrefetchConfidence)(CheriPCPrefetcher) 
 provisos (
     NumAlias#(backwardsTableIdxBits, TLog#(backwardsTableSize)),
-    NumAlias#(backwardsTableTagBits, TSub#(TSub#(64, 4), backwardsTableIdxBits)),
+    NumAlias#(backwardsTableTagBits, TSub#(64, backwardsTableIdxBits)),
+    NumAlias#(backwardsTableIdxTagBits, TAdd#(backwardsTableIdxBits, backwardsTableTagBits)),
     NumAlias#(offsetBits, 64), // Could likely use a smaller number of bits for offset
+
+    NumAlias#(timelinessIdxBits, TLog#(timelinessTableSets)),
+    NumAlias#(timelinessTagBits, TSub#(64, timelinessIdxBits)),
+    NumAlias#(timelinessIdxTagBits, TAdd#(timelinessIdxBits, timelinessTagBits)),
     
     NumAlias#(predictionTableIdxBits, TLog#(predictionTableSize)),
     NumAlias#(predictionTableTagBits, 32),
@@ -1793,6 +1806,7 @@ provisos (
     
     Alias#(backwardsTableIdxT, Bit#(backwardsTableIdxBits)),
     Alias#(backwardsTableTagT, Bit#(backwardsTableTagBits)),
+    Alias#(backwardsTableIdxTagT, Bit#(backwardsTableIdxTagBits)),
     Alias#(offsetT, Bit#(offsetBits)),
     Alias#(backwardsTableEntryT, BackwardsEntry#(backwardsTableTagBits, offsetBits)),
 
@@ -1810,11 +1824,16 @@ provisos (
     Alias#(confidenceUpdateTableEntryT, ConfidenceUpdateEntry#(confidenceUpdateTagBits, offsetBits)),
 
     Add#(a__, backwardsTableIdxBits, 64),
-    Add#(1, b__, timelinessTableWays),
-    Add#(c__, TLog#(timelinessTableSets), 64),
-    Add#(1, d__, TDiv#(32, predictionTableIdxTagBits)), // 
-    Add#(e__, 32, TMul#(TDiv#(32, predictionTableIdxTagBits),
-    predictionTableIdxTagBits))
+    Add#(1, b__, TDiv#(64, backwardsTableIdxTagBits)),
+    Add#(c__, 64, TMul#(TDiv#(64, backwardsTableIdxTagBits), backwardsTableIdxTagBits)),
+
+    Add#(1, d__, timelinessTableWays),
+    Add#(e__, TLog#(timelinessTableSets), 64),
+    Add#(1, f__, TDiv#(64, timelinessIdxTagBits)),
+    Add#(g__, 64, TMul#(TDiv#(64, timelinessIdxTagBits), timelinessIdxTagBits)),
+
+    Add#(1, h__, TDiv#(32, predictionTableIdxTagBits)),
+    Add#(i_, 32, TMul#(TDiv#(32, predictionTableIdxTagBits), predictionTableIdxTagBits))
 );
     Fifo#(8, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) prefetchQueue <- mkOverflowBypassFifo;
 
@@ -1886,11 +1905,8 @@ provisos (
         end
     endrule
 
-    function backwardsTableIdxT getBackwardsIdx(Addr childVirtBase) =
+    function backwardsTableIdxTagT getBackwardsIdxTag(Addr childVirtBase) = 
         truncate(childVirtBase >> 4);
-
-    function backwardsTableTagT getBackwardsTag(Addr childVirtBase) =
-        truncateLSB(childVirtBase >> 4);
 
     function predictionTableIdxTagT getPredictionIdxTag(PCHash pcHash) =
         hash(pcHash); 
@@ -2030,8 +2046,9 @@ provisos (
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
         $display("%t Prefetcher logReportAccess addr %h pcHash %h hitMiss %b boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h op %h", $time, addr, pcHash, hitMiss, boundsOffset, boundsLength, boundsVirtBase, capPerms, op);
         if (hitMiss == MISS) begin 
-            backwardsTableIdxT bIdx = getBackwardsIdx(boundsVirtBase);
-            backwardsTableTagT bTag = getBackwardsTag(boundsVirtBase);
+            backwardsTableIdxTagT bIdxTag = getBackwardsIdxTag(boundsVirtBase);
+            backwardsTableIdxT bIdx = truncate(boundsVirtBase);
+            backwardsTableTagT bTag = truncateLSB(boundsVirtBase);
             dataForBtRead.enq(tuple3(bTag, boundsOffset, pcHash));
             backwardsTable.rdReq(bIdx);
         end
@@ -2056,8 +2073,9 @@ provisos (
         if (!wasPrefetch && addr[3:0] == 0) begin 
             // Prefetching from node to node so avoiding same virtBase
             if (current.tag && getBase(selCap) != boundsVirtBase) begin
-                    backwardsTableIdxT bIdx = getBackwardsIdx(getBase(selCap));
-                    backwardsTableTagT bTag = getBackwardsTag(getBase(selCap));
+                    backwardsTableIdxTagT bIdxTag = getBackwardsIdxTag(getBase(selCap));
+                    backwardsTableIdxT bIdx = truncate(boundsVirtBase);
+                    backwardsTableTagT bTag = truncateLSB(boundsVirtBase);
 
                     backwardsTableEntryT be;
                     be.valid = True;
