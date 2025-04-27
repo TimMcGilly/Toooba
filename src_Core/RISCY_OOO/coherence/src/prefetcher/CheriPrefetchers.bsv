@@ -1652,7 +1652,7 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
     Reg#(Maybe#(indexT)) pendReq_enq = pendReq[1];
     
     function indexTagT getIndexTag(Addr virtBase) = hash(virtBase);
-    
+
     Wire#(Maybe#(indexT)) pendIndex <- mkBypassWire;
     (* fire_when_enabled, no_implicit_conditions *)
     rule setPendIndex;
@@ -1712,15 +1712,17 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
         repBram.rdReq(idx);
     endmethod
 
-    method Action rdReq(Addr virtBase);
+    method Action rdReq(Addr virtBase) if(!isValid(pendReq_enq));
         indexTagT idxTag = getIndexTag(virtBase);
         indexT idx = truncate(idxTag);
         tagT tag = truncateLSB(idxTag);
 
+        when(pendIndex != Valid (idx), noAction);
+
         for (Integer i = 0; i < valueof(numOfWays); i = i+1) begin
             tRam[i].rdReq(idx);
         end
-
+        
         // Request replacement info as well for 
         repBram.rdReq(idx);
         
@@ -1743,7 +1745,7 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
         let repResp = repBram.rdResp; 
         
         let rotateNum = (repResp == 0) ? 0 : fromInteger(valueof(TSub#(numOfWays,1)))-repResp+1;
-
+        
         // Rotate so index 0 is oldest
         let rotatedResp = rotateBy(resps, unpack(rotateNum));
         
@@ -1782,6 +1784,8 @@ typedef struct {
     Bit#(tagBits) tag; 
 }  ConfidenceUpdateEntry#(numeric type tagBits, numeric type offsetBits) deriving (Bits, Eq, FShow);
 
+`ifdef DATA_PREFETCHER_CAP_PC_BACKWARDS
+
 module mkCapPCBackwards#(DTlbToPrefetcher toTlb, Parameter#(backwardsTableSize) _, Parameter#(timelinessTableWays) __, 
     Parameter#(timelinessTableSets) ___, Parameter#(predictionTableSize) ____, Parameter#(confidenceBits) _____, 
     Parameter#(confidenceUpdateTableSize) ______, Integer predictionReplacementConfidence, 
@@ -1797,7 +1801,7 @@ provisos (
     NumAlias#(timelinessIdxTagBits, TAdd#(timelinessIdxBits, timelinessTagBits)),
     
     NumAlias#(predictionTableIdxBits, TLog#(predictionTableSize)),
-    NumAlias#(predictionTableTagBits, 32),
+    NumAlias#(predictionTableTagBits, TSub#(32, predictionTableIdxBits)),
     NumAlias#(predictionTableIdxTagBits, TAdd#(predictionTableIdxBits, predictionTableTagBits)),
 
     NumAlias#(confidenceUpdateIdxBits, TLog#(confidenceUpdateTableSize)),
@@ -1832,8 +1836,9 @@ provisos (
     Add#(1, f__, TDiv#(64, timelinessIdxTagBits)),
     Add#(g__, 64, TMul#(TDiv#(64, timelinessIdxTagBits), timelinessIdxTagBits)),
 
-    Add#(1, h__, TDiv#(32, predictionTableIdxTagBits)),
-    Add#(i_, 32, TMul#(TDiv#(32, predictionTableIdxTagBits), predictionTableIdxTagBits))
+    Add#(h__, predictionTableIdxBits, 32),
+    Add#(1, i__, TDiv#(32, predictionTableIdxTagBits)),
+    Add#(j_, 32, TMul#(TDiv#(32, predictionTableIdxTagBits), predictionTableIdxTagBits))
 );
     Fifo#(8, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) prefetchQueue <- mkOverflowBypassFifo;
 
@@ -2039,8 +2044,6 @@ provisos (
         end
     endrule
 
-        end
-    endrule
 
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, MemOp op, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
@@ -2100,8 +2103,8 @@ provisos (
                     let cp1 = setAddr(cp, getBase(selCap));
                     let cp2 = setBounds(cp1.value, saturating_truncate(getLength(selCap)));
                     let cp3 = setOffset(cp2.value, childOffset);
-                    tlbLookupQueue.enq(tuple2(cp3.value, Invalid));
-                    if (`VERBOSE ) $display("%t Prefetch childPrefetch virtBase %h childOffset %h", $time, getBase(selCap), childOffset, fshow(prefetchOtherInfo));
+                    tlbLookupQueue.enq(tuple3(cp3.value, Invalid, getPredictionIdxTag(prefetchInfo.pcHash)));
+                    if (`VERBOSE ) $display("%t Prefetch childPrefetch virtBase %h childOffset %h ", $time, getBase(selCap), childOffset, fshow(prefetchOtherInfo));
 
                 end
             end
@@ -2141,3 +2144,4 @@ provisos (
 `endif
 
 endmodule
+`endif
