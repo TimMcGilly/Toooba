@@ -1785,12 +1785,11 @@ typedef struct {
 } BackwardsEntry #(numeric type tagBits, numeric type offsetBits) deriving (Bits, Eq, FShow);
 
 typedef struct {
-    Bool valid;
     Bit#(offsetBits) parentOffset;
     Bit#(offsetBits) childOffset;
     Bit#(confidenceBits) confidence;
     Bit#(tagBits) tag; 
-} PredicitionEntry#(numeric type tagBits, numeric type offsetBits, numeric type confidenceBits) deriving (Bits, Eq, FShow);
+} PredictionEntry#(numeric type tagBits, numeric type offsetBits, numeric type confidenceBits) deriving (Bits, Eq, FShow);
 
 typedef struct {
     PCHash pcHash;
@@ -1832,7 +1831,7 @@ provisos (
     Alias#(predictionTableIdxT, Bit#(predictionTableIdxBits)),
     Alias#(predictionTableTagT, Bit#(predictionTableTagBits)),
     Alias#(predictionTableIdxTagT, Bit#(predictionTableIdxTagBits)),
-    Alias#(predictionTableEntryT, PredicitionEntry#(predictionTableTagBits, offsetBits, confidenceBits)),
+    Alias#(predictionTableEntryT, PredictionEntry#(predictionTableTagBits, offsetBits, confidenceBits)),
 
     Alias#(confidenceUpdateIdxT, Bit#(confidenceUpdateIdxBits)),
     Alias#(confidenceUpdateTagT, Bit#(confidenceUpdateTagBits)),
@@ -2041,7 +2040,7 @@ provisos (
             let cp2 = setBounds(cp1.value, boundsLength);
             let cp3 = setOffset(cp2.value, predResp.parentOffset);
 
-            tlbLookupQueue.enq(tuple3(cp3.value, Valid (predResp.childOffset), predIdxTag));
+            // tlbLookupQueue.enq(tuple3(cp3.value, Valid (predResp.childOffset), predIdxTag));
         end
     endrule
 
@@ -2133,7 +2132,7 @@ provisos (
                     let cp1 = setAddr(cp, getBase(selCap));
                     let cp2 = setBounds(cp1.value, saturating_truncate(getLength(selCap)));
                     let cp3 = setOffset(cp2.value, childOffset);
-                    tlbLookupQueue.enq(tuple3(cp3.value, Invalid, getPredictionIdxTag(prefetchInfo.pcHash)));
+                    // tlbLookupQueue.enq(tuple3(cp3.value, Invalid, getPredictionIdxTag(prefetchInfo.pcHash)));
                     if (`VERBOSE ) $display("%t Prefetch childPrefetch virtBase %h childOffset %h ", $time, getBase(selCap), childOffset, fshow(prefetchOtherInfo));
 
                 end
