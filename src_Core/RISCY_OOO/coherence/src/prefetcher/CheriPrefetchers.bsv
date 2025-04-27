@@ -1618,14 +1618,16 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
 );
     // See SetAssocTlb.bsv for basis of set associative data structure
 
-    Vector#(numOfWays, RWBramCore#(indexT, timelinessSetAssocEntryT)) tRam <- replicateM(mkRWBramCore);
+    Vector#(numOfWays, RWBramCore#(indexT, timelinessSetAssocEntryT)) tRam <- replicateM(mkRWBramCoreForwarded);
 
     // Stores overflowing counter for fifo replacement of ways
     RWBramCore#(indexT, wayT) repBram <- mkRWBramCoreForwarded;
+    RWBramCore#(indexT, wayT) repBramCopy <- mkRWBramCoreForwarded;
     
     Fifo#(1, Tuple2#(Addr, PCHash)) writeQ <- mkPipelineFifo;
-    Fifo#(1, tagT) rdReqQ <- mkPipelineFifo; 
+    Fifo#(1, indexTagT) rdReqQ <- mkPipelineFifo; 
 
+    Fifo#(1, TimelinessTableResp) rdRespQ <- mkBypassFifo;
 
     // initialize BRAM
     Reg#(Bool) initDone <- mkReg(False);
@@ -1640,6 +1642,7 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
             });
         end
         repBram.wrReq(initIndex, 0);
+        repBramCopy.wrReq(initIndex, 0);
         initIndex <= initIndex + 1;
         if(initIndex == maxBound) begin
             initDone <= True;
@@ -1696,6 +1699,43 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
         tRam[repResp].wrReq(idx, tse);
 
         repBram.wrReq(idx, nextReplacement(repResp));
+        repBramCopy.wrReq(idx, nextReplacement(repResp));
+    endrule
+
+    // (* descending_urgency = "replacementResp, processRdReq" *) 
+    rule processRdReq;
+        rdReqQ.deq;
+        indexTagT idxTag =  rdReqQ.first;
+        indexT idx = truncate(idxTag);
+        tagT tag = truncateLSB(idxTag);
+
+        for(Integer i = 0; i < valueof(numOfWays); i = i+1) begin
+            tRam[i].deqRdResp;
+        end
+
+        Vector#(numOfWays, timelinessSetAssocEntryT) resps; 
+        for(Integer i = 0; i < valueof(numOfWays); i = i+1) begin
+            resps[i] = tRam[i].rdResp;
+        end
+
+        repBramCopy.deqRdResp;
+        let repResp = repBramCopy.rdResp; 
+        
+        let rotateNum = (repResp == 0) ? 0 : fromInteger(valueof(TSub#(numOfWays,1)))-repResp+1;
+        
+        // Rotate so index 0 is oldest
+        let rotatedResp = rotateBy(resps, unpack(rotateNum));
+        
+        function timelinessSetAssocEntryT oldestValid(timelinessSetAssocEntryT a, timelinessSetAssocEntryT b);
+            return (a.valid && a.tag == tag) ? a : b;
+        endfunction
+
+        // function bool isMatch(timelinessSetAssocEntryT a)
+
+        let result = fold(oldestValid, rotatedResp);
+        if (`VERBOSE) $display("%t prefetcher timeliness table rdResp valid %b idx %h tag %h pcHash %h repResp %d rotateNum %d fshow ", $time, result.valid, idx, result.tag, result.entry.pcHash, repResp, rotateNum, fshow(resps), fshow(rotatedResp));
+
+        rdRespQ.enq((result.valid && result.tag == tag) ? Valid (result.entry): Invalid);
     endrule
 
     method Action wrReq (Addr virtBase, PCHash pcHash) if(!isValid(pendReq_enq));
@@ -1724,41 +1764,14 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
         end
         
         // Request replacement info as well for 
-        repBram.rdReq(idx);
+        repBramCopy.rdReq(idx);
         
-        rdReqQ.enq(tag);
+        rdReqQ.enq(idxTag);
     endmethod
 
     method ActionValue#(TimelinessTableResp) rdResp();
-        rdReqQ.deq;
-        tagT tag =  rdReqQ.first;
-        for(Integer i = 0; i < valueof(numOfWays); i = i+1) begin
-            tRam[i].deqRdResp;
-        end
-
-        Vector#(numOfWays, timelinessSetAssocEntryT) resps; 
-        for(Integer i = 0; i < valueof(numOfWays); i = i+1) begin
-            resps[i] = tRam[i].rdResp;
-        end
-
-        repBram.deqRdResp;
-        let repResp = repBram.rdResp; 
-        
-        let rotateNum = (repResp == 0) ? 0 : fromInteger(valueof(TSub#(numOfWays,1)))-repResp+1;
-        
-        // Rotate so index 0 is oldest
-        let rotatedResp = rotateBy(resps, unpack(rotateNum));
-        
-        function timelinessSetAssocEntryT oldestValid(timelinessSetAssocEntryT a, timelinessSetAssocEntryT b);
-            return (a.valid && a.tag == tag) ? a : b;
-        endfunction
-
-        // function bool isMatch(timelinessSetAssocEntryT a)
-
-        let result = fold(oldestValid, rotatedResp);
-        if (`VERBOSE) $display("%t prefetcher timeliness table rdResp valid %b tag %h pcHash %h repResp %d rotateNum %d fshow ", $time, result.valid, result.tag, result.entry.pcHash, repResp, rotateNum, fshow(resps), fshow(rotatedResp));
-
-        return (result.valid && result.tag == tag) ? Valid (result.entry): Invalid;
+        rdRespQ.deq;
+        return rdRespQ.first; 
     endmethod
 
 
@@ -1772,6 +1785,7 @@ typedef struct {
 } BackwardsEntry #(numeric type tagBits, numeric type offsetBits) deriving (Bits, Eq, FShow);
 
 typedef struct {
+    Bool valid;
     Bit#(offsetBits) parentOffset;
     Bit#(offsetBits) childOffset;
     Bit#(confidenceBits) confidence;
@@ -1783,8 +1797,6 @@ typedef struct {
     Bit#(offsetBits) parentOffset;
     Bit#(tagBits) tag; 
 }  ConfidenceUpdateEntry#(numeric type tagBits, numeric type offsetBits) deriving (Bits, Eq, FShow);
-
-`ifdef DATA_PREFETCHER_CAP_PC_BACKWARDS
 
 module mkCapPCBackwards#(DTlbToPrefetcher toTlb, Parameter#(backwardsTableSize) _, Parameter#(timelinessTableWays) __, 
     Parameter#(timelinessTableSets) ___, Parameter#(predictionTableSize) ____, Parameter#(confidenceBits) _____, 
@@ -1845,12 +1857,14 @@ provisos (
     Fifo#(1, Tuple3#(backwardsTableTagT, offsetT, PCHash)) dataForBtRead <- mkPipelineFifo;
     RWBramCore#(backwardsTableIdxT, backwardsTableEntryT) backwardsTable <- mkRWBramCoreForwarded;
     
+    Fifo#(4, Tuple2#(Addr, PCHash)) dataForTtWriteEnq <- mkPipelineFifo;
     Fifo#(1, Tuple3#(Addr, offsetT, offsetT)) dataForTtRead <- mkPipelineFifo;
     timelinessTableT timelinessTable <- mkTimelinessTable;
 
     Fifo#(1, Tuple3#(predictionTableIdxTagT, offsetT, offsetT)) dataForPredReplacmentRd <- mkPipelineFifo;
     Fifo#(1, Tuple3#(predictionTableIdxTagT, Addr, Addr)) dataForPredRd <- mkPipelineFifo;
     RWBramCore#(predictionTableIdxT, predictionTableEntryT) predictionTable <- mkRWBramCoreForwarded;
+    RWBramCore#(predictionTableIdxT, predictionTableEntryT) predictionTableCopy <- mkRWBramCoreForwarded;
 
     RWBramCore#(confidenceUpdateIdxT, confidenceUpdateTableEntryT) confidenceUpdateTable <- mkRWBramCoreForwarded;
 
@@ -1888,6 +1902,7 @@ provisos (
         pe.tag = 0;
         
         predictionTable.wrReq(initPredictionIndex, pe);
+        predictionTableCopy.wrReq(initPredictionIndex, pe);
 
         initPredictionIndex <= initPredictionIndex + 1;
         if(initPredictionIndex == maxBound) begin
@@ -1931,8 +1946,11 @@ provisos (
 
         if (pe.tag == predTag && pe.parentOffset == parentOffset && pe.childOffset == childOffset) begin
             if (`VERBOSE) $display("%t prefetecher processPredictionReplacementRd match +1 oldConfidence %h idx %h tag %h",$time, pe.confidence, predIdx, predTag);
-            pe.confidence = pe.confidence + 1;
-            predictionTable.wrReq(predIdx, pe);
+            if (pe.confidence < maxBound) begin
+                pe.confidence = pe.confidence + 1;
+                predictionTable.wrReq(predIdx, pe);
+                predictionTableCopy.wrReq(predIdx, pe);
+            end
         end
         else begin // Decrease confidence or replace
             if (pe.confidence < fromInteger(predictionReplacementConfidence)) begin
@@ -1945,13 +1963,17 @@ provisos (
                 peReplacement.confidence = 1;
                 peReplacement.tag = predTag;
                 predictionTable.wrReq(predIdx, peReplacement);
+                predictionTableCopy.wrReq(predIdx, peReplacement);
+
             end 
             else begin
-                 if (`VERBOSE) $display("%t prefetecher processPredictionReplacementRd decrease confidence oldConfidence %h idx %h tag %h oldParentOffset %h oldChildOffset %h", 
+                    if (`VERBOSE) $display("%t prefetecher processPredictionReplacementRd decrease confidence oldConfidence %h idx %h tag %h oldParentOffset %h oldChildOffset %h", 
                                         $time, pe.confidence, predIdx, predTag, pe.parentOffset, pe.childOffset);
                 // Decrease confidence
                 pe.confidence = pe.confidence - 1;
                 predictionTable.wrReq(predIdx, pe);
+                predictionTableCopy.wrReq(predIdx, pe);
+
             end 
         end
     endrule
@@ -2005,8 +2027,8 @@ provisos (
         let {predIdxTag, boundsLength, boundsVirtBase} = dataForPredRd.first;
         predictionTableTagT predTag = truncateLSB(predIdxTag);
 
-        predictionTable.deqRdResp;
-        let predResp = predictionTable.rdResp;
+        predictionTableCopy.deqRdResp;
+        let predResp = predictionTableCopy.rdResp;
 
         if (`VERBOSE) $display("%t Prefetcher processPredictionResponse inital response predIdxTag %h parentOffset %h childOffset %h confidence %h", $time, predIdxTag, predResp.parentOffset, predResp.childOffset, predResp.confidence);
 
@@ -2044,6 +2066,17 @@ provisos (
         end
     endrule
 
+    // (* descending_urgency = "processBtResp, processTimelinessTableResp, writeToTimeliness" *)
+    rule writeToTimeliness;
+        let {boundsVirtBase, pcHash} = dataForTtWriteEnq.first;
+        dataForTtWriteEnq.deq;
+
+        timelinessTable.wrReq(boundsVirtBase, pcHash);
+    endrule
+
+    // rule readPredictionForPrefetch 
+    //     let {predIdxTag, boundsLength, boundsVirtBase}
+    // endrule
 
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, MemOp op, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
@@ -2056,12 +2089,12 @@ provisos (
             backwardsTable.rdReq(bIdx);
         end
 
-        timelinessTable.wrReq(boundsVirtBase, pcHash);
+        dataForTtWriteEnq.enq(tuple2(boundsVirtBase, pcHash));
         
         predictionTableIdxTagT predIdxTag = getPredictionIdxTag(pcHash);
         predictionTableIdxT predIdx = truncate(predIdxTag);
         dataForPredRd.enq(tuple3(predIdxTag, boundsLength, boundsVirtBase));
-        predictionTable.rdReq(predIdx);
+        predictionTableCopy.rdReq(predIdx);
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
@@ -2071,11 +2104,9 @@ provisos (
         MemTaggedData current = getTaggedDataAt(lineWithTags, dataSel);
         CapPipe selCap = fromMem(unpack(pack(current)));
 
-        // Check if addr is 16 byte aligned so may be capability. 
         // Populate backwards table
-        if (!wasPrefetch && addr[3:0] == 0) begin 
             // Prefetching from node to node so avoiding same virtBase
-            if (current.tag && getBase(selCap) != boundsVirtBase) begin
+        if (!wasPrefetch && current.tag && getBase(selCap) != boundsVirtBase) begin
                     backwardsTableIdxTagT bIdxTag = getBackwardsIdxTag(getBase(selCap));
                     backwardsTableIdxT bIdx = truncate(bIdxTag);
                     backwardsTableTagT bTag = truncateLSB(bIdxTag);
@@ -2090,7 +2121,6 @@ provisos (
                     
                     // TODO: should this be pulled out into seperate rule
                     backwardsTable.wrReq(bIdx, be); 
-            end
         end
 
     
@@ -2144,4 +2174,3 @@ provisos (
 `endif
 
 endmodule
-`endif
