@@ -1576,6 +1576,7 @@ module mkCapLoggingPrefetcher(CheriPCPrefetcher) provisos ();
 
 endmodule
 
+`ifdef DATA_PREFETCHER_CAP_PC_BACKWARDS
 typedef struct {
     PCHash pcHash;
 } TimelinessEntry deriving (Bits, Eq, FShow);
@@ -2040,7 +2041,9 @@ provisos (
             let cp2 = setBounds(cp1.value, boundsLength);
             let cp3 = setOffset(cp2.value, predResp.parentOffset);
 
-            // tlbLookupQueue.enq(tuple3(cp3.value, Valid (predResp.childOffset), predIdxTag));
+`ifndef PREFETCHER_RUN_ASIDE
+            tlbLookupQueue.enq(tuple3(cp3.value, Valid (predResp.childOffset), predIdxTag));
+`endif
         end
     endrule
 
@@ -2131,8 +2134,11 @@ provisos (
                     CapPipe cp = almightyCap;
                     let cp1 = setAddr(cp, getBase(selCap));
                     let cp2 = setBounds(cp1.value, saturating_truncate(getLength(selCap)));
-                    let cp3 = setOffset(cp2.value, childOffset);
-                    // tlbLookupQueue.enq(tuple3(cp3.value, Invalid, getPredictionIdxTag(prefetchInfo.pcHash)));
+                    let cp3 = setOffset(cp2.value, childOffset);    
+   
+`ifndef PREFETCHER_RUN_ASIDE
+                    tlbLookupQueue.enq(tuple3(cp3.value, Invalid, getPredictionIdxTag(prefetchInfo.pcHash)));
+`endif                    
                     if (`VERBOSE ) $display("%t Prefetch childPrefetch virtBase %h childOffset %h ", $time, getBase(selCap), childOffset, fshow(prefetchOtherInfo));
 
                 end
@@ -2173,3 +2179,4 @@ provisos (
 `endif
 
 endmodule
+`endif
