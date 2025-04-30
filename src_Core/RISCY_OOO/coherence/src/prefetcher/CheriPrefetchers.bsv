@@ -1852,12 +1852,12 @@ provisos (
     Add#(1, i__, TDiv#(32, predictionTableIdxTagBits)),
     Add#(j_, 32, TMul#(TDiv#(32, predictionTableIdxTagBits), predictionTableIdxTagBits))
 );
-    Fifo#(8, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) prefetchQueue <- mkOverflowBypassFifo;
+    Fifo#(4, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) prefetchQueue <- mkOverflowBypassFifo;
 
     Fifo#(1, Tuple3#(backwardsTableTagT, offsetT, PCHash)) dataForBtRead <- mkPipelineFifo;
     RWBramCore#(backwardsTableIdxT, backwardsTableEntryT) backwardsTable <- mkRWBramCoreForwarded;
     
-    Fifo#(4, Tuple2#(Addr, PCHash)) dataForTtWriteEnq <- mkPipelineFifo;
+    Fifo#(2, Tuple2#(Addr, PCHash)) dataForTtWriteEnq <- mkOverflowBypassFifo;
     Fifo#(1, Tuple3#(Addr, offsetT, offsetT)) dataForTtRead <- mkPipelineFifo;
     timelinessTableT timelinessTable <- mkTimelinessTable;
 
@@ -1868,7 +1868,7 @@ provisos (
 
     RWBramCore#(confidenceUpdateIdxT, confidenceUpdateTableEntryT) confidenceUpdateTable <- mkRWBramCoreForwarded;
 
-    Fifo#(8, Tuple3#(CapPipe, Maybe#(offsetT), predictionTableIdxTagT)) tlbLookupQueue <- mkOverflowPipelineFifo;
+    Fifo#(4, Tuple3#(CapPipe, Maybe#(offsetT), predictionTableIdxTagT)) tlbLookupQueue <- mkOverflowPipelineFifo;
 
     Reg#(Bool) initBackwardsDone <- mkReg(False);
     Reg#(backwardsTableIdxT) initBackwardsIndex <- mkReg(0);
