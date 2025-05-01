@@ -453,20 +453,20 @@ module mkL1DPrefetcher#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
     `elsif DATA_PREFETCHER_MEASURER
         let m <- mkPCCapMeasurer;
     `elsif DATA_PREFETCHER_LOGGING
-        Parameter#(1) cacheLevel <- mkParameter;
-        let m <- mkCapLoggingPrefetcher(cacheLevel);
+        let m <- mkCapLoggingPrefetcher;
     `elsif DATA_PREFETCHER_CAP_PC_BACKWARDS
         Parameter#(256) backwardsTableSize <- mkParameter;
         Parameter#(8) timelinessTableWays <- mkParameter;
         Parameter#(256) timelinessTableSets <- mkParameter;
         Parameter#(256) predictionTableSize <- mkParameter;
+        Parameter#(16) prefetchFilterTableSize <- mkParameter;
         Parameter#(32) confidenceUpdateTableSize <- mkParameter;
-        Parameter#(3) confidenceBits <- mkParameter;
+        Parameter#(32) confidenceBits <- mkParameter;
         Integer predictionReplacementConfidence = 1;
         Integer predictionPrefetchConfidence = 2;
 
         let m <- mkCapPCBackwards(toTlb, backwardsTableSize, timelinessTableWays, timelinessTableSets,
-                                    predictionTableSize, confidenceBits, confidenceUpdateTableSize, predictionReplacementConfidence, predictionPrefetchConfidence);
+                                    predictionTableSize, confidenceBits, confidenceUpdateTableSize, prefetchFilterTableSize, predictionReplacementConfidence, predictionPrefetchConfidence);
     `endif
 `else 
     let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));
