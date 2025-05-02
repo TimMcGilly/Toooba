@@ -1704,7 +1704,7 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
     endrule
 
     // (* descending_urgency = "replacementResp, processRdReq" *) 
-    rule processRdReq;
+    rule processRdReq if (initDone);
         rdReqQ.deq;
         indexTagT idxTag =  rdReqQ.first;
         indexT idx = truncate(idxTag);
@@ -1739,7 +1739,7 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
         rdRespQ.enq((result.valid && result.tag == tag) ? Valid (result.entry): Invalid);
     endrule
 
-    method Action wrReq (Addr virtBase, PCHash pcHash) if(!isValid(pendReq_enq));
+    method Action wrReq (Addr virtBase, PCHash pcHash) if(!isValid(pendReq_enq) && initDone);
         indexTagT idxTag = getIndexTag(virtBase);
         indexT idx = truncate(idxTag);
         tagT tag = truncateLSB(idxTag);
@@ -1753,7 +1753,7 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
         repBram.rdReq(idx);
     endmethod
 
-    method Action rdReq(Addr virtBase) if(!isValid(pendReq_enq));
+    method Action rdReq(Addr virtBase) if(!isValid(pendReq_enq) && initDone);
         indexTagT idxTag = getIndexTag(virtBase);
         indexT idx = truncate(idxTag);
         tagT tag = truncateLSB(idxTag);
@@ -1879,6 +1879,7 @@ provisos (
 );
     Fifo#(4, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) prefetchQueue <- mkOverflowBypassFifo;
 
+    Fifo#(1, Tuple2#(backwardsTableIdxT, backwardsTableEntryT)) backwardsEntryToWrite <- mkOverflowBypassFifo;
     Fifo#(1, Tuple3#(backwardsTableTagT, offsetT, PCHash)) dataForBtRead <- mkPipelineFifo;
     RWBramCore#(backwardsTableIdxT, backwardsTableEntryT) backwardsTable <- mkRWBramCoreForwarded;
     
@@ -1887,9 +1888,10 @@ provisos (
     timelinessTableT timelinessTable <- mkTimelinessTable;
 
     Fifo#(1, Tuple3#(predictionTableIdxTagT, offsetT, offsetT)) dataForPredReplacmentRd <- mkPipelineFifo;
-    Fifo#(1, Tuple3#(predictionTableIdxTagT, Addr, Addr)) dataForPredRd <- mkPipelineFifo;
+    Fifo#(1, Tuple3#(predictionTableIdxTagT, Addr, Addr)) dataForPredRdResp <- mkPipelineFifo;
     RWBramCore#(predictionTableIdxT, predictionTableEntryT) predictionTable <- mkRWBramCoreForwarded;
     RWBramCore#(predictionTableIdxT, predictionTableEntryT) predictionTableCopy <- mkRWBramCoreForwarded;
+    Fifo#(1,  Tuple3#(predictionTableIdxTagT, Addr, Addr)) dataForPredRdReq <- mkOverflowBypassFifo;
 
     RWBramCore#(confidenceUpdateIdxT, confidenceUpdateTableEntryT) confidenceUpdateTable <- mkRWBramCoreForwarded;
 
@@ -1973,6 +1975,9 @@ provisos (
 
     endrule
 
+    function Bool initsDone() = 
+        initBackwardsDone && initPredictionDone && initConfidenceUpdateDone && initPrefetchFilterDone;
+
     function backwardsTableIdxTagT getBackwardsIdxTag(Addr childVirtBase) = 
         hash(childVirtBase); 
 
@@ -2029,7 +2034,7 @@ provisos (
         end
     endrule
 
-    rule processTimelinessTableResp;
+    rule processTimelinessTableResp if (initsDone());
         // TODO: remove parentVirtBase as may be unecessary
         let {parentVirtBase, parentOffset, childOffset} = dataForTtRead.first;
         dataForTtRead.deq;
@@ -2054,7 +2059,7 @@ provisos (
     endrule
 
 
-    rule processBtResp;
+    rule processBtResp if (initsDone());
         let {bTag, childOffset, pcHash} = dataForBtRead.first;
         dataForBtRead.deq;
         let bResp = backwardsTable.rdResp;
@@ -2074,8 +2079,8 @@ provisos (
 
     // Prediction read to attempt prefetch
     rule processPredictionResponse;
-        dataForPredRd.deq;
-        let {predIdxTag, boundsLength, boundsVirtBase} = dataForPredRd.first;
+        dataForPredRdResp.deq;
+        let {predIdxTag, boundsLength, boundsVirtBase} = dataForPredRdResp.first;
         predictionTableTagT predTag = truncateLSB(predIdxTag);
 
         predictionTableCopy.deqRdResp;
@@ -2102,7 +2107,7 @@ provisos (
     endrule
 
     // Need to add additional rule to prevent back-pressure and merge request from prediction response and data arrival
-    rule prefetchFilterRdFromPrediction;
+    rule prefetchFilterRdFromPrediction if (initsDone());
         let tlbInfo = dataForPrefetchFilterFromPrediction.first;
         dataForPrefetchFilterFromPrediction.deq;
 
@@ -2115,7 +2120,7 @@ provisos (
         dataForPrefetchFilterRdResp.enq(tlbInfo);        
     endrule
 
-    rule prefetchFilterRdFromDataArrival;
+    rule prefetchFilterRdFromDataArrival if (initsDone());
         let tlbInfo = dataForPrefetchFilterFromDataArrival.first;
         dataForPrefetchFilterFromDataArrival.deq;
 
@@ -2128,7 +2133,7 @@ provisos (
         dataForPrefetchFilterRdResp.enq(tlbInfo);        
     endrule
 
-    rule processPrefetchFilterRdResp;
+    rule processPrefetchFilterRdResp if (initsDone());
         let tlbInfo = dataForPrefetchFilterRdResp.first;
         dataForPrefetchFilterRdResp.deq;
 
@@ -2181,6 +2186,25 @@ provisos (
     // rule readPredictionForPrefetch 
     //     let {predIdxTag, boundsLength, boundsVirtBase}
     // endrule
+
+    rule writeToBackwards;
+        let {bIdx, be} = backwardsEntryToWrite.first;
+        backwardsEntryToWrite.deq;
+
+        backwardsTable.wrReq(bIdx, be); 
+                            if (`VERBOSE) $display("%t Prefetcher Item added to backwards table parentVirtBase %h parentOffset %h idx %h childTag %h ", $time, be.parentVirtBase, be.parentOffset, bIdx, be.tag);
+
+    endrule
+
+    rule predictionTableReadRequest if (initsDone());
+        let {predIdxTag, boundsLength, boundsVirtBase} = dataForPredRdReq.first;
+        dataForPredRdReq.deq;
+
+        predictionTableIdxT predIdx = truncate(predIdxTag);
+
+        predictionTableCopy.rdReq(predIdx);
+        dataForPredRdResp.enq(tuple3(predIdxTag, boundsLength, boundsVirtBase));
+    endrule
     
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, MemOp op, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
@@ -2196,9 +2220,7 @@ provisos (
         dataForTtWriteEnq.enq(tuple2(boundsVirtBase, pcHash));
         
         predictionTableIdxTagT predIdxTag = getPredictionIdxTag(pcHash);
-        predictionTableIdxT predIdx = truncate(predIdxTag);
-        dataForPredRd.enq(tuple3(predIdxTag, boundsLength, boundsVirtBase));
-        predictionTableCopy.rdReq(predIdx);
+        dataForPredRdReq.enq(tuple3(predIdxTag, boundsLength, boundsVirtBase));
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
@@ -2220,11 +2242,8 @@ provisos (
                     be.parentVirtBase = boundsVirtBase;
                     be.parentOffset = truncate(boundsOffset);
                     be.tag = bTag;
-
-                    if (`VERBOSE) $display("%t Prefetcher Item added to backwards table parentVirtBase %h parentOffset %h idx %h childTag %h ", $time, be.parentVirtBase, be.parentOffset, bIdx, be.tag);
-                    
-                    // TODO: should this be pulled out into seperate rule
-                    backwardsTable.wrReq(bIdx, be); 
+        
+                    backwardsEntryToWrite.enq(tuple2(bIdx, be));
         end
 
     
