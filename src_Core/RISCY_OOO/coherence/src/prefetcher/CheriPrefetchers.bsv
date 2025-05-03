@@ -1880,7 +1880,8 @@ provisos (
     Fifo#(4, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) prefetchQueue <- mkOverflowBypassFifo;
 
     Fifo#(1, Tuple2#(backwardsTableIdxT, backwardsTableEntryT)) backwardsEntryToWrite <- mkOverflowBypassFifo;
-    Fifo#(1, Tuple3#(backwardsTableTagT, offsetT, PCHash)) dataForBtRead <- mkPipelineFifo;
+    Fifo#(1, Tuple3#(backwardsTableIdxTagT, offsetT, PCHash)) dataForBtReadReq <- mkOverflowBypassFifo;
+    Fifo#(1, Tuple3#(backwardsTableTagT, offsetT, PCHash)) dataForBtReadResp <- mkPipelineFifo;
     RWBramCore#(backwardsTableIdxT, backwardsTableEntryT) backwardsTable <- mkRWBramCoreForwarded;
     
     Fifo#(2, Tuple2#(Addr, PCHash)) dataForTtWriteEnq <- mkOverflowBypassFifo;
@@ -2060,8 +2061,8 @@ provisos (
 
 
     rule processBtResp if (initsDone());
-        let {bTag, childOffset, pcHash} = dataForBtRead.first;
-        dataForBtRead.deq;
+        let {bTag, childOffset, pcHash} = dataForBtReadResp.first;
+        dataForBtReadResp.deq;
         let bResp = backwardsTable.rdResp;
         backwardsTable.deqRdResp;
 
