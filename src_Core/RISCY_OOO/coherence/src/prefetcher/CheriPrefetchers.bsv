@@ -96,7 +96,7 @@ module mkAllInCapPrefetcher#(Parameter#(maxCapSizeToPrefetch) _)(CheriPCPrefetch
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
     endmethod
 
     method ActionValue#(Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) getNextPrefetchAddr
@@ -331,7 +331,7 @@ provisos(
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
     endmethod
 
     method ActionValue#(Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) getNextPrefetchAddr;
@@ -589,7 +589,7 @@ module mkCapBitmapPrefetcherOld#(Parameter#(maxCapSizeToTrack) _, Parameter#(bit
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
     endmethod
 
     method ActionValue#(Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) getNextPrefetchAddr;
@@ -919,7 +919,7 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
         return pfQueue.first;
     endmethod
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
         $display ("prefetcher:reportCacheDataArrival line ", fshow(lineWithTags), " addr %x wasMiss %d wasPrefetch %d boundsOffset %h boundsLength %d boundsVirtBase %x", 
             addr, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase);
     endmethod
@@ -1213,7 +1213,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
         if (boundsLength <= 131072*16) begin
             $display ("%t Prefetcher reportCacheDataArrival wasMiss %d wasPrefetch %d ", $time, wasMiss, wasPrefetch, fshow(lineWithTags));
 
@@ -1299,7 +1299,7 @@ module mkCapPtrTestPrefetcher(CheriPCPrefetcher) provisos ();
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
         MemTaggedData d = getTaggedDataAt(lineWithTags, 0);
         CapPipe cap = fromMem(unpack(pack(d)));
         if (d.tag) begin
@@ -1425,7 +1425,7 @@ module mkPCCapMeasurer(CheriPCPrefetcher) provisos (
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
 
     endmethod
 
@@ -1512,7 +1512,7 @@ module mkCapPCMeasurer(CheriPCPrefetcher) provisos (
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
 
     endmethod
 
@@ -1537,7 +1537,7 @@ module mkCapLoggingPrefetcher(CheriPCPrefetcher) provisos ();
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
         MemTaggedData d1 = getTaggedDataAt(lineWithTags, 0);
         MemTaggedData d2 = getTaggedDataAt(lineWithTags, 1);
         MemTaggedData d3 = getTaggedDataAt(lineWithTags, 2);
@@ -1828,11 +1828,11 @@ provisos (
     NumAlias#(predictionTableIdxTagBits, TAdd#(predictionTableIdxBits, predictionTableTagBits)),
 
     NumAlias#(confidenceUpdateIdxBits, TLog#(confidenceUpdateTableSize)),
-    NumAlias#(confidenceUpdateTagBits, TSub#(TSub#(64, 4), backwardsTableIdxBits)),
+    NumAlias#(confidenceUpdateTagBits, TSub#(64, backwardsTableIdxBits)),
     NumAlias#(confidenceUpdateIdxTagBits, TAdd#(confidenceUpdateIdxBits, confidenceUpdateTagBits)),
 
     NumAlias#(prefetchFilterIdxBits, TLog#(prefetchFilterTableSize)),
-    NumAlias#(prefetchFilterTagBits, 6),
+    NumAlias#(prefetchFilterTagBits, TSub#(64, prefetchFilterIdxBits)),
     NumAlias#(prefetchFilterIdxTagBits, TAdd#(prefetchFilterIdxBits, prefetchFilterTagBits)),
     
     Alias#(backwardsTableIdxT, Bit#(backwardsTableIdxBits)),
@@ -1875,7 +1875,8 @@ provisos (
     Add#(j_, 32, TMul#(TDiv#(32, predictionTableIdxTagBits), predictionTableIdxTagBits)),
 
     Add#(k__, 64, TMul#(TDiv#(64, prefetchFilterIdxTagBits), prefetchFilterIdxTagBits)),
-    Add#(1, j__, TDiv#(64, prefetchFilterIdxTagBits))
+    Add#(1, j__, TDiv#(64, prefetchFilterIdxTagBits)),
+    Add#(TLog#(prefetchFilterTableSize), l__, 64)
 );
     Fifo#(4, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) prefetchQueue <- mkOverflowBypassFifo;
 
@@ -2011,8 +2012,8 @@ provisos (
         end
         else begin // Decrease confidence or replace
             if (pe.confidence < fromInteger(predictionReplacementConfidence)) begin
-            if (`VERBOSE) $display("%t prefetecher processPredictionReplacementRd replacement idx %h tag %h newParentOffset %h newChildOffset %h oldParentOffset %h oldChildOffset %h", 
-                                        $time, predIdx, predTag, parentOffset, childOffset, pe.parentOffset, pe.childOffset);
+                if (`VERBOSE) $display("%t prefetecher processPredictionReplacementRd replacement idx %h tag %h newParentOffset %h newChildOffset %h oldParentOffset %h oldChildOffset %h", 
+                                            $time, predIdx, predTag, parentOffset, childOffset, pe.parentOffset, pe.childOffset);
                 // Replace
                 predictionTableEntryT peReplacement;
                 peReplacement.parentOffset = parentOffset;
@@ -2024,9 +2025,10 @@ provisos (
 
             end 
             else begin
-                    if (`VERBOSE) $display("%t prefetecher processPredictionReplacementRd decrease confidence oldConfidence %h idx %h tag %h oldParentOffset %h oldChildOffset %h", 
+                    if (`VERBOSE) $display("%t   confidence oldConfidence %h idx %h tag %h oldParentOffset %h oldChildOffset %h", 
                                         $time, pe.confidence, predIdx, predTag, pe.parentOffset, pe.childOffset);
                 // Decrease confidence
+                doAssert(pe.confidence > 0, "Old confidence should be greater than 0");
                 pe.confidence = pe.confidence - 1;
                 predictionTable.wrReq(predIdx, pe);
                 predictionTableCopy.wrReq(predIdx, pe);
@@ -2059,6 +2061,16 @@ provisos (
         endcase
     endrule
 
+    rule processBtReadReq if (initsDone());
+        let {bIdxTag, childOffset, pcHash} = dataForBtReadReq.first;
+        dataForBtReadReq.deq;
+
+        backwardsTableIdxT bIdx = truncate(bIdxTag);
+        backwardsTableTagT bTag = truncateLSB(bIdxTag);
+        
+        dataForBtReadResp.enq(tuple3(bTag, childOffset, pcHash));
+        backwardsTable.rdReq(bIdx);
+    endrule
 
     rule processBtResp if (initsDone());
         let {bTag, childOffset, pcHash} = dataForBtReadResp.first;
@@ -2152,6 +2164,12 @@ provisos (
 `ifndef PREFETCHER_RUN_ASIDE
             tlbLookupQueue.enq(tlbInfo);
 `endif
+            prefetchFilterEntryT pe;
+            pe.valid = True;
+            pe.tag = prefetchFilterTag;
+
+            prefetchFilterTable.wrReq(prefetchFilterIdx, pe);
+            if (`VERBOSE) $display("%t prefetcher prefetchfilter write idx %h tag %h valid %h", $time, prefetchFilterIdx, pe.tag, pe.valid);
         end
     endrule
 
@@ -2161,6 +2179,7 @@ provisos (
 
         toTlb.prefetcherReq(tlbInfo.cap, Valid(PrefetchOtherInfo {childOffset: tlbInfo.childOffset, pcHash: tlbInfo.predIdxTag}));
         if (`VERBOSE) $display("%t Prefetcher doTlbLookup boundsVirtBase %h boundsOffset %h boundsLength %h childOffset %h", $time, getBase(tlbInfo.cap), getOffset(tlbInfo.cap), getLength(tlbInfo.cap), tlbInfo.childOffset);
+
     endrule
 
     rule getTlbResp;
@@ -2184,11 +2203,7 @@ provisos (
         timelinessTable.wrReq(boundsVirtBase, pcHash);
     endrule
 
-    // rule readPredictionForPrefetch 
-    //     let {predIdxTag, boundsLength, boundsVirtBase}
-    // endrule
-
-    rule writeToBackwards;
+    rule writeToBackwards if (initsDone());
         let {bIdx, be} = backwardsEntryToWrite.first;
         backwardsEntryToWrite.deq;
 
@@ -2212,10 +2227,8 @@ provisos (
         $display("%t Prefetcher logReportAccess addr %h pcHash %h hitMiss %b boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h op %h", $time, addr, pcHash, hitMiss, boundsOffset, boundsLength, boundsVirtBase, capPerms, op);
         if (hitMiss == MISS) begin 
             backwardsTableIdxTagT bIdxTag = getBackwardsIdxTag(boundsVirtBase);
-            backwardsTableIdxT bIdx = truncate(bIdxTag);
-            backwardsTableTagT bTag = truncateLSB(bIdxTag);
-            dataForBtRead.enq(tuple3(bTag, boundsOffset, pcHash));
-            backwardsTable.rdReq(bIdx);
+
+            dataForBtReadReq.enq(tuple3(bIdxTag, boundsOffset, pcHash));
         end
 
         dataForTtWriteEnq.enq(tuple2(boundsVirtBase, pcHash));
@@ -2225,7 +2238,7 @@ provisos (
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
         
         LineMemDataOffset dataSel = getLineMemDataOffset(addr);
         MemTaggedData current = getTaggedDataAt(lineWithTags, dataSel);
@@ -2264,10 +2277,7 @@ provisos (
                     tlbInfo.childOffset = Invalid;
                     tlbInfo.predIdxTag = getPredictionIdxTag(prefetchInfo.pcHash);
 
-                    dataForPrefetchFilterFromDataArrival.enq(tlbInfo);
-`ifndef PREFETCHER_RUN_ASIDE
-                    tlbLookupQueue.enq(tlbInfo);
-`endif                    
+                    dataForPrefetchFilterFromDataArrival.enq(tlbInfo);       
                     if (`VERBOSE ) $display("%t Prefetch childPrefetch virtBase %h childOffset %h ", $time, getBase(selCap), childOffset, fshow(prefetchOtherInfo));
 
                 end
@@ -2299,17 +2309,6 @@ provisos (
         if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr %h", $time, tpl_1(prefetchQueue.first));
         prefetchQueue.deq;
 
-        prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(tpl_2(prefetchQueue.first));
-        prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
-        prefetchFilterTagT prefetchFilterTag = truncateLSB(prefetchFilterIdxTag);
-
-        prefetchFilterEntryT pe;
-        pe.valid = True;
-        pe.tag = prefetchFilterTag;
-
-        prefetchFilterTable.wrReq(prefetchFilterIdx, pe);
-        if (`VERBOSE) $display("%t prefetcher prefetchfilter write idx %h tag %h responseTag %h valid %h", $time, prefetchFilterIdx, pe.tag, pe.valid);
-        
         return prefetchQueue.first;
     endmethod
 

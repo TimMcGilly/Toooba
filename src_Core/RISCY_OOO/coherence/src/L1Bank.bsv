@@ -411,7 +411,7 @@ endfunction
         end
         if (resp.data matches tagged Valid .data)
             llcPrefetcher.reportCacheDataArrival(data, resp.addr, /*pcHash:*/0, /*op unknown*/ Ld,
-                True, resp.cameFromPrefetch, resp.boundsOffset, resp.boundsLength, resp.boundsVirtBase, /*capPerms:*/unpack(0), Invalid); // Assume no PrefetchInfo from LL currently
+                True, resp.cameFromPrefetch, resp.boundsOffset, resp.boundsLength, resp.boundsVirtBase, /*capPerms:*/unpack(0), Invalid, False); // Assume no PrefetchInfo from LL currently
        if (verbose)
         $display("%t L1 %m pRsTransfer: ", $time, fshow(resp));
     endrule
@@ -740,10 +740,11 @@ endfunction
 
             if (req.op == Ld || req.op == St) begin
                 let otherPrefetchInfo = cRqIsPrefetch[n] ? Valid(cRqPrefetchOtherInfo[n]): Invalid;
-                prefetcher.reportCacheDataArrival(curLine, req.addr, req.pcHash, req.op, wasMiss, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase, req.capPerms, otherPrefetchInfo);
+                Bool hitOnPrefetch = ram.info.other.wasPrefetch && !cRqIsPrefetch[n];
+                prefetcher.reportCacheDataArrival(curLine, req.addr, req.pcHash, req.op, wasMiss, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase, req.capPerms, otherPrefetchInfo, hitOnPrefetch);
                 if (wasMiss == False) begin
                     llcPrefetcher.reportCacheDataArrival(curLine, req.addr, req.pcHash, req.op,
-                        False, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase, req.capPerms, otherPrefetchInfo);
+                        False, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase, req.capPerms, otherPrefetchInfo, hitOnPrefetch);
                 end
             end
             
