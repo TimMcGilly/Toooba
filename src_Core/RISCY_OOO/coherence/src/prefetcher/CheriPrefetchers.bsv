@@ -1832,7 +1832,7 @@ provisos (
     NumAlias#(confidenceUpdateIdxTagBits, TAdd#(confidenceUpdateIdxBits, confidenceUpdateTagBits)),
 
     NumAlias#(prefetchFilterIdxBits, TLog#(prefetchFilterTableSize)),
-    NumAlias#(prefetchFilterTagBits, TSub#(64, prefetchFilterIdxBits)),
+    NumAlias#(prefetchFilterTagBits, TSub#(CLineAddrSz, prefetchFilterIdxBits)),
     NumAlias#(prefetchFilterIdxTagBits, TAdd#(prefetchFilterIdxBits, prefetchFilterTagBits)),
     
     Alias#(backwardsTableIdxT, Bit#(backwardsTableIdxBits)),
@@ -1874,9 +1874,9 @@ provisos (
     Add#(1, i__, TDiv#(32, predictionTableIdxTagBits)),
     Add#(j_, 32, TMul#(TDiv#(32, predictionTableIdxTagBits), predictionTableIdxTagBits)),
 
-    Add#(k__, 64, TMul#(TDiv#(64, prefetchFilterIdxTagBits), prefetchFilterIdxTagBits)),
-    Add#(1, j__, TDiv#(64, prefetchFilterIdxTagBits)),
-    Add#(TLog#(prefetchFilterTableSize), l__, 64)
+    Add#(k__, CLineAddrSz, TMul#(TDiv#(CLineAddrSz, prefetchFilterIdxTagBits), prefetchFilterIdxTagBits)),
+    Add#(1, j__, TDiv#(CLineAddrSz, prefetchFilterIdxTagBits)),
+    Add#(TLog#(prefetchFilterTableSize), l__, CLineAddrSz)
 );
     Fifo#(4, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) prefetchQueue <- mkOverflowBypassFifo;
 
@@ -1899,10 +1899,12 @@ provisos (
 
     Fifo#(4, tlbInfoT) tlbLookupQueue <- mkOverflowPipelineFifo;
 
-    Fifo#(2, tlbInfoT) dataForPrefetchFilterFromPrediction <- mkOverflowBypassFifo;
-    Fifo#(2, tlbInfoT) dataForPrefetchFilterFromDataArrival <- mkOverflowBypassFifo;
+    Fifo#(2, tlbInfoT) dataForTlbLookupFromPrediction <- mkOverflowBypassFifo;
+    Fifo#(2, tlbInfoT) dataForTlbLookupFromDataArrival <- mkOverflowBypassFifo;
 
-    Fifo#(1, tlbInfoT) dataForPrefetchFilterRdResp <- mkOverflowPipelineFifo;
+    Fifo#(1, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) dataForPrefetchFilterRdResp <- mkOverflowPipelineFifo;
+    Fifo#(1, LineAddr) evictFromPrefetchFilterQ <- mkOverflowBypassFifo;
+    Fifo#(1, LineAddr) dataForPrefetchFilterEvict <- mkPipelineFifo;
     RWBramCore#(prefetchFilterIdxT, prefetchFilterEntryT) prefetchFilterTable <- mkRWBramCoreForwarded;
 
     Reg#(Bool) initBackwardsDone <- mkReg(False);
@@ -1986,8 +1988,8 @@ provisos (
     function predictionTableIdxTagT getPredictionIdxTag(PCHash pcHash) =
         hash(pcHash);
 
-    function prefetchFilterIdxTagT getPrefetchFilterIdxTag(CapPipe cap) = 
-        hash(getBase(cap) + getOffset(cap));
+    function prefetchFilterIdxTagT getPrefetchFilterIdxTag(LineAddr lineAddr) = 
+        hash(lineAddr);
 
     rule processPredictionReplacementRd;
         let {predIdxTag, parentOffset, childOffset} = dataForPredReplacmentRd.first;
@@ -2115,55 +2117,46 @@ provisos (
             tlbInfo.childOffset = Valid (predResp.childOffset);
             tlbInfo.predIdxTag = predIdxTag;
 
-            dataForPrefetchFilterFromPrediction.enq(tlbInfo);
+            dataForTlbLookupFromPrediction.enq(tlbInfo);
         end
     endrule
 
     // Need to add additional rule to prevent back-pressure and merge request from prediction response and data arrival
-    rule prefetchFilterRdFromPrediction if (initsDone());
-        let tlbInfo = dataForPrefetchFilterFromPrediction.first;
-        dataForPrefetchFilterFromPrediction.deq;
+    rule tlbLookupFromPrediction if (initsDone());
+        let tlbInfo = dataForTlbLookupFromPrediction.first;
+        dataForTlbLookupFromPrediction.deq;
 
-        prefetchFilterIdxT prefetchFilterIdx = truncate(getPrefetchFilterIdxTag(tlbInfo.cap));
-
-        if (`VERBOSE) $display("%t prefetcher deq prefetchfilterfrom prediction idx %h", $time, prefetchFilterIdx);
-
-        prefetchFilterTable.rdReq(prefetchFilterIdx);
-
-        dataForPrefetchFilterRdResp.enq(tlbInfo);        
+`ifndef PREFETCHER_RUN_ASIDE
+        tlbLookupQueue.enq(tlbInfo);
+`endif    
     endrule
 
-    rule prefetchFilterRdFromDataArrival if (initsDone());
-        let tlbInfo = dataForPrefetchFilterFromDataArrival.first;
-        dataForPrefetchFilterFromDataArrival.deq;
+    rule tlbLookupFromDataArrival if (initsDone());
+        let tlbInfo = dataForTlbLookupFromDataArrival.first;
+        dataForTlbLookupFromDataArrival.deq;
 
-        prefetchFilterIdxT prefetchFilterIdx = truncate(getPrefetchFilterIdxTag(tlbInfo.cap));
-
-
-        if (`VERBOSE) $display("%t prefetcher deq prefetchfilterfrom prediction idx %h", $time, prefetchFilterIdx);
-        prefetchFilterTable.rdReq(prefetchFilterIdx);
-
-        dataForPrefetchFilterRdResp.enq(tlbInfo);        
+`ifndef PREFETCHER_RUN_ASIDE
+        tlbLookupQueue.enq(tlbInfo);
+`endif
     endrule
 
     rule processPrefetchFilterRdResp if (initsDone());
-        let tlbInfo = dataForPrefetchFilterRdResp.first;
+        let {prefetchAddr, cap, prefetchOtherInfo} = dataForPrefetchFilterRdResp.first;
         dataForPrefetchFilterRdResp.deq;
-
-        prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(tlbInfo.cap);
-        prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
-        prefetchFilterTagT prefetchFilterTag = truncateLSB(prefetchFilterIdxTag);
         
         prefetchFilterTable.deqRdResp;
         prefetchFilterEntryT prefetchFilterEntry = prefetchFilterTable.rdResp;
+
+        prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(getLineAddr(prefetchAddr));
+        prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
+        prefetchFilterTagT prefetchFilterTag = truncateLSB(prefetchFilterIdxTag);
 
         if (`VERBOSE) $display("%t prefetcher prefetchfilterRdResponse idx %h tag %h responseTag %h valid %h", $time, prefetchFilterIdx, prefetchFilterTag, prefetchFilterEntry.tag, prefetchFilterEntry.valid);
 
 
         if (!prefetchFilterEntry.valid || prefetchFilterEntry.tag != prefetchFilterTag) begin
-`ifndef PREFETCHER_RUN_ASIDE
-            tlbLookupQueue.enq(tlbInfo);
-`endif
+            prefetchQueue.enq(tuple3(prefetchAddr, cap, prefetchOtherInfo));
+
             prefetchFilterEntryT pe;
             pe.valid = True;
             pe.tag = prefetchFilterTag;
@@ -2191,7 +2184,12 @@ provisos (
         doAssert(isValid(resp.prefetchOtherInfo), "TLB response should have tagged prefetchOtherInfo");
 
         if (!resp.haveException && resp.paddr != 0) begin
-            prefetchQueue.enq(tuple3(resp.paddr, resp.cap, fromMaybe(?, resp.prefetchOtherInfo)));
+            prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(getLineAddr(resp.paddr));
+            prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
+
+            if (`VERBOSE) $display("%t prefetcher prefetchfilter RdReq prediction idx %h", $time, prefetchFilterIdx);
+            prefetchFilterTable.rdReq(prefetchFilterIdx);
+            dataForPrefetchFilterRdResp.enq(tuple3(resp.paddr, resp.cap, fromMaybe(?, resp.prefetchOtherInfo)));
         end
     endrule
 
@@ -2208,7 +2206,7 @@ provisos (
         backwardsEntryToWrite.deq;
 
         backwardsTable.wrReq(bIdx, be); 
-                            if (`VERBOSE) $display("%t Prefetcher Item added to backwards table parentVirtBase %h parentOffset %h idx %h childTag %h ", $time, be.parentVirtBase, be.parentOffset, bIdx, be.tag);
+        if (`VERBOSE) $display("%t Prefetcher Item added to backwards table parentVirtBase %h parentOffset %h idx %h childTag %h ", $time, be.parentVirtBase, be.parentOffset, bIdx, be.tag);
 
     endrule
 
@@ -2220,6 +2218,41 @@ provisos (
 
         predictionTableCopy.rdReq(predIdx);
         dataForPredRdResp.enq(tuple3(predIdxTag, boundsLength, boundsVirtBase));
+    endrule
+    
+    (* descending_urgency = "tlbLookupFromPrediction, tlbLookupFromDataArrival, evictFromPrefetchFilterReadRq" *)
+    rule evictFromPrefetchFilterReadRq;
+        let lineAddr = evictFromPrefetchFilterQ.first;
+        evictFromPrefetchFilterQ.deq;
+
+        prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(lineAddr);
+        prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
+
+        if (`VERBOSE) $display("%t Prefetcher prefetchFilter evictReadRq idx %h", $time, prefetchFilterIdx);
+        prefetchFilterTable.rdReq(prefetchFilterIdx);
+        dataForPrefetchFilterEvict.enq(lineAddr);
+    endrule
+
+    (* descending_urgency = "processPrefetchFilterRdResp, evictFromPrefetchFilterRead" *)
+    rule evictFromPrefetchFilterRead;
+        let lineAddr = dataForPrefetchFilterEvict.first;
+        dataForPrefetchFilterEvict.deq;
+
+        prefetchFilterTable.deqRdResp;
+        prefetchFilterEntryT prefetchFilterEntry = prefetchFilterTable.rdResp;
+
+        prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(lineAddr);
+        prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
+        prefetchFilterTagT prefetchFilterTag = truncateLSB(prefetchFilterIdxTag);
+
+
+        if (prefetchFilterEntry.valid && prefetchFilterEntry.tag == prefetchFilterTag) begin
+            
+            prefetchFilterEntry.valid = False;
+
+            if (`VERBOSE) $display("%t Prefetcher prefetchFilter evictWrite idx %h tag %h", $time, prefetchFilterIdx, prefetchFilterTag);
+            prefetchFilterTable.wrReq(prefetchFilterIdx, prefetchFilterEntry);
+        end
     endrule
     
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, MemOp op, 
@@ -2277,7 +2310,7 @@ provisos (
                     tlbInfo.childOffset = Invalid;
                     tlbInfo.predIdxTag = getPredictionIdxTag(prefetchInfo.pcHash);
 
-                    dataForPrefetchFilterFromDataArrival.enq(tlbInfo);       
+                    dataForTlbLookupFromDataArrival.enq(tlbInfo);       
                     if (`VERBOSE ) $display("%t Prefetch childPrefetch virtBase %h childOffset %h ", $time, getBase(selCap), childOffset, fshow(prefetchOtherInfo));
 
                 end
@@ -2310,6 +2343,10 @@ provisos (
         prefetchQueue.deq;
 
         return prefetchQueue.first;
+    endmethod
+
+    method Action reportCacheEviction(LineAddr lineAddr);
+            evictFromPrefetchFilterQ.enq(lineAddr);
     endmethod
 
 `ifdef PERFORMANCE_MONITORING

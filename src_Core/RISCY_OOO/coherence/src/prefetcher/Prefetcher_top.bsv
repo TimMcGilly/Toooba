@@ -144,7 +144,7 @@ module mkCheriPCPrefetcherAdapter#(module#(PCPrefetcher) mkPrefetcher)(CheriPCPr
         p.reportAccess(addr, hash(pcHash), hitMiss, op);
     endmethod
     method Action reportCacheDataArrival(CLine lineWithTags, Addr accessAddr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
     endmethod
     method ActionValue#(Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) getNextPrefetchAddr;
         let addr <- p.getNextPrefetchAddr;
@@ -267,10 +267,10 @@ provisos ();
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op,
-        Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo);
+        Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
 
-        p1.reportCacheDataArrival(lineWithTags, addr, pcHash, op, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms, prefetchOtherInfo);
-        p2.reportCacheDataArrival(lineWithTags, addr, pcHash, op, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms, prefetchOtherInfo);
+        p1.reportCacheDataArrival(lineWithTags, addr, pcHash, op, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms, prefetchOtherInfo, hitOnPrefetch);
+        p2.reportCacheDataArrival(lineWithTags, addr, pcHash, op, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms, prefetchOtherInfo, hitOnPrefetch);
     endmethod
 
 `ifdef PERFORMANCE_MONITORING
@@ -459,9 +459,9 @@ module mkL1DPrefetcher#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         Parameter#(8) timelinessTableWays <- mkParameter;
         Parameter#(256) timelinessTableSets <- mkParameter;
         Parameter#(256) predictionTableSize <- mkParameter;
-        Parameter#(16) prefetchFilterTableSize <- mkParameter;
+        Parameter#(1024) prefetchFilterTableSize <- mkParameter;
         Parameter#(32) confidenceUpdateTableSize <- mkParameter;
-        Parameter#(32) confidenceBits <- mkParameter;
+        Parameter#(3) confidenceBits <- mkParameter;
         Integer predictionReplacementConfidence = 1;
         Integer predictionPrefetchConfidence = 2;
 

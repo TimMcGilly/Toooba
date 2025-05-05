@@ -521,6 +521,8 @@ endfunction
         });
         // inform processor of line eviction
         procResp.evict(getLineAddr(resp.addr));
+        prefetcher.reportCacheEviction(getLineAddr(req.addr));
+
        if (verbose)
         $display("%t L1 %m sendRsToP: ", $time,
             fshow(rsToPIndexQ.first)," ; ",
@@ -544,6 +546,8 @@ endfunction
         pRqMshr.sendRsToP_pRq.releaseEntry(n); // mshr entry released
         // inform processor of line eviction
         procResp.evict(getLineAddr(resp.addr));
+        prefetcher.reportCacheEviction(getLineAddr(req.addr));
+
        if (verbose)
         $display("%t L1 %m sendRsToP: ", $time,
             fshow(rsToPIndexQ.first), " ; ",
