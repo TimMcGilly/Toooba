@@ -1579,6 +1579,7 @@ endmodule
 `ifdef DATA_PREFETCHER_CAP_PC_BACKWARDS
 typedef struct {
     PCHash pcHash;
+    Bit#(64) enqTime;
 } TimelinessEntry deriving (Bits, Eq, FShow);
 
 typedef struct {
@@ -1593,8 +1594,8 @@ interface TimelinessTable#(
     numeric type numOfWays,
     numeric type numOfSets
 );
-    method Action wrReq (Addr virtBase, PCHash pcHash);
-    method Action rdReq (Addr virtBase);
+    method Action wrReq (Addr virtBase, PCHash pcHash, Bit#(64) enqTime);
+    method Action rdReq (Addr virtBase, Bit#(64) targetTime);
     method ActionValue#(TimelinessTableResp) rdResp;
 endinterface
 
@@ -1625,8 +1626,8 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
     RWBramCore#(indexT, wayT) repBram <- mkRWBramCoreForwarded;
     RWBramCore#(indexT, wayT) repBramCopy <- mkRWBramCoreForwarded;
     
-    Fifo#(1, Tuple2#(Addr, PCHash)) writeQ <- mkPipelineFifo;
-    Fifo#(1, indexTagT) rdReqQ <- mkPipelineFifo; 
+    Fifo#(1, Tuple3#(Addr, PCHash, Bit#(64))) writeQ <- mkPipelineFifo;
+    Fifo#(1, Tuple2#(indexTagT, Bit#(64))) rdReqQ <- mkPipelineFifo; 
 
     Fifo#(1, TimelinessTableResp) rdRespQ <- mkBypassFifo;
 
@@ -1639,7 +1640,7 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
             tRam[i].wrReq(initIndex, TimelinessSetAssocEntry {
                 valid: False,
                 tag: 0,
-                entry: TimelinessEntry {pcHash: 0}
+                entry: TimelinessEntry {pcHash: 0, enqTime: 0}
             });
         end
         repBram.wrReq(initIndex, 0);
@@ -1676,7 +1677,7 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
     );
         pendReq_deq <= Invalid;
 
-        let {virtBase, pcHash} = writeQ.first;
+        let {virtBase, pcHash, enqTime} = writeQ.first;
         writeQ.deq;
 
         let repResp = repBram.rdResp;
@@ -1689,6 +1690,7 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
 
         timelinessEntryT te;
         te.pcHash = pcHash;
+        te.enqTime = enqTime;
 
         timelinessSetAssocEntryT tse;
         tse.valid = True;
@@ -1706,7 +1708,7 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
     // (* descending_urgency = "replacementResp, processRdReq" *) 
     rule processRdReq if (initDone);
         rdReqQ.deq;
-        indexTagT idxTag =  rdReqQ.first;
+        let {idxTag, targetTime} =  rdReqQ.first;
         indexT idx = truncate(idxTag);
         tagT tag = truncateLSB(idxTag);
 
@@ -1728,7 +1730,13 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
         let rotatedResp = rotateBy(resps, unpack(rotateNum));
         
         function timelinessSetAssocEntryT oldestValid(timelinessSetAssocEntryT a, timelinessSetAssocEntryT b);
-            return (a.valid && a.tag == tag) ? a : b;
+            // If matches target time choose newer, otherwise choose oldest valid
+            if (b.entry.enqTime < targetTime) begin
+                return (b.valid && b.tag == tag) ? b : a;
+            end
+            else begin
+                return (a.valid && a.tag == tag) ? a : b;
+            end
         endfunction
 
         // function bool isMatch(timelinessSetAssocEntryT a)
@@ -1739,7 +1747,7 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
         rdRespQ.enq((result.valid && result.tag == tag) ? Valid (result.entry): Invalid);
     endrule
 
-    method Action wrReq (Addr virtBase, PCHash pcHash) if(!isValid(pendReq_enq) && initDone);
+    method Action wrReq (Addr virtBase, PCHash pcHash, Bit#(64) enqTime) if(!isValid(pendReq_enq) && initDone);
         indexTagT idxTag = getIndexTag(virtBase);
         indexT idx = truncate(idxTag);
         tagT tag = truncateLSB(idxTag);
@@ -1749,11 +1757,11 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
 
         pendReq_enq <= Valid(idx);
         
-        writeQ.enq(tuple2(virtBase, pcHash));
+        writeQ.enq(tuple3(virtBase, pcHash, enqTime));
         repBram.rdReq(idx);
     endmethod
 
-    method Action rdReq(Addr virtBase) if(!isValid(pendReq_enq) && initDone);
+    method Action rdReq(Addr virtBase, Bit#(64) targetTime) if(!isValid(pendReq_enq) && initDone);
         indexTagT idxTag = getIndexTag(virtBase);
         indexT idx = truncate(idxTag);
         tagT tag = truncateLSB(idxTag);
@@ -1767,7 +1775,7 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
         // Request replacement info as well for 
         repBramCopy.rdReq(idx);
         
-        rdReqQ.enq(idxTag);
+        rdReqQ.enq(tuple2(idxTag, targetTime));
     endmethod
 
     method ActionValue#(TimelinessTableResp) rdResp();
@@ -1782,7 +1790,8 @@ typedef struct {
     Bool valid;
     Addr parentVirtBase;
     Bit#(offsetBits) parentOffset;
-    Bit#(tagBits) tag; 
+    Bit#(64) parentTime;
+    Bit#(tagBits) tag;
 } BackwardsEntry #(numeric type tagBits, numeric type offsetBits) deriving (Bits, Eq, FShow);
 
 typedef struct {
@@ -1881,11 +1890,11 @@ provisos (
     Fifo#(4, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) prefetchQueue <- mkOverflowBypassFifo;
 
     Fifo#(1, Tuple2#(backwardsTableIdxT, backwardsTableEntryT)) backwardsEntryToWrite <- mkOverflowBypassFifo;
-    Fifo#(1, Tuple3#(backwardsTableIdxTagT, offsetT, PCHash)) dataForBtReadReq <- mkOverflowBypassFifo;
-    Fifo#(1, Tuple3#(backwardsTableTagT, offsetT, PCHash)) dataForBtReadResp <- mkPipelineFifo;
+    Fifo#(1, Tuple4#(backwardsTableIdxTagT, offsetT, PCHash, Bit#(64))) dataForBtReadReq <- mkOverflowBypassFifo;
+    Fifo#(1, Tuple4#(backwardsTableTagT, offsetT, PCHash, Bit#(64))) dataForBtReadResp <- mkPipelineFifo;
     RWBramCore#(backwardsTableIdxT, backwardsTableEntryT) backwardsTable <- mkRWBramCoreForwarded;
     
-    Fifo#(2, Tuple2#(Addr, PCHash)) dataForTtWriteEnq <- mkOverflowBypassFifo;
+    Fifo#(2, Tuple3#(Addr, PCHash, Bit#(64))) dataForTtWriteEnq <- mkOverflowBypassFifo;
     Fifo#(1, Tuple3#(Addr, offsetT, offsetT)) dataForTtRead <- mkPipelineFifo;
     timelinessTableT timelinessTable <- mkTimelinessTable;
 
@@ -1925,6 +1934,7 @@ provisos (
         be.parentVirtBase = 0;
         be.parentOffset = 0;
         be.tag = 0;
+        be.parentTime = 0;
 
         backwardsTable.wrReq(initBackwardsIndex,  be);
 
@@ -2064,28 +2074,28 @@ provisos (
     endrule
 
     rule processBtReadReq if (initsDone());
-        let {bIdxTag, childOffset, pcHash} = dataForBtReadReq.first;
+        let {bIdxTag, childOffset, pcHash, childMissArrivalTime} = dataForBtReadReq.first;
         dataForBtReadReq.deq;
 
         backwardsTableIdxT bIdx = truncate(bIdxTag);
         backwardsTableTagT bTag = truncateLSB(bIdxTag);
         
-        dataForBtReadResp.enq(tuple3(bTag, childOffset, pcHash));
+        dataForBtReadResp.enq(tuple4(bTag, childOffset, pcHash, childMissArrivalTime));
         backwardsTable.rdReq(bIdx);
     endrule
 
     rule processBtResp if (initsDone());
-        let {bTag, childOffset, pcHash} = dataForBtReadResp.first;
+        let {bTag, childOffset, pcHash, childMissArrivalTime} = dataForBtReadResp.first;
         dataForBtReadResp.deq;
         let bResp = backwardsTable.rdResp;
         backwardsTable.deqRdResp;
 
 
         if (bResp.tag == bTag && bResp.valid) begin
-            if (`VERBOSE) $display("%t Prefetcher backwards table hit tag %h parentVirtBase %h parentOffset %h childOffset %h", $time, bResp.tag, bResp.parentVirtBase, bResp.parentOffset, childOffset);
+            if (`VERBOSE) $display("%t Prefetcher backwards table hit tag %h parentVirtBase %h parentOffset %h childOffset %h childMissTime %h", $time, bResp.tag, bResp.parentVirtBase, bResp.parentOffset, childOffset, childMissArrivalTime);
             dataForTtRead.enq(tuple3(bResp.parentVirtBase, bResp.parentOffset, childOffset));
 
-            timelinessTable.rdReq(bResp.parentVirtBase);
+            timelinessTable.rdReq(bResp.parentVirtBase, (bResp.parentTime << 1) - childMissArrivalTime); 
         end
         else begin
             if (`VERBOSE) $display("%t Prefetcher backwards table collision or invalid tableTag %h ourTag %h valid %h", $time, bResp.tag, bTag, bResp.valid);
@@ -2195,10 +2205,10 @@ provisos (
 
     // (* descending_urgency = "processBtResp, processTimelinessTableResp, writeToTimeliness" *)
     rule writeToTimeliness;
-        let {boundsVirtBase, pcHash} = dataForTtWriteEnq.first;
+        let {boundsVirtBase, pcHash, enqTime} = dataForTtWriteEnq.first;
         dataForTtWriteEnq.deq;
 
-        timelinessTable.wrReq(boundsVirtBase, pcHash);
+        timelinessTable.wrReq(boundsVirtBase, pcHash, enqTime);
     endrule
 
     rule writeToBackwards if (initsDone());
@@ -2258,13 +2268,8 @@ provisos (
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, MemOp op, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
         $display("%t Prefetcher logReportAccess addr %h pcHash %h hitMiss %b boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h op %h", $time, addr, pcHash, hitMiss, boundsOffset, boundsLength, boundsVirtBase, capPerms, op);
-        if (hitMiss == MISS) begin 
-            backwardsTableIdxTagT bIdxTag = getBackwardsIdxTag(boundsVirtBase);
-
-            dataForBtReadReq.enq(tuple3(bIdxTag, boundsOffset, pcHash));
-        end
-
-        dataForTtWriteEnq.enq(tuple2(boundsVirtBase, pcHash));
+        let enqTime <- $time;
+        dataForTtWriteEnq.enq(tuple3(boundsVirtBase, pcHash, enqTime));
         
         predictionTableIdxTagT predIdxTag = getPredictionIdxTag(pcHash);
         dataForPredRdReq.enq(tuple3(predIdxTag, boundsLength, boundsVirtBase));
@@ -2276,6 +2281,14 @@ provisos (
         LineMemDataOffset dataSel = getLineMemDataOffset(addr);
         MemTaggedData current = getTaggedDataAt(lineWithTags, dataSel);
         CapPipe selCap = fromMem(unpack(pack(current)));
+
+        if (wasMiss && !wasPrefetch) begin 
+            backwardsTableIdxTagT bIdxTag = getBackwardsIdxTag(boundsVirtBase);
+
+            let childMissArrivalTime <- $time;
+
+            dataForBtReadReq.enq(tuple4(bIdxTag, boundsOffset, pcHash, childMissArrivalTime));
+        end
 
         // Populate backwards table
             // Prefetching from node to node so avoiding same virtBase
@@ -2289,6 +2302,8 @@ provisos (
                     be.parentVirtBase = boundsVirtBase;
                     be.parentOffset = truncate(boundsOffset);
                     be.tag = bTag;
+                    let parentTime <- $time;
+                    be.parentTime = parentTime;
         
                     backwardsEntryToWrite.enq(tuple2(bIdx, be));
         end
