@@ -463,7 +463,8 @@ module mkL1DPrefetcher#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         Parameter#(32) confidenceUpdateTableSize <- mkParameter;
         Parameter#(3) confidenceBits <- mkParameter;
         Integer predictionReplacementConfidence = 1;
-        Integer predictionPrefetchConfidence = 2;
+        Integer predictionPrefetchConfidence = 1;
+        Integer recursionDepth = 1;
 
         let m <- mkCapPCBackwards(toTlb, backwardsTableSize, timelinessTableWays, timelinessTableSets,
                                     predictionTableSize, confidenceBits, confidenceUpdateTableSize, prefetchFilterTableSize, predictionReplacementConfidence, predictionPrefetchConfidence,

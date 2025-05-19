@@ -1991,6 +1991,8 @@ module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
 
 endmodule
 
+typedef Bit#(3) Depth;
+
 typedef struct {
     Bool valid;
     Addr parentVirtBase;
@@ -2003,6 +2005,7 @@ typedef struct {
     Bit#(offsetBits) parentOffset;
     Bit#(offsetBits) childOffset;
     Bit#(confidenceBits) confidence;
+    PCHash childPCHash;
     Bit#(tagBits) tag; 
 } PredictionEntry#(numeric type tagBits, numeric type offsetBits, numeric type confidenceBits) deriving (Bits, Eq, FShow);
 
@@ -2021,12 +2024,14 @@ typedef struct {
     CapPipe cap;
     Maybe#(Bit#(offsetBits)) childOffset;
     predictionTableIdxTagT predIdxTag;
+    PCHash childPCHash;
+    Depth depth;
 } TlbInfo#(numeric type offsetBits, type predictionTableIdxTagT) deriving (Bits, Eq, FShow);
 
 module mkCapPCBackwards#(DTlbToPrefetcher toTlb, Parameter#(backwardsTableSize) _, Parameter#(timelinessTableWays) __, 
     Parameter#(timelinessTableSets) ___, Parameter#(predictionTableSize) ____, Parameter#(confidenceBits) _____,
     Parameter#(confidenceUpdateTableSize) ______, Parameter#(prefetchFilterTableSize) _______, Integer predictionReplacementConfidence, 
-    Integer predictionPrefetchConfidence)(CheriPCPrefetcher) 
+    Integer predictionPrefetchConfidence, Integer recursionDepth)(CheriPCPrefetcher) 
 provisos (
     NumAlias#(backwardsTableIdxBits, TLog#(backwardsTableSize)),
     NumAlias#(backwardsTableTagBits, TSub#(64, backwardsTableIdxBits)),
@@ -2087,7 +2092,6 @@ provisos (
     Add#(h__, predictionTableIdxBits, 32),
     Add#(1, i__, TDiv#(32, predictionTableIdxTagBits)),
     Add#(j_, 32, TMul#(TDiv#(32, predictionTableIdxTagBits), predictionTableIdxTagBits)),
-
     Add#(k__, CLineAddrSz, TMul#(TDiv#(CLineAddrSz, prefetchFilterIdxTagBits), prefetchFilterIdxTagBits)),
     Add#(1, j__, TDiv#(CLineAddrSz, prefetchFilterIdxTagBits)),
     Add#(TLog#(prefetchFilterTableSize), l__, CLineAddrSz)
@@ -2095,19 +2099,21 @@ provisos (
     Fifo#(4, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) prefetchQueue <- mkOverflowBypassFifo;
 
     Fifo#(1, Tuple2#(backwardsTableIdxT, backwardsTableEntryT)) backwardsEntryToWrite <- mkOverflowBypassFifo;
-    Fifo#(1, Tuple4#(backwardsTableIdxTagT, offsetT, PCHash, Bit#(64))) dataForBtReadReq <- mkOverflowBypassFifo;
-    Fifo#(1, Tuple4#(backwardsTableTagT, offsetT, PCHash, Bit#(64))) dataForBtReadResp <- mkPipelineFifo;
+    Fifo#(1, Tuple5#(backwardsTableIdxTagT, offsetT, PCHash, Bit#(64), PCHash)) dataForBtReadReq <- mkOverflowBypassFifo;
+    Fifo#(1, Tuple5#(backwardsTableTagT, offsetT, PCHash, Bit#(64), PCHash)) dataForBtReadResp <- mkPipelineFifo;
     RWBramCore#(backwardsTableIdxT, backwardsTableEntryT) backwardsTable <- mkRWBramCoreForwarded;
     
     Fifo#(2, Tuple3#(Addr, PCHash, Bit#(64))) dataForTtWriteEnq <- mkOverflowBypassFifo;
-    Fifo#(1, Tuple3#(Addr, offsetT, offsetT)) dataForTtRead <- mkPipelineFifo;
+    Fifo#(1, Tuple4#(Addr, offsetT, offsetT, PCHash)) dataForTtRead <- mkPipelineFifo;
     timelinessTableT timelinessTable <- mkTimelinessTable;
 
-    Fifo#(1, Tuple3#(predictionTableIdxTagT, offsetT, offsetT)) dataForPredReplacmentRd <- mkPipelineFifo;
-    Fifo#(1, Tuple3#(predictionTableIdxTagT, Addr, Addr)) dataForPredRdResp <- mkPipelineFifo;
+    Fifo#(1, Tuple4#(predictionTableIdxTagT, offsetT, offsetT, PCHash)) dataForPredReplacmentRd <- mkPipelineFifo;
+    Fifo#(1, Tuple4#(predictionTableIdxTagT, Addr, Addr, Depth)) dataForPredRdResp <- mkPipelineFifo;
     RWBramCore#(predictionTableIdxT, predictionTableEntryT) predictionTable <- mkRWBramCoreForwarded;
     RWBramCore#(predictionTableIdxT, predictionTableEntryT) predictionTableCopy <- mkRWBramCoreForwarded;
+
     Fifo#(1,  Tuple3#(predictionTableIdxTagT, Addr, Addr)) dataForPredRdReq <- mkOverflowBypassFifo;
+    Fifo#(1,  Tuple4#(predictionTableIdxTagT, Addr, Addr, Depth)) dataForPredFromPrefetchRdReq <- mkOverflowBypassFifo;
 
     RWBramCore#(confidenceUpdateIdxT, confidenceUpdateTableEntryT) confidenceUpdateTable <- mkRWBramCoreForwarded;
 
@@ -2207,7 +2213,7 @@ provisos (
         hash(lineAddr);
 
     rule processPredictionReplacementRd;
-        let {predIdxTag, parentOffset, childOffset} = dataForPredReplacmentRd.first;
+        let {predIdxTag, parentOffset, childOffset, childPCHash} = dataForPredReplacmentRd.first;
         dataForPredReplacmentRd.deq;
 
         predictionTableIdxT predIdx = truncate(predIdxTag);
@@ -2216,11 +2222,11 @@ provisos (
         predictionTableEntryT pe = predictionTable.rdResp;
         predictionTable.deqRdResp;
         
-        if (`VERBOSE) $display("%t Prefetcher processPredictionReplacementRd inital response predIdxTag %h parentOffset %h childOffset %h confidence %h", $time, predIdxTag, pe.parentOffset, pe.childOffset, pe.confidence);
+        if (`VERBOSE) $display("%t Prefetcher processPredictionReplacementRd inital response predIdxTag %h parentOffset %h childOffset %h confidence %h childPCHash %h", $time, predIdxTag, pe.parentOffset, pe.childOffset, pe.confidence, pe.childPCHash);
 
 
-        if (pe.tag == predTag && pe.parentOffset == parentOffset && pe.childOffset == childOffset) begin
-            if (`VERBOSE) $display("%t prefetecher processPredictionReplacementRd match +1 oldConfidence %h idx %h tag %h",$time, pe.confidence, predIdx, predTag);
+        if (pe.tag == predTag && pe.parentOffset == parentOffset && pe.childOffset == childOffset && pe.childPCHash == childPCHash) begin
+            if (`VERBOSE) $display("%t prefetecher processPredictionReplacementRd match +1 oldConfidence %h idx %h tag %h childPCHash %h",$time, pe.confidence, predIdx, predTag, childPCHash);
             if (pe.confidence < maxBound) begin
                 pe.confidence = pe.confidence + 1;
                 predictionTable.wrReq(predIdx, pe);
@@ -2229,14 +2235,15 @@ provisos (
         end
         else begin // Decrease confidence or replace
             if (pe.confidence < fromInteger(predictionReplacementConfidence)) begin
-                if (`VERBOSE) $display("%t prefetecher processPredictionReplacementRd replacement idx %h tag %h newParentOffset %h newChildOffset %h oldParentOffset %h oldChildOffset %h", 
-                                            $time, predIdx, predTag, parentOffset, childOffset, pe.parentOffset, pe.childOffset);
+                if (`VERBOSE) $display("%t prefetecher processPredictionReplacementRd replacement idx %h tag %h newParentOffset %h newChildOffset %h newChildPCHash oldParentOffset %h oldChildOffset %h oldChildPCHash %h", 
+                                            $time, predIdx, predTag, parentOffset, childOffset, childPCHash, pe.parentOffset, pe.childOffset, pe.childPCHash);
                 // Replace
                 predictionTableEntryT peReplacement;
                 peReplacement.parentOffset = parentOffset;
                 peReplacement.childOffset = childOffset;
                 peReplacement.confidence = 1;
                 peReplacement.tag = predTag;
+                peReplacement.childPCHash = childPCHash;
                 predictionTable.wrReq(predIdx, peReplacement);
                 predictionTableCopy.wrReq(predIdx, peReplacement);
 
@@ -2256,7 +2263,7 @@ provisos (
 
     rule processTimelinessTableResp if (initsDone());
         // TODO: remove parentVirtBase as may be unecessary
-        let {parentVirtBase, parentOffset, childOffset} = dataForTtRead.first;
+        let {parentVirtBase, parentOffset, childOffset, childPCHash} = dataForTtRead.first;
         dataForTtRead.deq;
 
         let tResp <- timelinessTable.rdResp;
@@ -2269,7 +2276,7 @@ provisos (
                 predictionTableTagT predTag = truncateLSB(predIdxTag);
                 
                 // Read existing predicition as only replace if below confidence
-                dataForPredReplacmentRd.enq(tuple3(predIdxTag, parentOffset, childOffset));
+                dataForPredReplacmentRd.enq(tuple4(predIdxTag, parentOffset, childOffset, childPCHash));
                 predictionTable.rdReq(predIdx);
             end
             tagged Invalid:
@@ -2279,18 +2286,18 @@ provisos (
     endrule
 
     rule processBtReadReq if (initsDone());
-        let {bIdxTag, childOffset, pcHash, childMissArrivalTime} = dataForBtReadReq.first;
+        let {bIdxTag, childOffset, pcHash, childMissArrivalTime, childPCHash} = dataForBtReadReq.first;
         dataForBtReadReq.deq;
 
         backwardsTableIdxT bIdx = truncate(bIdxTag);
         backwardsTableTagT bTag = truncateLSB(bIdxTag);
         
-        dataForBtReadResp.enq(tuple4(bTag, childOffset, pcHash, childMissArrivalTime));
+        dataForBtReadResp.enq(tuple5(bTag, childOffset, pcHash, childMissArrivalTime, childPCHash));
         backwardsTable.rdReq(bIdx);
     endrule
 
     rule processBtResp if (initsDone());
-        let {bTag, childOffset, pcHash, childMissArrivalTime} = dataForBtReadResp.first;
+        let {bTag, childOffset, pcHash, childMissArrivalTime, childPCHash} = dataForBtReadResp.first;
         dataForBtReadResp.deq;
         let bResp = backwardsTable.rdResp;
         backwardsTable.deqRdResp;
@@ -2298,7 +2305,7 @@ provisos (
 
         if (bResp.tag == bTag && bResp.valid) begin
             if (`VERBOSE) $display("%t Prefetcher backwards table hit tag %h parentVirtBase %h parentOffset %h childOffset %h childMissTime %h", $time, bResp.tag, bResp.parentVirtBase, bResp.parentOffset, childOffset, childMissArrivalTime);
-            dataForTtRead.enq(tuple3(bResp.parentVirtBase, bResp.parentOffset, childOffset));
+            dataForTtRead.enq(tuple4(bResp.parentVirtBase, bResp.parentOffset, childOffset, childPCHash));
 
             timelinessTable.rdReq(bResp.parentVirtBase, (bResp.parentTime << 1) - childMissArrivalTime); 
         end
@@ -2310,7 +2317,7 @@ provisos (
     // Prediction read to attempt prefetch
     rule processPredictionResponse;
         dataForPredRdResp.deq;
-        let {predIdxTag, boundsLength, boundsVirtBase} = dataForPredRdResp.first;
+        let {predIdxTag, boundsLength, boundsVirtBase, depth} = dataForPredRdResp.first;
         predictionTableTagT predTag = truncateLSB(predIdxTag);
 
         predictionTableCopy.deqRdResp;
@@ -2331,6 +2338,9 @@ provisos (
             tlbInfo.cap = cp3.value;
             tlbInfo.childOffset = Valid (predResp.childOffset);
             tlbInfo.predIdxTag = predIdxTag;
+            tlbInfo.childPCHash = predResp.childPCHash;
+            tlbInfo.depth = depth;
+            
 
             dataForTlbLookupFromPrediction.enq(tlbInfo);
         end
@@ -2385,7 +2395,7 @@ provisos (
         let tlbInfo = tlbLookupQueue.first;
         tlbLookupQueue.deq;
 
-        toTlb.prefetcherReq(tlbInfo.cap, Valid(PrefetchOtherInfo {childOffset: tlbInfo.childOffset, pcHash: tlbInfo.predIdxTag}));
+        toTlb.prefetcherReq(tlbInfo.cap, Valid(PrefetchOtherInfo {childOffset: tlbInfo.childOffset, pcHash: tlbInfo.predIdxTag, childPCHash: tlbInfo.childPCHash}));
         if (`VERBOSE) $display("%t Prefetcher doTlbLookup boundsVirtBase %h boundsOffset %h boundsLength %h childOffset %h", $time, getBase(tlbInfo.cap), getOffset(tlbInfo.cap), getLength(tlbInfo.cap), tlbInfo.childOffset);
 
     endrule
@@ -2432,7 +2442,17 @@ provisos (
         predictionTableIdxT predIdx = truncate(predIdxTag);
 
         predictionTableCopy.rdReq(predIdx);
-        dataForPredRdResp.enq(tuple3(predIdxTag, boundsLength, boundsVirtBase));
+        dataForPredRdResp.enq(tuple4(predIdxTag, boundsLength, boundsVirtBase, 0));
+    endrule
+
+    rule predictionTableFromPrefetchReadRequest if (initsDone());
+        let {predIdxTag, boundsLength, boundsVirtBase, depth} = dataForPredFromPrefetchRdReq.first;
+        dataForPredFromPrefetchRdReq.deq;
+
+        predictionTableIdxT predIdx = truncate(predIdxTag);
+
+        predictionTableCopy.rdReq(predIdx);
+        dataForPredRdResp.enq(tuple4(predIdxTag, boundsLength, boundsVirtBase, depth));
     endrule
     
     (* descending_urgency = "tlbLookupFromPrediction, tlbLookupFromDataArrival, evictFromPrefetchFilterReadRq" *)
@@ -2492,7 +2512,7 @@ provisos (
 
             let childMissArrivalTime <- $time;
 
-            dataForBtReadReq.enq(tuple4(bIdxTag, boundsOffset, pcHash, childMissArrivalTime));
+            dataForBtReadReq.enq(tuple5(bIdxTag, boundsOffset, pcHash, childMissArrivalTime, pcHash));
         end
 
         // Populate backwards table
@@ -2534,6 +2554,12 @@ provisos (
                     if (`VERBOSE ) $display("%t Prefetch childPrefetch virtBase %h childOffset %h ", $time, getBase(selCap), childOffset, fshow(prefetchOtherInfo));
 
                 end
+            end
+            else if (prefetchInfo.depth <= 1) begin // Result of a child prefetch so start chaining
+                predictionTableIdxTagT predIdxTag = getPredictionIdxTag(prefetchInfo.childPCHash);
+                dataForPredFromPrefetchRdReq.enq(tuple4(predIdxTag, boundsLength, boundsVirtBase, prefetchInfo.depth + 1));
+                if (`VERBOSE ) $display("%t Prefetcher triggering chain childPCHash %h", prefetchInfo.childPCHash);
+
             end
         end 
 

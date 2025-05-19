@@ -203,6 +203,11 @@ typedef struct {
     `ifdef DATA_PREFETCHER_CAP_PC_BACKWARDS
         Maybe#(Bit#(64)) childOffset;
         Bit#(32) pcHash;
+        Bit#(32) childPCHash;
+        Bit#(3) depth;
+    `endif
+    `ifdef DATA_PREFETCHER_ALL_PREFETCH_FILTER
+        Bit#(3) depth;
     `endif
 } PrefetchOtherInfo deriving (Bits, Eq, FShow);
 
