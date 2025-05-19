@@ -209,6 +209,10 @@ typedef struct {
     `ifdef DATA_PREFETCHER_ALL_PREFETCH_FILTER
         Bit#(3) depth;
     `endif
+    `ifdef DATA_PREFETCHER_DEPENDENCE_PREFETCHER
+        Bit#(3) depth;
+        PCHash childPC;
+    `endif    
 } PrefetchOtherInfo deriving (Bits, Eq, FShow);
 
 // processor req/resp

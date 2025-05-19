@@ -472,7 +472,13 @@ module mkL1DPrefetcher#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
     `elsif DATA_PREFETCHER_ALL_PREFETCH_FILTER
         Parameter#(1024) prefetchFilterTableSize <- mkParameter;
         let m <- mkAllWithPrefetchFilterPrefetcher(toTlb, prefetchFilterTableSize);
-     `endif
+    `elsif DATA_PREFETCHER_DEPENDENCE_PREFETCHER
+        Parameter#(128) backwardsTableSize <- mkParameter;
+        Parameter#(4) predictionTableWays <- mkParameter;
+        Parameter#(64) predictionTableSets <- mkParameter;
+        Integer recursionDepth = 1;
+        let m <- mkDependancePrefetcher(toTlb, backwardsTableSize, predictionTableWays, predictionTableSets, recursionDepth);
+    `endif
 `else 
     let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));
     // Parameter#(512) strideTableSize <- mkParameter;
