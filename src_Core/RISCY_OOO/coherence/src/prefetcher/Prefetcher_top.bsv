@@ -466,8 +466,12 @@ module mkL1DPrefetcher#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         Integer predictionPrefetchConfidence = 2;
 
         let m <- mkCapPCBackwards(toTlb, backwardsTableSize, timelinessTableWays, timelinessTableSets,
-                                    predictionTableSize, confidenceBits, confidenceUpdateTableSize, prefetchFilterTableSize, predictionReplacementConfidence, predictionPrefetchConfidence);
-    `endif
+                                    predictionTableSize, confidenceBits, confidenceUpdateTableSize, prefetchFilterTableSize, predictionReplacementConfidence, predictionPrefetchConfidence,
+                                    recursionDepth);
+    `elsif DATA_PREFETCHER_ALL_PREFETCH_FILTER
+        Parameter#(1024) prefetchFilterTableSize <- mkParameter;
+        let m <- mkAllWithPrefetchFilterPrefetcher(toTlb, prefetchFilterTableSize);
+     `endif
 `else 
     let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));
     // Parameter#(512) strideTableSize <- mkParameter;

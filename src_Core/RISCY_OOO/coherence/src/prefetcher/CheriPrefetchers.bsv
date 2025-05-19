@@ -1576,6 +1576,211 @@ module mkCapLoggingPrefetcher(CheriPCPrefetcher) provisos ();
 
 endmodule
 
+`ifdef DATA_PREFETCHER_ALL_PREFETCH_FILTER
+
+typedef struct {
+    Bool valid;
+    Bit#(tagBits) tag;
+} PrefetchFilterEntry#(numeric type tagBits) deriving (Bits, Eq, FShow);
+
+typedef struct {
+    CapPipe cap;
+    Bit#(3) depth;
+} TlbInfo deriving (Bits, Eq, FShow);
+
+module mkAllWithPrefetchFilterPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(prefetchFilterTableSize) _)(CheriPCPrefetcher) 
+provisos (
+    NumAlias#(prefetchFilterIdxBits, TLog#(prefetchFilterTableSize)),
+    NumAlias#(prefetchFilterTagBits, TSub#(CLineAddrSz, prefetchFilterIdxBits)),
+    NumAlias#(prefetchFilterIdxTagBits, TAdd#(prefetchFilterIdxBits, prefetchFilterTagBits)),
+
+    Alias#(prefetchFilterIdxT, Bit#(prefetchFilterIdxBits)),
+    Alias#(prefetchFilterTagT, Bit#(prefetchFilterTagBits)),
+    Alias#(prefetchFilterIdxTagT, Bit#(prefetchFilterIdxTagBits)),
+    Alias#(prefetchFilterEntryT, PrefetchFilterEntry#(prefetchFilterTagBits)),
+
+    Add#(k__, CLineAddrSz, TMul#(TDiv#(CLineAddrSz, prefetchFilterIdxTagBits), prefetchFilterIdxTagBits)),
+    Add#(1, j__, TDiv#(CLineAddrSz, prefetchFilterIdxTagBits)),
+    Add#(TLog#(prefetchFilterTableSize), l__, CLineAddrSz)
+);
+    Fifo#(4, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) prefetchQueue <- mkOverflowBypassFifo;
+
+    Fifo#(4, TlbInfo) tlbLookupQueue <- mkOverflowPipelineFifo;
+
+    Fifo#(1, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) dataForPrefetchFilterRdResp <- mkOverflowPipelineFifo;
+    Fifo#(1, LineAddr) evictFromPrefetchFilterQ <- mkOverflowBypassFifo;
+    Fifo#(1, LineAddr) dataForPrefetchFilterEvict <- mkPipelineFifo;
+    RWBramCore#(prefetchFilterIdxT, prefetchFilterEntryT) prefetchFilterTable <- mkRWBramCoreForwarded;
+
+    Reg#(Bool) initPrefetchFilterDone <- mkReg(False);
+    Reg#(prefetchFilterIdxT) initPrefetchFilterIndex <- mkReg(0);
+
+    rule doPrefetchFilterTableInit(!initPrefetchFilterDone);
+        prefetchFilterEntryT pe;
+        pe.valid = False;
+        pe.tag = 0;
+
+        prefetchFilterTable.wrReq(initPrefetchFilterIndex, pe);
+
+        initPrefetchFilterIndex <= initPrefetchFilterIndex + 1;
+        if(initPrefetchFilterIndex == maxBound) begin
+            initPrefetchFilterDone <= True;
+        end
+
+    endrule
+
+        function prefetchFilterIdxTagT getPrefetchFilterIdxTag(LineAddr lineAddr) = 
+        hash(lineAddr);
+
+    (* descending_urgency = "doTlbLookup, evictFromPrefetchFilterReadRq" *)
+    rule evictFromPrefetchFilterReadRq;
+        let lineAddr = evictFromPrefetchFilterQ.first;
+        evictFromPrefetchFilterQ.deq;
+
+        prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(lineAddr);
+        prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
+
+        if (`VERBOSE) $display("%t Prefetcher prefetchFilter evictReadRq idx %h", $time, prefetchFilterIdx);
+        prefetchFilterTable.rdReq(prefetchFilterIdx);
+        dataForPrefetchFilterEvict.enq(lineAddr);
+    endrule
+
+    (* descending_urgency = "processPrefetchFilterRdResp, evictFromPrefetchFilterRead" *)
+    rule evictFromPrefetchFilterRead;
+        let lineAddr = dataForPrefetchFilterEvict.first;
+        dataForPrefetchFilterEvict.deq;
+
+        prefetchFilterTable.deqRdResp;
+        prefetchFilterEntryT prefetchFilterEntry = prefetchFilterTable.rdResp;
+
+        prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(lineAddr);
+        prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
+        prefetchFilterTagT prefetchFilterTag = truncateLSB(prefetchFilterIdxTag);
+
+
+        if (prefetchFilterEntry.valid && prefetchFilterEntry.tag == prefetchFilterTag) begin
+            
+            prefetchFilterEntry.valid = False;
+
+            if (`VERBOSE) $display("%t Prefetcher prefetchFilter evictWrite idx %h tag %h", $time, prefetchFilterIdx, prefetchFilterTag);
+            prefetchFilterTable.wrReq(prefetchFilterIdx, prefetchFilterEntry);
+        end
+    endrule
+
+    rule processPrefetchFilterRdResp if (initPrefetchFilterDone);
+        let {prefetchAddr, cap, prefetchOtherInfo} = dataForPrefetchFilterRdResp.first;
+        dataForPrefetchFilterRdResp.deq;
+        
+        prefetchFilterTable.deqRdResp;
+        prefetchFilterEntryT prefetchFilterEntry = prefetchFilterTable.rdResp;
+
+        prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(getLineAddr(prefetchAddr));
+        prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
+        prefetchFilterTagT prefetchFilterTag = truncateLSB(prefetchFilterIdxTag);
+
+        if (`VERBOSE) $display("%t prefetcher prefetchfilterRdResponse idx %h tag %h responseTag %h valid %h", $time, prefetchFilterIdx, prefetchFilterTag, prefetchFilterEntry.tag, prefetchFilterEntry.valid);
+
+
+        if (!prefetchFilterEntry.valid || prefetchFilterEntry.tag != prefetchFilterTag) begin
+            prefetchQueue.enq(tuple3(prefetchAddr, cap, prefetchOtherInfo));
+
+            prefetchFilterEntryT pe;
+            pe.valid = True;
+            pe.tag = prefetchFilterTag;
+
+            prefetchFilterTable.wrReq(prefetchFilterIdx, pe);
+            if (`VERBOSE) $display("%t prefetcher prefetchfilter write idx %h tag %h valid %h", $time, prefetchFilterIdx, pe.tag, pe.valid);
+        end
+    endrule
+
+    rule doTlbLookup;
+        let tlbInfo = tlbLookupQueue.first;
+        tlbLookupQueue.deq;
+
+        toTlb.prefetcherReq(tlbInfo.cap, Valid(PrefetchOtherInfo {depth: tlbInfo.depth}));
+        if (`VERBOSE) $display("%t Prefetcher doTlbLookup boundsVirtBase %h boundsOffset %h boundsLength %h depth %h", $time, getBase(tlbInfo.cap), getOffset(tlbInfo.cap), getLength(tlbInfo.cap), tlbInfo.depth);
+    endrule
+
+    rule getTlbResp;
+        let resp = toTlb.prefetcherResp;
+        toTlb.deqPrefetcherResp;
+
+        if (`VERBOSE) $display("%t Prefetcher got TLB response: ", $time, fshow(resp));
+
+        doAssert(isValid(resp.prefetchOtherInfo), "TLB response should have tagged prefetchOtherInfo");
+
+        if (!resp.haveException && resp.paddr != 0) begin
+            prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(getLineAddr(resp.paddr));
+            prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
+
+            if (`VERBOSE) $display("%t prefetcher prefetchfilter RdReq prediction idx %h", $time, prefetchFilterIdx);
+            prefetchFilterTable.rdReq(prefetchFilterIdx);
+            dataForPrefetchFilterRdResp.enq(tuple3(resp.paddr, resp.cap, fromMaybe(?, resp.prefetchOtherInfo)));
+        end
+    endrule
+
+    method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, MemOp op, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
+        $display("%t Prefetcher logReportAccess addr %h pcHash %h hitMiss %b boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h op %h", $time, addr, pcHash, hitMiss, boundsOffset, boundsLength, boundsVirtBase, capPerms, op);
+    endmethod
+
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
+        MemTaggedData d1 = getTaggedDataAt(lineWithTags, 0);
+        MemTaggedData d2 = getTaggedDataAt(lineWithTags, 1);
+        MemTaggedData d3 = getTaggedDataAt(lineWithTags, 2);
+        MemTaggedData d4 = getTaggedDataAt(lineWithTags, 3);
+
+        CapPipe cap1 = fromMem(unpack(pack(d1)));
+        CapPipe cap2 = fromMem(unpack(pack(d2)));
+        CapPipe cap3 = fromMem(unpack(pack(d3)));
+        CapPipe cap4 = fromMem(unpack(pack(d4)));
+
+        LineMemDataOffset dataSel = getLineMemDataOffset(addr);
+        MemTaggedData current = getTaggedDataAt(lineWithTags, dataSel);
+        CapPipe selCap = fromMem(unpack(pack(current)));
+
+        // Is pointer
+        if (current.tag) begin
+            case (prefetchOtherInfo) matches
+                tagged Valid .prefetchInfo:
+                    if (prefetchInfo.depth < 2) begin
+                        tlbLookupQueue.enq(TlbInfo{cap: selCap, depth: prefetchInfo.depth + 1});
+                    end
+                tagged Invalid:
+                    tlbLookupQueue.enq(TlbInfo{cap: selCap, depth: 0});
+            endcase
+        end
+
+        $display("%t Prefetcher logReportDataArrival requestAddr %h pcHash %h wasMiss %b wasPrefetch %b boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h op %h", $time, addr, pcHash, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms, op);
+        $display("%t Preftecher logReportDataArrivalCap capIndex 1 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d1.tag, getAddr(cap1), getOffset(cap1), getLength(cap1), getBase(cap1), getPerms(cap1));
+        $display("%t Preftecher logReportDataArrivalCap capIndex 2 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d2.tag, getAddr(cap2), getOffset(cap2), getLength(cap2), getBase(cap2), getPerms(cap2));
+        $display("%t Preftecher logReportDataArrivalCap capIndex 3 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d3.tag, getAddr(cap3), getOffset(cap3), getLength(cap3), getBase(cap3), getPerms(cap3));
+        $display("%t Preftecher logReportDataArrivalCap capIndex 4 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d4.tag, getAddr(cap4), getOffset(cap4), getLength(cap4), getBase(cap4), getPerms(cap4));
+        $display("%t Preftecher logReportDataArrivalSelectedCap capIndex %b tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, dataSel, current.tag, getAddr(selCap), getOffset(selCap), getLength(selCap), getBase(selCap), getPerms(selCap));
+
+    endmethod
+
+    method ActionValue#(Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) getNextPrefetchAddr;
+        if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr %h", $time, tpl_1(prefetchQueue.first));
+        prefetchQueue.deq;
+
+        return prefetchQueue.first;
+    endmethod
+
+        method Action reportCacheEviction(LineAddr lineAddr);
+            evictFromPrefetchFilterQ.enq(lineAddr);
+    endmethod
+
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return  unpack(0);
+    endmethod
+`endif
+
+endmodule
+`endif
+
 `ifdef DATA_PREFETCHER_CAP_PC_BACKWARDS
 typedef struct {
     PCHash pcHash;
