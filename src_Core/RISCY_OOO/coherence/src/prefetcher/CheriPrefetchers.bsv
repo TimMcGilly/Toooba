@@ -2618,7 +2618,7 @@ typedef struct {
 typedef struct {
     Vector#(numOfWays, predictionDepEntryT) entries;
     Vector#(numOfWays, Bool) hit;
-} PredictionDepTableResp#(numeric type numOfWays, type wayT, type predictionDepEntryT);
+} PredictionDepTableResp#(numeric type numOfWays, type wayT, type predictionDepEntryT) deriving (Bits, Eq, FShow);
 
 interface PredictionDepTable#(
     numeric type numOfWays,
@@ -2650,8 +2650,6 @@ module mkPredictionDepTable#(
     Alias#(predictionDepEntryT, PredictionDepEntry#(tagBits, offsetBits)),
     Alias#(predictionDepSetAssocEntryT, PredictionDepSetAssocEntry#(tagBits, offsetBits)),
     Alias#(predictionDepTableRespT, PredictionDepTableResp#(numOfWays, wayT, predictionDepEntryT)),
-
-    Alias#(respT, PredictionDepTableResp#(numOfWays, wayT, predictionDepSetAssocEntryT)),
 
     Add#(1, a__, numOfWays),
     Add#(b__, idxBits, 32),
@@ -2896,15 +2894,16 @@ typedef struct {
 } BackwardsDepReadRespData #(type backwardsTableIdxTagT, numeric type offsetBits) deriving (Bits, Eq, FShow);
 
 typedef struct {
-    Addr addr;
-    CapPipe cap;
-    PrefetchOtherInfo prefetchOtherInfo;
-} PrefetchDepQueueInfo deriving (Bits, Eq, FShow);
-
-typedef struct {
     PCHash parentPC;
+    CapPipe filledCap;
     Bit#(depthBits) depth;
 } PredictionDepReadRespData#(numeric type depthBits) deriving (Bits, Eq, FShow);
+
+typedef struct {
+    CapPipe cap;
+    Bit#(3) depth;
+    PCHash childPC;
+} TlbInfo deriving (Bits, Eq, FShow);
 
 module mkDependancePrefetcher#(DTlbToPrefetcher toTlb, Parameter#(backwardsTableSize) _, Parameter#(predictionTableWays) __, 
     Parameter#(predictionTableSets) ___, Integer recursionDepth)(CheriPCPrefetcher) 
@@ -2929,8 +2928,6 @@ provisos (
 
     Alias#(backwardsDepReadRespDataT, BackwardsDepReadRespData#(backwardsTableIdxTagT, offsetBits)),
 
-
-
     Alias#(predictionDepEntryT, PredictionDepEntry#(predictionTableTagBits, offsetBits)),
     Alias#(predictionWayT, Bit#(predictionWayBits)),
     Alias#(predictionDepTableRespT, PredictionDepTableResp#(predictionTableWays, predictionWayT, predictionDepEntryT)),
@@ -2950,7 +2947,6 @@ provisos (
     Add#(g__, 32, TMul#(TDiv#(32, predictionTableIdxTagBits), predictionTableIdxTagBits))
 );
 
-    Fifo#(4, PrefetchDepQueueInfo) prefetchQueue <- mkOverflowBypassFifo;
 
     Fifo#(1, Tuple2#(backwardsTableIdxT, backwardsTableEntryT)) backwardsEntryToWrite <- mkOverflowBypassFifo;
     Fifo#(1, backwardsDepReadRespDataT) dataForBtReadReq <- mkOverflowBypassFifo;
@@ -2961,6 +2957,13 @@ provisos (
     Fifo#(1, predictionDepReadRespDataT) dataForPredRdResp <- mkPipelineFifo;
     predictionTableT predictionTable <- mkPredictionDepTable(True);
 
+    Fifo#(1, predictionDepTableRespT) currentPredictionTableResp <- mkPipelineFifo;
+    Fifo#(1, predictionDepReadRespDataT) currentPredictionTableRespData <- mkPipelineFifo;
+    Reg#(Vector#(predictionTableWays, Bool)) predRespWaysUsed <- mkReg(replicate(False));
+
+    Fifo#(4, TlbInfo) tlbLookupQueue <- mkOverflowPipelineFifo;
+
+    Fifo#(4, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) prefetchQueue <- mkOverflowBypassFifo;
 
     // Initalisation
     Reg#(Bool) initBackwardsDone <- mkReg(False);
@@ -2987,7 +2990,15 @@ provisos (
     function backwardsTableIdxTagT getBackwardsIdxTag(Addr childVirtBase) = 
         hash(childVirtBase); 
 
-    
+    function Bool canPrefetch(predictionWayT way) = 
+        !predRespWaysUsed[way] && currentPredictionTableResp.first.hit[way];
+
+    function canDoAnyPrefetch();
+        Vector#(predictionTableWays, predictionWayT) wayVec = genWith(fromInteger);
+
+        return any(canPrefetch, wayVec);
+    endfunction
+
     // Rules
 
     // Backwards table
@@ -3041,16 +3052,73 @@ provisos (
     endrule
 
     rule predictionTableReadResp;
+        $display("%t predictionTableReadResp");
         let predRespData = dataForPredRdResp.first;
         dataForPredRdResp.deq;
         
         predictionDepTableRespT predTableResp = predictionTable.rdResp();
         predictionTable.deqResp(predTableResp.hit);
-                       
+        
+        currentPredictionTableResp.enq(predTableResp);
+        currentPredictionTableRespData.enq(predRespData);
     endrule
     
+    rule deqPredRdResp if (!canDoAnyPrefetch);
+        $display("%t deqPredRdResp", $time, fshow(currentPredictionTableResp.first), fshow(currentPredictionTableRespData.first), fshow (predRespWaysUsed));
+        currentPredictionTableResp.deq;
+        currentPredictionTableRespData.deq;
+        predRespWaysUsed <= replicate(False);
+    endrule
+
+    rule processCurrentPredictionTableResp;
+        if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp ", $time, fshow(predRespWaysUsed), fshow(currentPredictionTableResp.first), fshow(currentPredictionTableRespData.first));
+        
+        Vector#(predictionTableWays, predictionWayT) wayVec = genWith(fromInteger);
+        let prefetchIdx = findIndex(canPrefetch, wayVec);
+
+        if (prefetchIdx matches tagged Valid .idx) begin
+            predRespWaysUsed[idx] <= True;
+
+            let predEntry = currentPredictionTableResp.first.entries[idx];
+            let predRdRespData = currentPredictionTableRespData.first;
+
+            Addr offset = extend(predEntry.childOffset);
+            let cap = setOffset(predRdRespData.filledCap, offset).value;
+
+            if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp foundPrefetch childOffset %h", predEntry.childOffset);
+            // TODO: add permissions check
+            TlbInfo tlbInfo;
+            tlbInfo.cap = cap;
+            tlbInfo.childPC = predEntry.childPC;
+            tlbInfo.depth = predRdRespData.depth;
+
+            tlbLookupQueue.enq(tlbInfo);
+        end
+
+    endrule
 
     // Tlb
+
+    rule doTlbLookup;
+        let tlbInfo = tlbLookupQueue.first;
+        tlbLookupQueue.deq;
+
+        toTlb.prefetcherReq(tlbInfo.cap, Valid(PrefetchOtherInfo {depth: tlbInfo.depth, childPC: tlbInfo.childPC}));
+        if (`VERBOSE) $display("%t Prefetcher doTlbLookup boundsVirtBase %h boundsOffset %h boundsLength %h depth %d childPC %h", $time, getBase(tlbInfo.cap), getOffset(tlbInfo.cap), getLength(tlbInfo.cap), tlbInfo.depth, tlbInfo.childPC);
+    endrule
+
+    rule getTlbResp;
+        let resp = toTlb.prefetcherResp;
+        toTlb.deqPrefetcherResp;
+
+        if (`VERBOSE) $display("%t Prefetcher got TLB response: ", $time, fshow(resp));
+
+        doAssert(isValid(resp.prefetchOtherInfo), "TLB response should have tagged prefetchOtherInfo");
+
+        if (!resp.haveException && resp.paddr != 0) begin
+            prefetchQueue.enq(tuple3(resp.paddr, resp.cap, fromMaybe(?, resp.prefetchOtherInfo)));
+        end
+    endrule
 
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
@@ -3102,6 +3170,7 @@ provisos (
                     predictionDepReadRespDataT predRdRespData;
                     predRdRespData.parentPC = prefetchInfo.childPC; // Chain PCs
                     predRdRespData.depth = prefetchInfo.depth + 1;
+                    predRdRespData.filledCap = selCap;
 
                     dataForPredRdReq.enq(predRdRespData);
                 end
@@ -3112,9 +3181,16 @@ provisos (
 
             predRdRespData.parentPC = pcHash;
             predRdRespData.depth = 0;
+            predRdRespData.filledCap = selCap;
             dataForPredRdReq.enq(predRdRespData);
         end
 
     endmethod
-        
+
+    method ActionValue#(Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) getNextPrefetchAddr;
+        if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr %h", $time, tpl_1(prefetchQueue.first));
+        prefetchQueue.deq;
+
+        return prefetchQueue.first;
+    endmethod
 endmodule
