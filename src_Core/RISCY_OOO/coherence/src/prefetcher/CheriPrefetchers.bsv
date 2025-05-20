@@ -2677,14 +2677,13 @@ module mkPredictionDepTable#(
     Reg#(Bool) initDone <- mkReg(False);
     Reg#(indexT) initIndex <- mkReg(0);
 
-    rule doInit(!initDone);
+    rule doInit if (!initDone);
         for(Integer i = 0; i < valueOf(numOfWays); i = i+1) begin
             predictionDepEntryT predEntry;
             predEntry.childOffset = 0;
             predEntry.childPC = 0;
             predEntry.tag = 0;
             
-
             predictionDepSetAssocEntryT predSetEntry;
             predSetEntry.valid = False;
             predSetEntry.entry = predEntry;
@@ -2738,6 +2737,7 @@ module mkPredictionDepTable#(
             return validVec[w] && entry_match;
         endfunction
 
+
         Vector#(numOfWays, wayT) wayVec = genWith(fromInteger);
 
         function Bool isFalse(Bool b) = !b;
@@ -2745,12 +2745,16 @@ module mkPredictionDepTable#(
         if(find(sameEntry, wayVec) matches tagged Valid .way) begin
             // entry exists, update rep info
             repBram.wrReq(idx, lruBitUpdate(repInfo, way));
+            if (`VERBOSE) $display("%t Prefetcher processWrReq found same entry rdReq lruBitUpdate %h entry ", $time, lruBitUpdate(repInfo, way), writeEntry);
+
         end
         else begin
             wayT repWay;
             if(findIndex(isFalse, validVec) matches tagged Valid .repWayIdx) begin
                 // get empty slot
                 repWay = pack(repWayIdx);
+                if (`VERBOSE) $display("%t Prefetcher processWrReq found empty slot replaceIndex %h", $time, repWay);
+
             end
             else begin
                 // find LRU slot (lruBit[i] = 0 means i is LRU slot)
@@ -2765,6 +2769,8 @@ module mkPredictionDepTable#(
                     repWay = 0; // this is actually impossible
                     doAssert(False, "must have at least 1 LRU slot");
                 end
+                if (`VERBOSE) $display("%t Prefetcher processWrReq found lru slot replaceIndex %h", $time, repWay);
+
             end
             repBram.wrReq(idx, lruBitUpdate(repInfo, repWay));
 
@@ -2773,6 +2779,7 @@ module mkPredictionDepTable#(
             predSetEntry.entry = writeEntry;
 
             predRam[repWay].wrReq(idx, predSetEntry);
+            if (`VERBOSE) $display("%t Prefetcher processWrReq replacement repWay %h lruBitUpdate %h entry ", $time, repWay, lruBitUpdate(repInfo, repWay), fshow(predSetEntry));
         end
     endrule
 
@@ -2794,6 +2801,7 @@ module mkPredictionDepTable#(
             predRam[i].rdReq(idx);
         end
 
+        if (`VERBOSE) $display("%t Prefetcher predTable wrReq idxTag %h predEntry ", $time, idxTag, predEntry);
     endmethod
 
     method Action rdReq(PCHash parentPC) if(initDone);
@@ -2805,8 +2813,9 @@ module mkPredictionDepTable#(
             predRam[i].rdReq(idx);
         end
         
+        if (`VERBOSE) $display("%t Prefetcher predTable rdReq parentPC %h", $time, parentPC);
+
         repBram.rdReq(idx);
-        
         rdReqQ.enq(idxTag);
     endmethod
 
@@ -2816,7 +2825,6 @@ module mkPredictionDepTable#(
         for(Integer i = 0; i < valueof(numOfWays); i = i+1) begin
             entries[i] = predRam[i].rdResp;
         end
-        repInfoT repInfo = repBram.rdResp;
 
         let idxTag = rdReqQ.first;
         tagT tag = truncateLSB(idxTag);
@@ -2839,6 +2847,8 @@ module mkPredictionDepTable#(
                 predTableResp.entries[i] = ?;
             end
         end
+
+        // if (`VERBOSE) $display("%t Prefetcher predTable rdResp idxTag %h", $time, idxTag, fshow(predTableResp));
         
         return predTableResp;
     endmethod
@@ -2872,6 +2882,8 @@ module mkPredictionDepTable#(
             end
         end
         
+        if (`VERBOSE) $display("%t Prefetcher predTable deqResp idxTag %h, repInfo ", $time, idxTag, repInfo);
+
         if (any(id, hitWays)) begin
             indexT idx = truncate(idxTag);
             repBram.wrReq(idx, repInfo);
@@ -3007,7 +3019,7 @@ provisos (
         backwardsEntryToWrite.deq;
 
         backwardsTable.wrReq(bIdx, be); 
-        if (`VERBOSE) $display("%t Prefetcher Item added to backwards table idx %h childTag %h parentPC", $time, bIdx, be.tag, be.parentPC);
+        if (`VERBOSE) $display("%t Prefetcher Item added to backwards table idx %h childTag %h parentPC %h", $time, bIdx, be.tag, be.parentPC);
     endrule
 
     rule processBtReadReq if (initsDone());
@@ -3018,6 +3030,9 @@ provisos (
         
         dataForBtReadResp.enq(backwardsRespData);
         backwardsTable.rdReq(bIdx);
+
+        if (`VERBOSE) $display("%t Prefetcher processBtReadReq ", $time, fshow(backwardsRespData));
+
     endrule
 
     rule processBtResp;
@@ -3049,10 +3064,11 @@ provisos (
 
         predictionTable.rdReq(predRespData.parentPC);
         dataForPredRdResp.enq(predRespData);
+
+        if (`VERBOSE) $display("%t Prefetcher predictionTableReadReq parentPC %h dataForPredRdResp ", $time, predRespData.parentPC, fshow(predRespData));
     endrule
 
     rule predictionTableReadResp;
-        $display("%t predictionTableReadResp");
         let predRespData = dataForPredRdResp.first;
         dataForPredRdResp.deq;
         
@@ -3061,15 +3077,19 @@ provisos (
         
         currentPredictionTableResp.enq(predTableResp);
         currentPredictionTableRespData.enq(predRespData);
+
+        if (`VERBOSE) $display("%t Prefetcher predictionTableReadResp response ", $time, predTableResp);
+
     endrule
     
     rule deqPredRdResp if (!canDoAnyPrefetch);
-        $display("%t deqPredRdResp", $time, fshow(currentPredictionTableResp.first), fshow(currentPredictionTableRespData.first), fshow (predRespWaysUsed));
+        $display("%t Prefetcher deqPredRdResp", $time, fshow(currentPredictionTableResp.first), fshow(currentPredictionTableRespData.first), fshow (predRespWaysUsed));
         currentPredictionTableResp.deq;
         currentPredictionTableRespData.deq;
         predRespWaysUsed <= replicate(False);
     endrule
 
+    (* descending_urgency = "deqPredRdResp, processCurrentPredictionTableResp" *)
     rule processCurrentPredictionTableResp;
         if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp ", $time, fshow(predRespWaysUsed), fshow(currentPredictionTableResp.first), fshow(currentPredictionTableRespData.first));
         
@@ -3085,7 +3105,7 @@ provisos (
             Addr offset = extend(predEntry.childOffset);
             let cap = setOffset(predRdRespData.filledCap, offset).value;
 
-            if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp foundPrefetch childOffset %h", predEntry.childOffset);
+            if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp foundPrefetch childOffset %h", $time, predEntry.childOffset);
             // TODO: add permissions check
             TlbInfo tlbInfo;
             tlbInfo.cap = cap;
@@ -3121,6 +3141,11 @@ provisos (
     endrule
 
 
+    method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, MemOp op, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
+        if (`VERBOSE) $display("%t Prefetcher logReportAccess addr %h pcHash %h hitMiss %b boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h op %h", $time, addr, pcHash, hitMiss, boundsOffset, boundsLength, boundsVirtBase, capPerms, op);
+    endmethod
+
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
 
@@ -3130,7 +3155,7 @@ provisos (
 
         if (!wasPrefetch) begin
                 // Write new access to backwards table
-                begin
+                if (current.tag) begin
 
                     backwardsTableIdxTagT bIdxTag = getBackwardsIdxTag(getBase(selCap)); // virt base of new child
                     backwardsTableIdxT bIdx = truncate(bIdxTag);
@@ -3142,6 +3167,7 @@ provisos (
                     be.tag = bTag;
 
                     backwardsEntryToWrite.enq(tuple2(bIdx, be));
+                    if (`VERBOSE) $display("%t Prefetcher backwardsEntryToWrite enq idx %h entry ", $time, bIdx, fshow(be));
                 end
 
 
@@ -3158,33 +3184,60 @@ provisos (
                     backwardsRespData.childPC = pcHash;
 
                     dataForBtReadReq.enq(backwardsRespData);
+                    if (`VERBOSE) $display("%t Prefetcher dataForBtReadReq enq", $time,fshow(backwardsRespData));
                 end
         end
 
         // Read from prediction table as can now chain next prefetch
         depthT newDepth = 0;
 
-        if (wasPrefetch) begin
-            if (prefetchOtherInfo matches tagged Valid .prefetchInfo) begin
-                if (prefetchInfo.depth <= fromInteger(recursionDepth)) begin
-                    predictionDepReadRespDataT predRdRespData;
-                    predRdRespData.parentPC = prefetchInfo.childPC; // Chain PCs
-                    predRdRespData.depth = prefetchInfo.depth + 1;
-                    predRdRespData.filledCap = selCap;
+        if (current.tag) begin
+            if (wasPrefetch) begin
+                if (prefetchOtherInfo matches tagged Valid .prefetchInfo) begin
+                    if (prefetchInfo.depth <= fromInteger(recursionDepth)) begin
+                        predictionDepReadRespDataT predRdRespData;
+                        predRdRespData.parentPC = prefetchInfo.childPC; // Chain PCs
+                        predRdRespData.depth = prefetchInfo.depth + 1;
+                        predRdRespData.filledCap = selCap;
 
-                    dataForPredRdReq.enq(predRdRespData);
+                        dataForPredRdReq.enq(predRdRespData);
+                        if (`VERBOSE) $display("%t Prefetcher dataForPredRdReq enq chain", $time,fshow(predRdRespData));
+
+                    end
                 end
-            end
-        end 
-        else begin
-            predictionDepReadRespDataT predRdRespData;
+            end 
+            else begin
+                predictionDepReadRespDataT predRdRespData;
 
-            predRdRespData.parentPC = pcHash;
-            predRdRespData.depth = 0;
-            predRdRespData.filledCap = selCap;
-            dataForPredRdReq.enq(predRdRespData);
+                predRdRespData.parentPC = pcHash;
+                predRdRespData.depth = 0;
+                predRdRespData.filledCap = selCap;
+                dataForPredRdReq.enq(predRdRespData);
+                if (`VERBOSE) $display("%t Prefetcher dataForPredRdReq enq", $time,fshow(predRdRespData));
+
+            end
         end
 
+
+        if (`VERBOSE) begin
+
+            MemTaggedData d1 = getTaggedDataAt(lineWithTags, 0);
+            MemTaggedData d2 = getTaggedDataAt(lineWithTags, 1);
+            MemTaggedData d3 = getTaggedDataAt(lineWithTags, 2);
+            MemTaggedData d4 = getTaggedDataAt(lineWithTags, 3);
+
+            CapPipe cap1 = fromMem(unpack(pack(d1)));
+            CapPipe cap2 = fromMem(unpack(pack(d2)));
+            CapPipe cap3 = fromMem(unpack(pack(d3)));
+            CapPipe cap4 = fromMem(unpack(pack(d4)));
+
+            $display("%t Prefetcher logReportDataArrival requestAddr %h pcHash %h wasMiss %b wasPrefetch %b boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h op %h", $time, addr, pcHash, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms, op);
+            $display("%t Preftecher logReportDataArrivalCap capIndex 1 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d1.tag, getAddr(cap1), getOffset(cap1), getLength(cap1), getBase(cap1), getPerms(cap1));
+            $display("%t Preftecher logReportDataArrivalCap capIndex 2 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d2.tag, getAddr(cap2), getOffset(cap2), getLength(cap2), getBase(cap2), getPerms(cap2));
+            $display("%t Preftecher logReportDataArrivalCap capIndex 3 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d3.tag, getAddr(cap3), getOffset(cap3), getLength(cap3), getBase(cap3), getPerms(cap3));
+            $display("%t Preftecher logReportDataArrivalCap capIndex 4 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d4.tag, getAddr(cap4), getOffset(cap4), getLength(cap4), getBase(cap4), getPerms(cap4));
+            $display("%t Preftecher logReportDataArrivalSelectedCap capIndex %b tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, dataSel, current.tag, getAddr(selCap), getOffset(selCap), getLength(selCap), getBase(selCap), getPerms(selCap));
+        end
     endmethod
 
     method ActionValue#(Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) getNextPrefetchAddr;
