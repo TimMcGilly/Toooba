@@ -1629,7 +1629,7 @@ provisos (
 
     endrule
 
-        function prefetchFilterIdxTagT getPrefetchFilterIdxTag(LineAddr lineAddr) = 
+    function prefetchFilterIdxTagT getPrefetchFilterIdxTag(LineAddr lineAddr) = 
         hash(lineAddr);
 
     (* descending_urgency = "doTlbLookup, evictFromPrefetchFilterReadRq" *)
@@ -1768,7 +1768,7 @@ provisos (
         return prefetchQueue.first;
     endmethod
 
-        method Action reportCacheEviction(LineAddr lineAddr);
+    method Action reportCacheEviction(LineAddr lineAddr);
             evictFromPrefetchFilterQ.enq(lineAddr);
     endmethod
 
@@ -2930,9 +2930,19 @@ typedef struct {
     PCHash childPC;
 } TlbInfo deriving (Bits, Eq, FShow);
 
+typedef struct {
+    Bool valid;
+    Bit#(tagBits) tag;
+} PrefetchFilterEntry#(numeric type tagBits) deriving (Bits, Eq, FShow);
+
 module mkDependancePrefetcher#(DTlbToPrefetcher toTlb, Parameter#(backwardsTableSize) _, Parameter#(predictionTableWays) __, 
-    Parameter#(predictionTableSets) ___, Integer recursionDepth)(CheriPCPrefetcher) 
+    Parameter#(predictionTableSets) ___, Parameter#(prefetchFilterTableSize) ____, Integer recursionDepth)(CheriPCPrefetcher) 
 provisos (
+    NumAlias#(prefetchFilterIdxBits, TLog#(prefetchFilterTableSize)),
+    NumAlias#(prefetchFilterTagBits, TSub#(CLineAddrSz, prefetchFilterIdxBits)),
+    NumAlias#(prefetchFilterIdxTagBits, TAdd#(prefetchFilterIdxBits, prefetchFilterTagBits)),
+
+
     NumAlias#(backwardsTableIdxBits, TLog#(backwardsTableSize)),
     NumAlias#(backwardsTableTagBits, TSub#(64, backwardsTableIdxBits)),
     NumAlias#(backwardsTableIdxTagBits, TAdd#(backwardsTableIdxBits, backwardsTableTagBits)),
@@ -2944,6 +2954,12 @@ provisos (
     NumAlias#(predictionWayBits, TLog#(predictionTableWays)),
 
     NumAlias#(depthBits, 3),
+
+
+    Alias#(prefetchFilterIdxT, Bit#(prefetchFilterIdxBits)),
+    Alias#(prefetchFilterTagT, Bit#(prefetchFilterTagBits)),
+    Alias#(prefetchFilterIdxTagT, Bit#(prefetchFilterIdxTagBits)),
+    Alias#(prefetchFilterEntryT, PrefetchFilterEntry#(prefetchFilterTagBits)),
 
     Alias#(backwardsTableIdxT, Bit#(backwardsTableIdxBits)),
     Alias#(backwardsTableTagT, Bit#(backwardsTableTagBits)),
@@ -2969,7 +2985,11 @@ provisos (
     Add#(1, d__, predictionTableWays),
     Add#(e__, predictionTableIdxBits, 32),
     Add#(1, f__, TDiv#(32, predictionTableIdxTagBits)),
-    Add#(g__, 32, TMul#(TDiv#(32, predictionTableIdxTagBits), predictionTableIdxTagBits))
+    Add#(g__, 32, TMul#(TDiv#(32, predictionTableIdxTagBits), predictionTableIdxTagBits)),
+
+    Add#(h__, CLineAddrSz, TMul#(TDiv#(CLineAddrSz, prefetchFilterIdxTagBits), prefetchFilterIdxTagBits)),
+    Add#(1, i__, TDiv#(CLineAddrSz, prefetchFilterIdxTagBits)),
+    Add#(TLog#(prefetchFilterTableSize), j__, CLineAddrSz)
 );
 
 
@@ -3012,12 +3032,32 @@ provisos (
         end
     endrule
 
+    Reg#(Bool) initPrefetchFilterDone <- mkReg(False);
+    Reg#(prefetchFilterIdxT) initPrefetchFilterIndex <- mkReg(0);
+
+    rule doPrefetchFilterTableInit(!initPrefetchFilterDone);
+        prefetchFilterEntryT pe;
+        pe.valid = False;
+        pe.tag = 0;
+
+        prefetchFilterTable.wrReq(initPrefetchFilterIndex, pe);
+
+        initPrefetchFilterIndex <= initPrefetchFilterIndex + 1;
+        if(initPrefetchFilterIndex == maxBound) begin
+            initPrefetchFilterDone <= True;
+        end
+
+    endrule
+
     // Functions
     function Bool initsDone() = 
-        initBackwardsDone;
+        initBackwardsDone && initPrefetchFilterDone;
 
     function backwardsTableIdxTagT getBackwardsIdxTag(Addr childVirtBase) = 
         hash(childVirtBase); 
+
+    function prefetchFilterIdxTagT getPrefetchFilterIdxTag(LineAddr lineAddr) = 
+        hash(lineAddr);
 
     function Bool canPrefetch(predictionWayT way) = 
         !predRespWaysUsed[way] && currentPredictionTableResp.first.hit[way];
@@ -3029,6 +3069,54 @@ provisos (
     endfunction
 
     // Rules
+    // Prefetch Filter
+    (* descending_urgency = "processPrefetchFilterRdResp, evictFromPrefetchFilterRead" *)
+    rule evictFromPrefetchFilterRead;
+        let lineAddr = dataForPrefetchFilterEvict.first;
+        dataForPrefetchFilterEvict.deq;
+
+        prefetchFilterTable.deqRdResp;
+        prefetchFilterEntryT prefetchFilterEntry = prefetchFilterTable.rdResp;
+
+        prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(lineAddr);
+        prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
+        prefetchFilterTagT prefetchFilterTag = truncateLSB(prefetchFilterIdxTag);
+
+
+        if (prefetchFilterEntry.valid && prefetchFilterEntry.tag == prefetchFilterTag) begin
+            
+            prefetchFilterEntry.valid = False;
+
+            if (`VERBOSE) $display("%t Prefetcher prefetchFilter evictWrite idx %h tag %h", $time, prefetchFilterIdx, prefetchFilterTag);
+            prefetchFilterTable.wrReq(prefetchFilterIdx, prefetchFilterEntry);
+        end
+    endrule
+
+    rule processPrefetchFilterRdResp if (initPrefetchFilterDone);
+        let {prefetchAddr, cap, prefetchOtherInfo} = dataForPrefetchFilterRdResp.first;
+        dataForPrefetchFilterRdResp.deq;
+        
+        prefetchFilterTable.deqRdResp;
+        prefetchFilterEntryT prefetchFilterEntry = prefetchFilterTable.rdResp;
+
+        prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(getLineAddr(prefetchAddr));
+        prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
+        prefetchFilterTagT prefetchFilterTag = truncateLSB(prefetchFilterIdxTag);
+
+        if (`VERBOSE) $display("%t prefetcher prefetchfilterRdResponse idx %h tag %h responseTag %h valid %h", $time, prefetchFilterIdx, prefetchFilterTag, prefetchFilterEntry.tag, prefetchFilterEntry.valid);
+
+
+        if (!prefetchFilterEntry.valid || prefetchFilterEntry.tag != prefetchFilterTag) begin
+            prefetchQueue.enq(tuple3(prefetchAddr, cap, prefetchOtherInfo));
+
+            prefetchFilterEntryT pe;
+            pe.valid = True;
+            pe.tag = prefetchFilterTag;
+
+            prefetchFilterTable.wrReq(prefetchFilterIdx, pe);
+            if (`VERBOSE) $display("%t prefetcher prefetchfilter write idx %h tag %h valid %h", $time, prefetchFilterIdx, pe.tag, pe.valid);
+        end
+    endrule
 
     // Backwards table
     rule writeToBackwards if (initsDone());
@@ -3140,36 +3228,37 @@ provisos (
             
             Addr prefetchAddr = getAddr(cap);
 
-            if (getLineAddr(prefetchAddr) == predRdRespData.lineAddr) begin
-                if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut lineAddr %h", $time, predRdRespData.lineAddr);
+            // if (getLineAddr(prefetchAddr) == predRdRespData.lineAddr) begin
+            //     if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut lineAddr %h", $time, predRdRespData.lineAddr);
 
-                LineMemDataOffset dataSel = getLineMemDataOffset(prefetchAddr);
-                MemTaggedData current = getTaggedDataAt(predRdRespData.lineWithTags, dataSel);
-                CapPipe shortcutChildCap = fromMem(unpack(pack(current)));
+            //     LineMemDataOffset dataSel = getLineMemDataOffset(prefetchAddr);
+            //     MemTaggedData current = getTaggedDataAt(predRdRespData.lineWithTags, dataSel);
+            //     CapPipe shortcutChildCap = fromMem(unpack(pack(current)));
 
-                if (current.tag) begin
-                    if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut tag valid shortcutCap ", $time, fshow(shortcutChildCap));
-                    if (predRdRespData.depth + 1 <= fromInteger(recursionDepth)) begin
+            //     if (current.tag) begin
+            //         if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut tag valid shortcutCap ", $time, fshow(shortcutChildCap));
+            //         if (predRdRespData.depth <= fromInteger(recursionDepth)) begin
 
-                        predictionDepReadRespDataT shortcutPredRdRespData;
-                        shortcutPredRdRespData.parentPC = predEntry.childPC; // Chain PCs
-                        shortcutPredRdRespData.depth = predRdRespData.depth + 1; // Should depth be increased
-                        shortcutPredRdRespData.filledCap = shortcutChildCap;
-                        shortcutPredRdRespData.lineWithTags = predRdRespData.lineWithTags;
-                        shortcutPredRdRespData.lineAddr = predRdRespData.lineAddr;
+            //             predictionDepReadRespDataT shortcutPredRdRespData;
+            //             shortcutPredRdRespData.parentPC = predEntry.childPC; // Chain PCs
+            //             shortcutPredRdRespData.depth = predRdRespData.depth + 1; // Should depth be increased
+            //             shortcutPredRdRespData.filledCap = shortcutChildCap; // TODO: add check we have permission to access this capability
+            //             shortcutPredRdRespData.lineWithTags = predRdRespData.lineWithTags;
+            //             shortcutPredRdRespData.lineAddr = predRdRespData.lineAddr;
 
-                        dataForPredRdReqFromShortcut.enq(shortcutPredRdRespData);
-                        if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut submit", $time);
+            //             dataForPredRdReqFromShortcut.enq(shortcutPredRdRespData);
+            //             if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut submit", $time);
 
-                    end
-                    else begin
-                        if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut skipped due to depth", $time);
-                    end
-                end begin
-                    if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut tag invalid", $time);
-                end
-            end
-            else begin
+            //         end
+            //         else begin
+            //             if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut skipped due to depth", $time);
+            //         end
+            //     end 
+            //     else begin
+            //         if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut tag invalid", $time);
+            //     end
+            // end
+            // else begin
                 
                 // TODO: add permissions check
                 TlbInfo tlbInfo;
@@ -3178,7 +3267,7 @@ provisos (
                 tlbInfo.depth = predRdRespData.depth;
 
                 tlbLookupQueue.enq(tlbInfo);
-            end
+            // end
         end
 
     endrule
@@ -3202,7 +3291,12 @@ provisos (
         doAssert(isValid(resp.prefetchOtherInfo), "TLB response should have tagged prefetchOtherInfo");
 
         if (!resp.haveException && resp.paddr != 0) begin
-            prefetchQueue.enq(tuple3(resp.paddr, resp.cap, fromMaybe(?, resp.prefetchOtherInfo)));
+            prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(getLineAddr(resp.paddr));
+            prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
+
+            if (`VERBOSE) $display("%t prefetcher prefetchfilter RdReq prediction idx %h", $time, prefetchFilterIdx);
+            prefetchFilterTable.rdReq(prefetchFilterIdx);
+            dataForPrefetchFilterRdResp.enq(tuple3(resp.paddr, resp.cap, fromMaybe(?, resp.prefetchOtherInfo)));
         end
     endrule
 
@@ -3317,5 +3411,9 @@ provisos (
         prefetchQueue.deq;
 
         return prefetchQueue.first;
+    endmethod
+
+    method Action reportCacheEviction(LineAddr lineAddr);
+            evictFromPrefetchFilterQ.enq(lineAddr);
     endmethod
 endmodule
