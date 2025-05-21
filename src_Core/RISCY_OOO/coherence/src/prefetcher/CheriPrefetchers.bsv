@@ -3014,6 +3014,13 @@ provisos (
 
     Fifo#(4, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) prefetchQueue <- mkOverflowBypassFifo;
 
+
+    Fifo#(1, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) dataForPrefetchFilterRdResp <- mkOverflowPipelineFifo;
+    Fifo#(1, LineAddr) evictFromPrefetchFilterQ <- mkOverflowBypassFifo;
+    Fifo#(1, LineAddr) dataForPrefetchFilterEvict <- mkPipelineFifo;
+    RWBramCore#(prefetchFilterIdxT, prefetchFilterEntryT) prefetchFilterTable <- mkRWBramCoreForwarded;
+
+
     // Initalisation
     Reg#(Bool) initBackwardsDone <- mkReg(False);
     Reg#(backwardsTableIdxT) initBackwardsIndex <- mkReg(0);
