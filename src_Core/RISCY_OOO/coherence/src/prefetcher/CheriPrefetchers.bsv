@@ -2935,8 +2935,20 @@ typedef struct {
     Bit#(tagBits) tag;
 } PrefetchFilterEntry#(numeric type tagBits) deriving (Bits, Eq, FShow);
 
+
+typedef struct {
+    Bool valid;
+    PCHash recentPC; // Most recent PC cap size was accessed at
+    Bit#(tagBits) tag;
+} CapSizeEntry#(numeric type tagBits) deriving (Bits, Eq, FShow);
+
+typedef struct {
+    Bool valid; // Cap has valid tag and isn't directly addressed cap but on other other caps 
+    CapPipe cap;
+} CapSizePrefetchQuery deriving (Bits, Eq, FShow);
+
 module mkDependancePrefetcher#(DTlbToPrefetcher toTlb, Parameter#(backwardsTableSize) _, Parameter#(predictionTableWays) __, 
-    Parameter#(predictionTableSets) ___, Parameter#(prefetchFilterTableSize) ____, Integer recursionDepth)(CheriPCPrefetcher) 
+    Parameter#(predictionTableSets) ___, Parameter#(prefetchFilterTableSize) ____, Parameter#(capSizeTableSize) _____, Integer recursionDepth)(CheriPCPrefetcher) 
 provisos (
     NumAlias#(prefetchFilterIdxBits, TLog#(prefetchFilterTableSize)),
     NumAlias#(prefetchFilterTagBits, TSub#(CLineAddrSz, prefetchFilterIdxBits)),
@@ -2952,6 +2964,10 @@ provisos (
     NumAlias#(predictionTableTagBits, TSub#(32, predictionTableIdxBits)),
     NumAlias#(predictionTableIdxTagBits, TAdd#(predictionTableIdxBits, predictionTableTagBits)),
     NumAlias#(predictionWayBits, TLog#(predictionTableWays)),
+
+    NumAlias#(capSizeTableIdxBits, TLog#(capSizeTableSize)),
+    NumAlias#(capSizeTableTagBits, TSub#(64, capSizeTableIdxBits)),
+    NumAlias#(capSizeTableIdxTagBits, TAdd#(capSizeTableIdxBits, capSizeTableTagBits)),
 
     NumAlias#(depthBits, 3),
 
@@ -2976,6 +2992,15 @@ provisos (
 
     Alias#(predictionDepReadRespDataT, PredictionDepReadRespData#(depthBits)),
 
+    Alias#(capSizeTableIdxT, Bit#(capSizeTableIdxBits)),
+    Alias#(capSizeTableTagT, Bit#(capSizeTableTagBits)),
+    Alias#(capSizeTableIdxTagT, Bit#(capSizeTableIdxTagBits)),
+    Alias#(capSizeTableEntryT, CapSizeEntry#(capSizeTableTagBits)),
+
+    NumAlias#(capSizeQLineNumElements, 4),
+    NumAlias#(capSizeQIdxBits, TLog#(capSizeQLineNumElements)),
+    Alias#(capSizeQIdxT, Bit#(capSizeQIdxBits)),
+
     Alias#(depthT, Bit#((depthBits))),
 
     Add#(a__, backwardsTableIdxBits, 64),
@@ -2989,7 +3014,12 @@ provisos (
 
     Add#(h__, CLineAddrSz, TMul#(TDiv#(CLineAddrSz, prefetchFilterIdxTagBits), prefetchFilterIdxTagBits)),
     Add#(1, i__, TDiv#(CLineAddrSz, prefetchFilterIdxTagBits)),
-    Add#(TLog#(prefetchFilterTableSize), j__, CLineAddrSz)
+    Add#(TLog#(prefetchFilterTableSize), j__, CLineAddrSz),
+
+    Add#(l__, capSizeTableIdxBits, 64),
+    Add#(1, k__, TDiv#(64, capSizeTableIdxTagBits)),
+    Add#(m__, 64, TMul#(TDiv#(64, capSizeTableIdxTagBits), capSizeTableIdxTagBits))
+
 );
 
 
@@ -3001,6 +3031,7 @@ provisos (
 
     Fifo#(1, predictionDepReadRespDataT) dataForPredRdReqFromShortcut <- mkOverflowBypassFifo;
     Fifo#(1, predictionDepReadRespDataT) dataForPredRdReqFromDataArrival <- mkOverflowBypassFifo;
+    Fifo#(1, predictionDepReadRespDataT) dataForPredRdReqFromCapSize <- mkOverflowBypassFifo;
 
     Fifo#(1, predictionDepReadRespDataT) dataForPredRdReq <- mkOverflowBypassFifo;
     Fifo#(1, predictionDepReadRespDataT) dataForPredRdResp <- mkPipelineFifo;
@@ -3020,6 +3051,11 @@ provisos (
     Fifo#(1, LineAddr) dataForPrefetchFilterEvict <- mkPipelineFifo;
     RWBramCore#(prefetchFilterIdxT, prefetchFilterEntryT) prefetchFilterTable <- mkRWBramCoreForwarded;
 
+    Fifo#(4, Vector#(capSizeQLineNumElements, CapSizePrefetchQuery)) capSizePrefetchQueryQueue <- mkOverflowPipelineFifo;
+    Fifo#(1, Vector#(capSizeQLineNumElements, CapSizePrefetchQuery)) currentCapSizePrefetchQuery <- mkBypassFifo;
+    Fifo#(1, CapSizePrefetchQuery) dataForCapSizeRdResp <- mkPipelineFifo;
+    Reg#(Vector#(capSizeQLineNumElements, Bool)) currentCapSizePrefetchQueryUsed <- mkReg(replicate(False));
+    RWBramCore#(capSizeTableIdxT, capSizeTableEntryT) capSizeTable <- mkRWBramCoreForwarded;
 
     // Initalisation
     Reg#(Bool) initBackwardsDone <- mkReg(False);
@@ -3053,18 +3089,37 @@ provisos (
         if(initPrefetchFilterIndex == maxBound) begin
             initPrefetchFilterDone <= True;
         end
+    endrule
 
+    Reg#(Bool) initCapSizeTableDone <- mkReg(False);
+    Reg#(capSizeTableIdxT) initCapSizeTableIndex <- mkReg(0);
+
+    rule doCapSizeTableInit(!initCapSizeTableDone);
+        capSizeTableEntryT ce;
+        ce.valid = False;
+        ce.recentPC = 0;
+        ce.tag = 0;
+
+        capSizeTable.wrReq(initCapSizeTableIndex, ce);
+
+        initCapSizeTableIndex <= initCapSizeTableIndex + 1;
+        if(initCapSizeTableIndex == maxBound) begin
+            initCapSizeTableDone <= True;
+        end
     endrule
 
     // Functions
     function Bool initsDone() = 
-        initBackwardsDone && initPrefetchFilterDone;
+        initBackwardsDone && initPrefetchFilterDone && initCapSizeTableDone;
 
     function backwardsTableIdxTagT getBackwardsIdxTag(Addr childVirtBase) = 
         hash(childVirtBase); 
 
     function prefetchFilterIdxTagT getPrefetchFilterIdxTag(LineAddr lineAddr) = 
         hash(lineAddr);
+
+    function capSizeTableIdxTagT getCapSizeTableIdxTag(Addr boundsLength) = 
+        hash(boundsLength);
 
     function Bool canPrefetch(predictionWayT way) = 
         !predRespWaysUsed[way] && currentPredictionTableResp.first.hit[way];
@@ -3168,14 +3223,21 @@ provisos (
         end
     endrule
 
-
     // Prediction table
-    rule predicitionTableRdReqFromShortcut if (initsDone());
-        let predRespData = dataForPredRdReqFromShortcut.first;
-        dataForPredRdReqFromShortcut.deq;
+    (* descending_urgency = "predicitionTableRdReqFromDataArrival, predicitionTableRdReqFromCapSize" *)
+     rule predicitionTableRdReqFromCapSize if (initsDone());
+        let predRespData = dataForPredRdReqFromCapSize.first;
+        dataForPredRdReqFromCapSize.deq;
 
         dataForPredRdReq.enq(predRespData);
     endrule
+    
+    // rule predicitionTableRdReqFromShortcut if (initsDone());
+    //     let predRespData = dataForPredRdReqFromShortcut.first;
+    //     dataForPredRdReqFromShortcut.deq;
+
+    //     dataForPredRdReq.enq(predRespData);
+    // endrule
 
     rule predicitionTableRdReqFromDataArrival if (initsDone());
         let predRespData = dataForPredRdReqFromDataArrival.first;
@@ -3279,6 +3341,84 @@ provisos (
 
     endrule
 
+    // // CapSize table
+    
+    function Bool isCapSizeQIdxValid(capSizeQIdxT idx) =
+         !currentCapSizePrefetchQueryUsed[idx] && currentCapSizePrefetchQuery.first[idx].valid;
+
+    function anyCapSizeQElValid();
+        Vector#(capSizeQLineNumElements, capSizeQIdxT) idxVec = genWith(fromInteger);
+
+        return any(isCapSizeQIdxValid, idxVec);
+    endfunction
+
+    rule deqFromCapSizeQueue(!anyCapSizeQElValid);
+        currentCapSizePrefetchQuery.deq;
+        currentCapSizePrefetchQueryUsed <= replicate(False);
+        if (`VERBOSE) $display("%t Prefetcher deqFromCapSizeQueue ", $time);
+    endrule
+
+    rule enqFromCapSizePrefetchQueue; 
+        let capSizePrefetchQuery = capSizePrefetchQueryQueue.first;
+        capSizePrefetchQueryQueue.deq;
+
+        currentCapSizePrefetchQuery.enq(capSizePrefetchQuery);
+        if (`VERBOSE) $display("%t Prefetcher enqFromCapSizePrefetchQueue foundMatch ", $time, fshow(capSizePrefetchQuery));
+
+    endrule
+
+    rule enqPredictionRdFromCapSize;
+        let capSizePrefetchQuery = currentCapSizePrefetchQuery.first;
+
+        Vector#(capSizeQLineNumElements, capSizeQIdxT) idxVec = genWith(fromInteger);
+        let capSizeQIndex = findIndex(isCapSizeQIdxValid, idxVec);
+        if (`VERBOSE) $display("%t Prefetcher enqPredictionRdFromCapSize ", $time, fshow(capSizePrefetchQuery));
+
+
+        if (capSizeQIndex matches tagged Valid .idx) begin
+            if (`VERBOSE) $display("%t Prefetcher enqPredictionRdFromCapSize foundMatch ", $time, fshow(capSizePrefetchQuery));
+
+            currentCapSizePrefetchQueryUsed[idx] <= True;
+            let capSizeQEl = currentCapSizePrefetchQuery.first[idx]; 
+
+            capSizeTableIdxTagT capSizeIdxTag = getCapSizeTableIdxTag(saturating_truncate(getLength(capSizeQEl.cap)));
+            capSizeTableIdxT capSizeIdx = truncate(capSizeIdxTag);
+
+            dataForCapSizeRdResp.enq(capSizeQEl);
+            capSizeTable.rdReq(capSizeIdx);
+        end
+    endrule
+
+    rule processCapSizeRdResp;
+        let capSizeQEl = dataForCapSizeRdResp.first;
+        dataForCapSizeRdResp.deq;
+
+        let capSizeResp = capSizeTable.rdResp();
+        capSizeTable.deqRdResp;
+
+
+        capSizeTableIdxTagT capSizeIdxTag = getCapSizeTableIdxTag(saturating_truncate(getLength(capSizeQEl.cap)));
+        capSizeTableTagT capSizeTag = truncateLSB(capSizeIdxTag);
+
+        if (`VERBOSE) $display("%t Prefetcher processCapSizeRdResp: ", $time, fshow(capSizeQEl));
+
+
+        if (capSizeResp.tag == capSizeTag) begin
+
+            predictionDepReadRespDataT predRdRespData;
+
+            predRdRespData.parentPC = capSizeResp.recentPC;
+            predRdRespData.depth = 0;
+            predRdRespData.filledCap = capSizeQEl.cap;
+            // predRdRespData.lineWithTags = lineWithTags;
+            // predRdRespData.lineAddr = getLineAddr(addr);
+
+            dataForPredRdReqFromCapSize.enq(predRdRespData);
+            if (`VERBOSE) $display("%t Prefetcher processCapSizeRdResp tag match: ", $time, fshow(capSizeQEl), predRdRespData);
+
+        end
+    endrule
+
     // Tlb
 
     rule doTlbLookup;
@@ -3307,6 +3447,7 @@ provisos (
         end
     endrule
 
+    // methods
 
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, MemOp op, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
@@ -3353,6 +3494,19 @@ provisos (
                     dataForBtReadReq.enq(backwardsRespData);
                     if (`VERBOSE) $display("%t Prefetcher dataForBtReadReq enq", $time,fshow(backwardsRespData));
                 end
+
+                begin
+                    capSizeTableIdxTagT cIdxTag = getCapSizeTableIdxTag(boundsLength);
+                    capSizeTableIdxT cIdx = truncate(cIdxTag);
+                    capSizeTableTagT cTag = truncateLSB(cIdxTag);
+
+                    capSizeTableEntryT ce;
+                    ce.valid = True;
+                    ce.recentPC = pcHash;
+                    ce.tag = cTag;
+
+                    capSizeTable.wrReq(cIdx, ce);
+                end
         end
 
         // Read from prediction table as can now chain next prefetch
@@ -3367,8 +3521,8 @@ provisos (
                         predRdRespData.parentPC = prefetchInfo.childPC; // Chain PCs
                         predRdRespData.depth = prefetchInfo.depth + 1;
                         predRdRespData.filledCap = selCap;
-                        predRdRespData.lineWithTags = lineWithTags;
-                        predRdRespData.lineAddr = getLineAddr(addr);
+                        // predRdRespData.lineWithTags = lineWithTags;
+                        // predRdRespData.lineAddr = getLineAddr(addr);
 
                         dataForPredRdReqFromDataArrival.enq(predRdRespData);
                         if (`VERBOSE) $display("%t Prefetcher dataForPredRdReq enq chain", $time,fshow(predRdRespData));
@@ -3382,8 +3536,8 @@ provisos (
                 predRdRespData.parentPC = pcHash;
                 predRdRespData.depth = 0;
                 predRdRespData.filledCap = selCap;
-                predRdRespData.lineWithTags = lineWithTags;
-                predRdRespData.lineAddr = getLineAddr(addr);
+                // predRdRespData.lineWithTags = lineWithTags;
+                // predRdRespData.lineAddr = getLineAddr(addr);
                 
                 dataForPredRdReqFromDataArrival.enq(predRdRespData);
                 if (`VERBOSE) $display("%t Prefetcher dataForPredRdReq enq", $time,fshow(predRdRespData));
@@ -3391,6 +3545,26 @@ provisos (
             end
         end
 
+        Vector#(4, CapSizePrefetchQuery) capSizeQueries;
+        Bool foundAnyCaps = False;
+
+        // TODO: Can be optimised to only three elements as ignoring sel cap
+        for (Integer i = 0; i < 4; i = i + 1) begin
+            MemTaggedData d = getTaggedDataAt(lineWithTags, fromInteger(i));
+            CapPipe cap = fromMem(unpack(pack(d)));
+
+            CapSizePrefetchQuery capSizePrefetchQuery;
+            capSizePrefetchQuery.valid = d.tag && fromInteger(i) == dataSel;
+            capSizePrefetchQuery.cap = cap;
+
+            capSizeQueries[i] = capSizePrefetchQuery;
+
+            foundAnyCaps = foundAnyCaps || d.tag;
+        end
+        if (foundAnyCaps) begin
+            capSizePrefetchQueryQueue.enq(capSizeQueries);
+            if (`VERBOSE) $display("$t Prefetcher reportDataArrival capSizePrefetchQuery enqueued ", fshow(capSizeQueries));
+        end
 
         if (`VERBOSE) begin
 
