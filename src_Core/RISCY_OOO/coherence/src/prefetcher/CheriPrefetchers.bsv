@@ -2745,6 +2745,17 @@ module mkPredictionDepTable#(
         if(find(sameEntry, wayVec) matches tagged Valid .way) begin
             // entry exists, update rep info
             repBram.wrReq(idx, lruBitUpdate(repInfo, way));
+
+            // if (writeEntry.childPC != entryVec[way].childPC) begin
+            //     if (`VERBOSE) $display("%t Prefetcher processWrReq found same entry replace child old %h new %h ", $time, entryVec[way].childPC, writeEntry.childPC);
+                
+            //     predictionDepSetAssocEntryT predSetEntry;
+            //     predSetEntry.valid = True;
+            //     predSetEntry.entry = writeEntry;
+                
+            //     predRam[way].wrReq(idx, predSetEntry);
+            // end
+
             if (`VERBOSE) $display("%t Prefetcher processWrReq found same entry rdReq lruBitUpdate %h entry ", $time, lruBitUpdate(repInfo, way), writeEntry);
 
         end
@@ -2907,8 +2918,10 @@ typedef struct {
 
 typedef struct {
     PCHash parentPC;
-    CapPipe filledCap;
+    CapPipe filledCap; // TODO: optimised to use lineCaps and index 
     Bit#(depthBits) depth;
+    CLine lineWithTags;
+    LineAddr lineAddr;
 } PredictionDepReadRespData#(numeric type depthBits) deriving (Bits, Eq, FShow);
 
 typedef struct {
@@ -2964,6 +2977,10 @@ provisos (
     Fifo#(1, backwardsDepReadRespDataT) dataForBtReadReq <- mkOverflowBypassFifo;
     Fifo#(1, backwardsDepReadRespDataT) dataForBtReadResp <- mkPipelineFifo;
     RWBramCore#(backwardsTableIdxT, backwardsTableEntryT) backwardsTable <- mkRWBramCoreForwarded;
+
+
+    Fifo#(1, predictionDepReadRespDataT) dataForPredRdReqFromShortcut <- mkOverflowBypassFifo;
+    Fifo#(1, predictionDepReadRespDataT) dataForPredRdReqFromDataArrival <- mkOverflowBypassFifo;
 
     Fifo#(1, predictionDepReadRespDataT) dataForPredRdReq <- mkOverflowBypassFifo;
     Fifo#(1, predictionDepReadRespDataT) dataForPredRdResp <- mkPipelineFifo;
@@ -3058,7 +3075,21 @@ provisos (
 
 
     // Prediction table
-    rule predictionTableReadReq if (initsDone());
+    rule predicitionTableRdReqFromShortcut if (initsDone());
+        let predRespData = dataForPredRdReqFromShortcut.first;
+        dataForPredRdReqFromShortcut.deq;
+
+        dataForPredRdReq.enq(predRespData);
+    endrule
+
+    rule predicitionTableRdReqFromDataArrival if (initsDone());
+        let predRespData = dataForPredRdReqFromDataArrival.first;
+        dataForPredRdReqFromDataArrival.deq;
+
+        dataForPredRdReq.enq(predRespData);
+    endrule
+
+    rule predictionTableReadReq;
         let predRespData = dataForPredRdReq.first;
         dataForPredRdReq.deq;
 
@@ -3106,13 +3137,48 @@ provisos (
             let cap = setOffset(predRdRespData.filledCap, offset).value;
 
             if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp foundPrefetch childOffset %h", $time, predEntry.childOffset);
-            // TODO: add permissions check
-            TlbInfo tlbInfo;
-            tlbInfo.cap = cap;
-            tlbInfo.childPC = predEntry.childPC;
-            tlbInfo.depth = predRdRespData.depth;
+            
+            Addr prefetchAddr = getAddr(cap);
 
-            tlbLookupQueue.enq(tlbInfo);
+            if (getLineAddr(prefetchAddr) == predRdRespData.lineAddr) begin
+                if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut lineAddr %h", $time, predRdRespData.lineAddr);
+
+                LineMemDataOffset dataSel = getLineMemDataOffset(prefetchAddr);
+                MemTaggedData current = getTaggedDataAt(predRdRespData.lineWithTags, dataSel);
+                CapPipe shortcutChildCap = fromMem(unpack(pack(current)));
+
+                if (current.tag) begin
+                    if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut tag valid shortcutCap ", $time, fshow(shortcutChildCap));
+                    if (predRdRespData.depth + 1 <= fromInteger(recursionDepth)) begin
+
+                        predictionDepReadRespDataT shortcutPredRdRespData;
+                        shortcutPredRdRespData.parentPC = predEntry.childPC; // Chain PCs
+                        shortcutPredRdRespData.depth = predRdRespData.depth + 1; // Should depth be increased
+                        shortcutPredRdRespData.filledCap = shortcutChildCap;
+                        shortcutPredRdRespData.lineWithTags = predRdRespData.lineWithTags;
+                        shortcutPredRdRespData.lineAddr = predRdRespData.lineAddr;
+
+                        dataForPredRdReqFromShortcut.enq(shortcutPredRdRespData);
+                        if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut submit", $time);
+
+                    end
+                    else begin
+                        if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut skipped due to depth", $time);
+                    end
+                end begin
+                    if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut tag invalid", $time);
+                end
+            end
+            else begin
+                
+                // TODO: add permissions check
+                TlbInfo tlbInfo;
+                tlbInfo.cap = cap;
+                tlbInfo.childPC = predEntry.childPC;
+                tlbInfo.depth = predRdRespData.depth;
+
+                tlbLookupQueue.enq(tlbInfo);
+            end
         end
 
     endrule
@@ -3196,11 +3262,14 @@ provisos (
                 if (prefetchOtherInfo matches tagged Valid .prefetchInfo) begin
                     if (prefetchInfo.depth <= fromInteger(recursionDepth)) begin
                         predictionDepReadRespDataT predRdRespData;
+                        
                         predRdRespData.parentPC = prefetchInfo.childPC; // Chain PCs
                         predRdRespData.depth = prefetchInfo.depth + 1;
                         predRdRespData.filledCap = selCap;
+                        predRdRespData.lineWithTags = lineWithTags;
+                        predRdRespData.lineAddr = getLineAddr(addr);
 
-                        dataForPredRdReq.enq(predRdRespData);
+                        dataForPredRdReqFromDataArrival.enq(predRdRespData);
                         if (`VERBOSE) $display("%t Prefetcher dataForPredRdReq enq chain", $time,fshow(predRdRespData));
 
                     end
@@ -3212,7 +3281,10 @@ provisos (
                 predRdRespData.parentPC = pcHash;
                 predRdRespData.depth = 0;
                 predRdRespData.filledCap = selCap;
-                dataForPredRdReq.enq(predRdRespData);
+                predRdRespData.lineWithTags = lineWithTags;
+                predRdRespData.lineAddr = getLineAddr(addr);
+                
+                dataForPredRdReqFromDataArrival.enq(predRdRespData);
                 if (`VERBOSE) $display("%t Prefetcher dataForPredRdReq enq", $time,fshow(predRdRespData));
 
             end
