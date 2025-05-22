@@ -211,7 +211,7 @@ typedef struct {
     `endif
     `ifdef DATA_PREFETCHER_DEPENDENCE_PREFETCHER
         Bit#(3) depth;
-        PCHash childPC;
+        Vector#(4, Maybe#(PCHash)) childPCs;
     `endif    
 } PrefetchOtherInfo deriving (Bits, Eq, FShow);
 

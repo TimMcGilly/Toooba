@@ -2920,14 +2920,14 @@ typedef struct {
     PCHash parentPC;
     CapPipe filledCap; // TODO: optimised to use lineCaps and index 
     Bit#(depthBits) depth;
-    CLine lineWithTags;
-    LineAddr lineAddr;
+    // CLine lineWithTags;
+    // LineAddr lineAddr;
 } PredictionDepReadRespData#(numeric type depthBits) deriving (Bits, Eq, FShow);
 
 typedef struct {
     CapPipe cap;
     Bit#(3) depth;
-    PCHash childPC;
+    Vector#(4, Maybe#(PCHash)) childPCs;
 } TlbInfo deriving (Bits, Eq, FShow);
 
 typedef struct {
@@ -2947,6 +2947,12 @@ typedef struct {
     CapPipe cap;
 } CapSizePrefetchQuery deriving (Bits, Eq, FShow);
 
+typedef struct {
+    CapPipe filledCap;
+    Bit#(depthBits) depth;
+    Vector#(4, Maybe#(PCHash)) childPCs;
+} ChainRequest#(numeric type depthBits) deriving (Bits, Eq, FShow);
+
 module mkDependancePrefetcher#(DTlbToPrefetcher toTlb, Parameter#(backwardsTableSize) _, Parameter#(predictionTableWays) __, 
     Parameter#(predictionTableSets) ___, Parameter#(prefetchFilterTableSize) ____, Parameter#(capSizeTableSize) _____, Integer recursionDepth)(CheriPCPrefetcher) 
 provisos (
@@ -2963,7 +2969,7 @@ provisos (
     NumAlias#(predictionTableIdxBits, TLog#(predictionTableSets)),
     NumAlias#(predictionTableTagBits, TSub#(32, predictionTableIdxBits)),
     NumAlias#(predictionTableIdxTagBits, TAdd#(predictionTableIdxBits, predictionTableTagBits)),
-    NumAlias#(predictionWayBits, TLog#(predictionTableWays)),
+    NumAlias#(predictionWayBits, TLog#(4)),
 
     NumAlias#(capSizeTableIdxBits, TLog#(capSizeTableSize)),
     NumAlias#(capSizeTableTagBits, TSub#(64, capSizeTableIdxBits)),
@@ -3001,7 +3007,10 @@ provisos (
     NumAlias#(capSizeQIdxBits, TLog#(capSizeQLineNumElements)),
     Alias#(capSizeQIdxT, Bit#(capSizeQIdxBits)),
 
-    Alias#(depthT, Bit#((depthBits))),
+    Alias#(depthT, Bit#(depthBits)),
+
+    Alias#(tlbInfoT, TlbInfo),
+    Alias#(chainRequestT, ChainRequest#(depthBits)),
 
     Add#(a__, backwardsTableIdxBits, 64),
     Add#(1, b__, TDiv#(64, backwardsTableIdxTagBits)),
@@ -3018,8 +3027,8 @@ provisos (
 
     Add#(l__, capSizeTableIdxBits, 64),
     Add#(1, k__, TDiv#(64, capSizeTableIdxTagBits)),
-    Add#(m__, 64, TMul#(TDiv#(64, capSizeTableIdxTagBits), capSizeTableIdxTagBits))
-
+    Add#(m__, 64, TMul#(TDiv#(64, capSizeTableIdxTagBits), capSizeTableIdxTagBits)),
+    Log#(predictionTableWays, 2)
 );
 
 
@@ -3032,6 +3041,7 @@ provisos (
     Fifo#(1, predictionDepReadRespDataT) dataForPredRdReqFromShortcut <- mkOverflowBypassFifo;
     Fifo#(1, predictionDepReadRespDataT) dataForPredRdReqFromDataArrival <- mkOverflowBypassFifo;
     Fifo#(1, predictionDepReadRespDataT) dataForPredRdReqFromCapSize <- mkOverflowBypassFifo;
+    Fifo#(1, predictionDepReadRespDataT) dataForPredRdReqFromChain <- mkOverflowBypassFifo;
 
     Fifo#(1, predictionDepReadRespDataT) dataForPredRdReq <- mkOverflowBypassFifo;
     Fifo#(1, predictionDepReadRespDataT) dataForPredRdResp <- mkPipelineFifo;
@@ -3039,9 +3049,9 @@ provisos (
 
     Fifo#(1, predictionDepTableRespT) currentPredictionTableResp <- mkPipelineFifo;
     Fifo#(1, predictionDepReadRespDataT) currentPredictionTableRespData <- mkPipelineFifo;
-    Reg#(Vector#(predictionTableWays, Bool)) predRespWaysUsed <- mkReg(replicate(False));
+    Reg#(Vector#(4, Bool)) predRespWaysUsed <- mkReg(replicate(False));
 
-    Fifo#(4, TlbInfo) tlbLookupQueue <- mkOverflowPipelineFifo;
+    Fifo#(4, tlbInfoT) tlbLookupQueue <- mkOverflowPipelineFifo;
 
     Fifo#(4, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) prefetchQueue <- mkOverflowBypassFifo;
 
@@ -3056,6 +3066,11 @@ provisos (
     Fifo#(1, CapSizePrefetchQuery) dataForCapSizeRdResp <- mkPipelineFifo;
     Reg#(Vector#(capSizeQLineNumElements, Bool)) currentCapSizePrefetchQueryUsed <- mkReg(replicate(False));
     RWBramCore#(capSizeTableIdxT, capSizeTableEntryT) capSizeTable <- mkRWBramCoreForwarded;
+
+    Fifo#(4, chainRequestT) chainRequests <- mkOverflowBypassFifo;
+    Fifo#(1, chainRequestT) currentChainRequest <- mkBypassFifo;
+    Reg#(Vector#(4, Bool)) currentChainRequestUsed <- mkReg(replicate(False));
+
 
     // Initalisation
     Reg#(Bool) initBackwardsDone <- mkReg(False);
@@ -3125,7 +3140,7 @@ provisos (
         !predRespWaysUsed[way] && currentPredictionTableResp.first.hit[way];
 
     function canDoAnyPrefetch();
-        Vector#(predictionTableWays, predictionWayT) wayVec = genWith(fromInteger);
+        Vector#(4, predictionWayT) wayVec = genWith(fromInteger);
 
         return any(canPrefetch, wayVec);
     endfunction
@@ -3224,10 +3239,17 @@ provisos (
     endrule
 
     // Prediction table
-    (* descending_urgency = "predicitionTableRdReqFromDataArrival, predicitionTableRdReqFromCapSize" *)
-     rule predicitionTableRdReqFromCapSize if (initsDone());
+    (* descending_urgency = "predicitionTableRdReqFromDataArrival, predicitionTableRdReqFromChain, predicitionTableRdReqFromCapSize" *)
+    rule predicitionTableRdReqFromCapSize if (initsDone());
         let predRespData = dataForPredRdReqFromCapSize.first;
         dataForPredRdReqFromCapSize.deq;
+
+        dataForPredRdReq.enq(predRespData);
+    endrule
+
+     rule predicitionTableRdReqFromChain if (initsDone());
+        let predRespData = dataForPredRdReqFromChain.first;
+        dataForPredRdReqFromChain.deq;
 
         dataForPredRdReq.enq(predRespData);
     endrule
@@ -3281,14 +3303,27 @@ provisos (
     rule processCurrentPredictionTableResp;
         if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp ", $time, fshow(predRespWaysUsed), fshow(currentPredictionTableResp.first), fshow(currentPredictionTableRespData.first));
         
-        Vector#(predictionTableWays, predictionWayT) wayVec = genWith(fromInteger);
+        Vector#(4, predictionWayT) wayVec = genWith(fromInteger);
         let prefetchIdx = findIndex(canPrefetch, wayVec);
 
         if (prefetchIdx matches tagged Valid .idx) begin
-            predRespWaysUsed[idx] <= True;
+            Vector#(4, Bool) predRespWaysUsedVec = predRespWaysUsed;
+            
+            predRespWaysUsedVec[idx] = True;
 
             let predEntry = currentPredictionTableResp.first.entries[idx];
             let predRdRespData = currentPredictionTableRespData.first;
+
+            Vector#(4, Maybe#(PCHash)) childPCs = replicate(Invalid);
+
+            for (Integer i = 0; i < fromInteger(4); i = i+1) begin
+                if (currentPredictionTableResp.first.entries[i].childOffset == predEntry.childOffset) begin
+                    childPCs[i] = Valid(currentPredictionTableResp.first.entries[i].childPC);
+                    predRespWaysUsedVec[i] = True;
+                end
+            end
+
+            predRespWaysUsed <= predRespWaysUsedVec;
 
             Addr offset = extend(predEntry.childOffset);
             let cap = setOffset(predRdRespData.filledCap, offset).value;
@@ -3330,9 +3365,9 @@ provisos (
             // else begin
                 
                 // TODO: add permissions check
-                TlbInfo tlbInfo;
+                tlbInfoT tlbInfo;
                 tlbInfo.cap = cap;
-                tlbInfo.childPC = predEntry.childPC;
+                tlbInfo.childPCs = childPCs;
                 tlbInfo.depth = predRdRespData.depth;
 
                 tlbLookupQueue.enq(tlbInfo);
@@ -3413,9 +3448,51 @@ provisos (
             // predRdRespData.lineWithTags = lineWithTags;
             // predRdRespData.lineAddr = getLineAddr(addr);
 
-            dataForPredRdReqFromCapSize.enq(predRdRespData);
+            // dataForPredRdReqFromCapSize.enq(predRdRespData);
             if (`VERBOSE) $display("%t Prefetcher processCapSizeRdResp tag match: ", $time, fshow(capSizeQEl), predRdRespData);
 
+        end
+    endrule
+
+    // Chain
+     function Bool validChainRequest(predictionWayT way) =
+         !currentChainRequestUsed[way] && isValid(currentChainRequest.first.childPCs[way]);
+
+    function anyValidChainRequest();
+        Vector#(4, predictionWayT) wayVec = genWith(fromInteger);
+
+        return any(validChainRequest, wayVec);
+    endfunction
+
+    rule enqCurrentChainRequest;
+        let chainRequest = chainRequests.first;
+        chainRequests.deq;
+
+        currentChainRequest.enq(chainRequest);
+    endrule
+
+    rule deqCurrentChainRequest if (!anyValidChainRequest);
+        currentChainRequest.deq;
+        currentChainRequestUsed <= replicate(False);
+    endrule
+
+    rule processCurrentChainRequest;
+        Vector#(4, predictionWayT) wayVec = genWith(fromInteger);
+        let prefetchIdx = findIndex(validChainRequest, wayVec);
+
+        if (prefetchIdx matches tagged Valid .idx) begin
+            currentChainRequestUsed[idx] <= True;
+
+            let chainRequest = currentChainRequest.first;
+            let childPC = chainRequest.childPCs[idx];
+
+            predictionDepReadRespDataT predRdRespData;
+
+            predRdRespData.parentPC = fromMaybe(?, childPC);
+            predRdRespData.depth = chainRequest.depth;
+            predRdRespData.filledCap = chainRequest.filledCap;
+
+            dataForPredRdReqFromCapSize.enq(predRdRespData);
         end
     endrule
 
@@ -3425,9 +3502,10 @@ provisos (
         let tlbInfo = tlbLookupQueue.first;
         tlbLookupQueue.deq;
 
-        toTlb.prefetcherReq(tlbInfo.cap, Valid(PrefetchOtherInfo {depth: tlbInfo.depth, childPC: tlbInfo.childPC}));
-        if (`VERBOSE) $display("%t Prefetcher doTlbLookup boundsVirtBase %h boundsOffset %h boundsLength %h depth %d childPC %h", $time, getBase(tlbInfo.cap), getOffset(tlbInfo.cap), getLength(tlbInfo.cap), tlbInfo.depth, tlbInfo.childPC);
+        toTlb.prefetcherReq(tlbInfo.cap, Valid(PrefetchOtherInfo {depth: tlbInfo.depth, childPCs: tlbInfo.childPCs}));
+        if (`VERBOSE) $display("%t Prefetcher doTlbLookup boundsVirtBase %h boundsOffset %h boundsLength %h depth %d childPCs ", $time, getBase(tlbInfo.cap), getOffset(tlbInfo.cap), getLength(tlbInfo.cap), tlbInfo.depth, fshow(tlbInfo.childPCs));
     endrule
+    
 
     rule getTlbResp;
         let resp = toTlb.prefetcherResp;
@@ -3516,16 +3594,15 @@ provisos (
             if (wasPrefetch) begin
                 if (prefetchOtherInfo matches tagged Valid .prefetchInfo) begin
                     if (prefetchInfo.depth <= fromInteger(recursionDepth)) begin
-                        predictionDepReadRespDataT predRdRespData;
-                        
-                        predRdRespData.parentPC = prefetchInfo.childPC; // Chain PCs
-                        predRdRespData.depth = prefetchInfo.depth + 1;
-                        predRdRespData.filledCap = selCap;
-                        // predRdRespData.lineWithTags = lineWithTags;
-                        // predRdRespData.lineAddr = getLineAddr(addr);
+                        chainRequestT chainRequest;
 
-                        dataForPredRdReqFromDataArrival.enq(predRdRespData);
-                        if (`VERBOSE) $display("%t Prefetcher dataForPredRdReq enq chain", $time,fshow(predRdRespData));
+                        chainRequest.depth = prefetchInfo.depth + 1;
+                        chainRequest.filledCap = selCap;
+                        chainRequest.childPCs = prefetchInfo.childPCs;
+
+
+                        chainRequests.enq(chainRequest);
+                        // if (`VERBOSE) $display("%t Prefetcher dataForPredRdReq enq chain", $time,fshow(predRdRespData));
 
                     end
                 end
