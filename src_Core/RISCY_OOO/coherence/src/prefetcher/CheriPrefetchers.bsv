@@ -96,7 +96,7 @@ module mkAllInCapPrefetcher#(Parameter#(maxCapSizeToPrefetch) _)(CheriPCPrefetch
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch, Bit#(64) startTime);
     endmethod
 
     method ActionValue#(Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) getNextPrefetchAddr
@@ -331,7 +331,7 @@ provisos(
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch, Bit#(64) startTime);
     endmethod
 
     method ActionValue#(Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) getNextPrefetchAddr;
@@ -589,7 +589,7 @@ module mkCapBitmapPrefetcherOld#(Parameter#(maxCapSizeToTrack) _, Parameter#(bit
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch, Bit#(64) startTime);
     endmethod
 
     method ActionValue#(Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) getNextPrefetchAddr;
@@ -919,7 +919,7 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
         return pfQueue.first;
     endmethod
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch, Bit#(64) startTime);
         $display ("prefetcher:reportCacheDataArrival line ", fshow(lineWithTags), " addr %x wasMiss %d wasPrefetch %d boundsOffset %h boundsLength %d boundsVirtBase %x", 
             addr, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase);
     endmethod
@@ -1213,7 +1213,7 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch, Bit#(64) startTime);
         if (boundsLength <= 131072*16) begin
             $display ("%t Prefetcher reportCacheDataArrival wasMiss %d wasPrefetch %d ", $time, wasMiss, wasPrefetch, fshow(lineWithTags));
 
@@ -1299,7 +1299,7 @@ module mkCapPtrTestPrefetcher(CheriPCPrefetcher) provisos ();
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch, Bit#(64) startTime);
         MemTaggedData d = getTaggedDataAt(lineWithTags, 0);
         CapPipe cap = fromMem(unpack(pack(d)));
         if (d.tag) begin
@@ -1425,7 +1425,7 @@ module mkPCCapMeasurer(CheriPCPrefetcher) provisos (
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch, Bit#(64) startTime);
 
     endmethod
 
@@ -1512,7 +1512,7 @@ module mkCapPCMeasurer(CheriPCPrefetcher) provisos (
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch, Bit#(64) startTime);
 
     endmethod
 
@@ -1537,7 +1537,7 @@ module mkCapLoggingPrefetcher(CheriPCPrefetcher) provisos ();
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch, Bit#(64) startTime);
         MemTaggedData d1 = getTaggedDataAt(lineWithTags, 0);
         MemTaggedData d2 = getTaggedDataAt(lineWithTags, 1);
         MemTaggedData d3 = getTaggedDataAt(lineWithTags, 2);
@@ -1725,7 +1725,7 @@ provisos (
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch, Bit#(64) startTime);
         MemTaggedData d1 = getTaggedDataAt(lineWithTags, 0);
         MemTaggedData d2 = getTaggedDataAt(lineWithTags, 1);
         MemTaggedData d3 = getTaggedDataAt(lineWithTags, 2);
@@ -1781,829 +1781,833 @@ provisos (
 endmodule
 `endif
 
-// `ifdef DATA_PREFETCHER_CAP_PC_BACKWARDS
-// typedef struct {
-//     PCHash pcHash;
-//     Bit#(64) enqTime;
-// } TimelinessEntry deriving (Bits, Eq, FShow);
+`ifdef DATA_PREFETCHER_CAP_PC_BACKWARDS
+typedef struct {
+    PCHash pcHash;
+    Bit#(64) enqTime;
+} TimelinessEntry deriving (Bits, Eq, FShow);
 
-// typedef struct {
-//     Bool valid;
-//     Bit#(tagBits) tag;
-//     TimelinessEntry entry;
-// } TimelinessSetAssocEntry #(numeric type tagBits) deriving (Bits, Eq, FShow);
+typedef struct {
+    Bool valid;
+    Bit#(tagBits) tag;
+    TimelinessEntry entry;
+} TimelinessSetAssocEntry #(numeric type tagBits) deriving (Bits, Eq, FShow);
 
-// typedef Maybe#(TimelinessEntry) TimelinessTableResp;
+typedef Maybe#(TimelinessEntry) TimelinessTableResp;
 
-// interface TimelinessTable#(
-//     numeric type numOfWays,
-//     numeric type numOfSets
-// );
-//     method Action wrReq (Addr virtBase, PCHash pcHash, Bit#(64) enqTime);
-//     method Action rdReq (Addr virtBase, Bit#(64) targetTime);
-//     method ActionValue#(TimelinessTableResp) rdResp;
-// endinterface
+interface TimelinessTable#(
+    numeric type numOfWays,
+    numeric type numOfSets
+);
+    method Action wrReq (Addr virtBase, PCHash pcHash, Bit#(64) enqTime);
+    method Action rdReq (Addr virtBase, Bit#(64) targetTime);
+    method ActionValue#(TimelinessTableResp) rdResp;
+endinterface
 
-// module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
-//     NumAlias#(idxBits, TLog#(numOfSets)),
-//     NumAlias#(tagBits, TSub#(64, idxBits)),
-//     NumAlias#(idxTagBits, TAdd#(idxBits, tagBits)),
+module mkTimelinessTable(TimelinessTable#(numOfWays, numOfSets)) provisos (
+    NumAlias#(idxBits, TLog#(numOfSets)),
+    NumAlias#(tagBits, TSub#(64, idxBits)),
+    NumAlias#(idxTagBits, TAdd#(idxBits, tagBits)),
 
-//     Alias#(wayT, Bit#(TLog#(numOfWays))),
-//     Alias#(indexT, Bit#(idxBits)),
-//     Alias#(tagT, Bit#(tagBits)),
-//     Alias#(indexTagT, Bit#(idxTagBits)),
-//     Alias#(repInfoT, wayT),
+    Alias#(wayT, Bit#(TLog#(numOfWays))),
+    Alias#(indexT, Bit#(idxBits)),
+    Alias#(tagT, Bit#(tagBits)),
+    Alias#(indexTagT, Bit#(idxTagBits)),
+    Alias#(repInfoT, wayT),
     
-//     Alias#(timelinessEntryT, TimelinessEntry),
-//     Alias#(timelinessSetAssocEntryT, TimelinessSetAssocEntry#(tagBits)),
+    Alias#(timelinessEntryT, TimelinessEntry),
+    Alias#(timelinessSetAssocEntryT, TimelinessSetAssocEntry#(tagBits)),
 
-//     Add#(1, a__, numOfWays),
-//     Add#(b__, idxBits, 64),
-//     Add#(1, c__, TDiv#(64, idxTagBits)),
-//     Add#(d__, 64, TMul#(TDiv#(64, idxTagBits), idxTagBits))
-// );
-//     // See SetAssocTlb.bsv for basis of set associative data structure
+    Add#(1, a__, numOfWays),
+    Add#(b__, idxBits, 64),
+    Add#(1, c__, TDiv#(64, idxTagBits)),
+    Add#(d__, 64, TMul#(TDiv#(64, idxTagBits), idxTagBits))
+);
+    // See SetAssocTlb.bsv for basis of set associative data structure
 
-//     Vector#(numOfWays, RWBramCore#(indexT, timelinessSetAssocEntryT)) tRam <- replicateM(mkRWBramCoreForwarded);
+    Vector#(numOfWays, RWBramCore#(indexT, timelinessSetAssocEntryT)) tRam <- replicateM(mkRWBramCoreForwarded);
 
-//     // Stores overflowing counter for fifo replacement of ways
-//     RWBramCore#(indexT, wayT) repBram <- mkRWBramCoreForwarded;
-//     RWBramCore#(indexT, wayT) repBramCopy <- mkRWBramCoreForwarded;
+    // Stores overflowing counter for fifo replacement of ways
+    RWBramCore#(indexT, wayT) repBram <- mkRWBramCoreForwarded;
+    RWBramCore#(indexT, wayT) repBramCopy <- mkRWBramCoreForwarded;
     
-//     Fifo#(1, Tuple3#(Addr, PCHash, Bit#(64))) writeQ <- mkPipelineFifo;
-//     Fifo#(1, Tuple2#(indexTagT, Bit#(64))) rdReqQ <- mkPipelineFifo; 
+    Fifo#(1, Tuple3#(Addr, PCHash, Bit#(64))) writeQ <- mkPipelineFifo;
+    Fifo#(1, Tuple2#(indexTagT, Bit#(64))) rdReqQ <- mkPipelineFifo; 
 
-//     Fifo#(1, TimelinessTableResp) rdRespQ <- mkBypassFifo;
+    Fifo#(1, TimelinessTableResp) rdRespQ <- mkBypassFifo;
 
-//     // initialize BRAM
-//     Reg#(Bool) initDone <- mkReg(False);
-//     Reg#(indexT) initIndex <- mkReg(0);
+    // initialize BRAM
+    Reg#(Bool) initDone <- mkReg(False);
+    Reg#(indexT) initIndex <- mkReg(0);
 
-//     rule doInit(!initDone);
-//         for(Integer i = 0; i < valueOf(numOfWays); i = i+1) begin
-//             tRam[i].wrReq(initIndex, TimelinessSetAssocEntry {
-//                 valid: False,
-//                 tag: 0,
-//                 entry: TimelinessEntry {pcHash: 0, enqTime: 0}
-//             });
-//         end
-//         repBram.wrReq(initIndex, 0);
-//         repBramCopy.wrReq(initIndex, 0);
-//         initIndex <= initIndex + 1;
-//         if(initIndex == maxBound) begin
-//             initDone <= True;
-//         end
-//     endrule
+    rule doInit(!initDone);
+        for(Integer i = 0; i < valueOf(numOfWays); i = i+1) begin
+            tRam[i].wrReq(initIndex, TimelinessSetAssocEntry {
+                valid: False,
+                tag: 0,
+                entry: TimelinessEntry {pcHash: 0, enqTime: 0}
+            });
+        end
+        repBram.wrReq(initIndex, 0);
+        repBramCopy.wrReq(initIndex, 0);
+        initIndex <= initIndex + 1;
+        if(initIndex == maxBound) begin
+            initDone <= True;
+        end
+    endrule
 
-//     // Required to prevent to two replacment reads to same index reciving some value
-//     Ehr#(2, Maybe#(indexT)) pendReq <- mkEhr(Invalid);
-//     Reg#(Maybe#(indexT)) pendReq_deq = pendReq[0];
-//     Reg#(Maybe#(indexT)) pendReq_enq = pendReq[1];
+    // Required to prevent to two replacment reads to same index reciving some value
+    Ehr#(2, Maybe#(indexT)) pendReq <- mkEhr(Invalid);
+    Reg#(Maybe#(indexT)) pendReq_deq = pendReq[0];
+    Reg#(Maybe#(indexT)) pendReq_enq = pendReq[1];
     
-//     function indexTagT getIndexTag(Addr virtBase) = hash(virtBase);
+    function indexTagT getIndexTag(Addr virtBase) = hash(virtBase);
 
-//     Wire#(Maybe#(indexT)) pendIndex <- mkBypassWire;
-//     (* fire_when_enabled, no_implicit_conditions *)
-//     rule setPendIndex;
-//         if(pendReq_deq matches tagged Valid .idx) begin
-//             pendIndex <= Valid (idx);
-//         end
-//         else begin
-//             pendIndex <= Invalid;
-//         end
-//     endrule
+    Wire#(Maybe#(indexT)) pendIndex <- mkBypassWire;
+    (* fire_when_enabled, no_implicit_conditions *)
+    rule setPendIndex;
+        if(pendReq_deq matches tagged Valid .idx) begin
+            pendIndex <= Valid (idx);
+        end
+        else begin
+            pendIndex <= Invalid;
+        end
+    endrule
 
-//     function repInfoT nextReplacement(repInfoT current) =
-//         (current == fromInteger(valueOf(TSub#(numOfWays,1)))) ? 0 : current + 1;
+    function repInfoT nextReplacement(repInfoT current) =
+        (current == fromInteger(valueOf(TSub#(numOfWays,1)))) ? 0 : current + 1;
 
-//     rule replacementResp(
-//         pendReq_deq matches tagged Valid .idx
-//     );
-//         pendReq_deq <= Invalid;
+    rule replacementResp(
+        pendReq_deq matches tagged Valid .idx
+    );
+        pendReq_deq <= Invalid;
 
-//         let {virtBase, pcHash, enqTime} = writeQ.first;
-//         writeQ.deq;
+        let {virtBase, pcHash, enqTime} = writeQ.first;
+        writeQ.deq;
 
-//         let repResp = repBram.rdResp;
-//         repBram.deqRdResp;
+        let repResp = repBram.rdResp;
+        repBram.deqRdResp;
 
-//         // Write new way and update fifo
-//         indexTagT idxTag = getIndexTag(virtBase);
-//         indexT idx = truncate(idxTag);
-//         tagT tag = truncateLSB(idxTag);
+        // Write new way and update fifo
+        indexTagT idxTag = getIndexTag(virtBase);
+        indexT idx = truncate(idxTag);
+        tagT tag = truncateLSB(idxTag);
 
-//         timelinessEntryT te;
-//         te.pcHash = pcHash;
-//         te.enqTime = enqTime;
+        timelinessEntryT te;
+        te.pcHash = pcHash;
+        te.enqTime = enqTime;
 
-//         timelinessSetAssocEntryT tse;
-//         tse.valid = True;
-//         tse.tag = tag;
-//         tse.entry = te;
+        timelinessSetAssocEntryT tse;
+        tse.valid = True;
+        tse.tag = tag;
+        tse.entry = te;
 
-//         if (`VERBOSE) $display("%t Prefetcher timeliness replacement repResp %d nextReplacement %d idx %h tag %h pcHash %h", $time, repResp, nextReplacement(repResp), idx, tag, pcHash);
+        if (`VERBOSE) $display("%t Prefetcher timeliness replacement repResp %d nextReplacement %d idx %h tag %h pcHash %h", $time, repResp, nextReplacement(repResp), idx, tag, pcHash);
 
-//         tRam[repResp].wrReq(idx, tse);
+        tRam[repResp].wrReq(idx, tse);
 
-//         repBram.wrReq(idx, nextReplacement(repResp));
-//         repBramCopy.wrReq(idx, nextReplacement(repResp));
-//     endrule
+        repBram.wrReq(idx, nextReplacement(repResp));
+        repBramCopy.wrReq(idx, nextReplacement(repResp));
+    endrule
 
-//     // (* descending_urgency = "replacementResp, processRdReq" *) 
-//     rule processRdReq if (initDone);
-//         rdReqQ.deq;
-//         let {idxTag, targetTime} =  rdReqQ.first;
-//         indexT idx = truncate(idxTag);
-//         tagT tag = truncateLSB(idxTag);
+    // (* descending_urgency = "replacementResp, processRdReq" *) 
+    rule processRdReq if (initDone);
+        rdReqQ.deq;
+        let {idxTag, targetTime} =  rdReqQ.first;
+        indexT idx = truncate(idxTag);
+        tagT tag = truncateLSB(idxTag);
 
-//         for(Integer i = 0; i < valueof(numOfWays); i = i+1) begin
-//             tRam[i].deqRdResp;
-//         end
+        for(Integer i = 0; i < valueof(numOfWays); i = i+1) begin
+            tRam[i].deqRdResp;
+        end
 
-//         Vector#(numOfWays, timelinessSetAssocEntryT) resps; 
-//         for(Integer i = 0; i < valueof(numOfWays); i = i+1) begin
-//             resps[i] = tRam[i].rdResp;
-//         end
+        Vector#(numOfWays, timelinessSetAssocEntryT) resps; 
+        for(Integer i = 0; i < valueof(numOfWays); i = i+1) begin
+            resps[i] = tRam[i].rdResp;
+        end
 
-//         repBramCopy.deqRdResp;
-//         let repResp = repBramCopy.rdResp; 
+        repBramCopy.deqRdResp;
+        let repResp = repBramCopy.rdResp; 
         
-//         let rotateNum = (repResp == 0) ? 0 : fromInteger(valueof(TSub#(numOfWays,1)))-repResp+1;
+        let rotateNum = (repResp == 0) ? 0 : fromInteger(valueof(TSub#(numOfWays,1)))-repResp+1;
         
-//         // Rotate so index 0 is oldest
-//         let rotatedResp = rotateBy(resps, unpack(rotateNum));
+        // Rotate so index 0 is oldest
+        let rotatedResp = rotateBy(resps, unpack(rotateNum));
         
-//         function timelinessSetAssocEntryT oldestValid(timelinessSetAssocEntryT a, timelinessSetAssocEntryT b);
-//             // If matches target time choose newer, otherwise choose oldest valid
-//             if (b.entry.enqTime < targetTime) begin
-//                 return (b.valid && b.tag == tag) ? b : a;
-//             end
-//             else begin
-//                 return (a.valid && a.tag == tag) ? a : b;
-//             end
-//         endfunction
+        function timelinessSetAssocEntryT oldestValid(timelinessSetAssocEntryT a, timelinessSetAssocEntryT b);
+            // If matches target time choose newer, otherwise choose oldest valid
+            if (b.entry.enqTime < targetTime) begin
+                return (b.valid && b.tag == tag) ? b : a;
+            end
+            else begin
+                return (a.valid && a.tag == tag) ? a : b;
+            end
+        endfunction
 
-//         // function bool isMatch(timelinessSetAssocEntryT a)
+        // function bool isMatch(timelinessSetAssocEntryT a)
 
-//         let result = fold(oldestValid, rotatedResp);
-//         if (`VERBOSE) $display("%t prefetcher timeliness table rdResp valid %b idx %h tag %h pcHash %h repResp %d rotateNum %d fshow ", $time, result.valid, idx, result.tag, result.entry.pcHash, repResp, rotateNum, fshow(resps), fshow(rotatedResp));
+        let result = fold(oldestValid, rotatedResp);
+        if (`VERBOSE) $display("%t prefetcher timeliness table rdResp valid %b idx %h tag %h pcHash %h repResp %d rotateNum %d fshow ", $time, result.valid, idx, result.tag, result.entry.pcHash, repResp, rotateNum, fshow(resps), fshow(rotatedResp));
 
-//         rdRespQ.enq((result.valid && result.tag == tag) ? Valid (result.entry): Invalid);
-//     endrule
+        rdRespQ.enq((result.valid && result.tag == tag) ? Valid (result.entry): Invalid);
+    endrule
 
-//     method Action wrReq (Addr virtBase, PCHash pcHash, Bit#(64) enqTime) if(!isValid(pendReq_enq) && initDone);
-//         indexTagT idxTag = getIndexTag(virtBase);
-//         indexT idx = truncate(idxTag);
-//         tagT tag = truncateLSB(idxTag);
+    method Action wrReq (Addr virtBase, PCHash pcHash, Bit#(64) enqTime) if(!isValid(pendReq_enq) && initDone);
+        indexTagT idxTag = getIndexTag(virtBase);
+        indexT idx = truncate(idxTag);
+        tagT tag = truncateLSB(idxTag);
 
-//         // Implicit condition that there are no current in progress writes on idx
-//         when(pendIndex != Valid (idx), noAction);
+        // Implicit condition that there are no current in progress writes on idx
+        when(pendIndex != Valid (idx), noAction);
 
-//         pendReq_enq <= Valid(idx);
+        pendReq_enq <= Valid(idx);
         
-//         writeQ.enq(tuple3(virtBase, pcHash, enqTime));
-//         repBram.rdReq(idx);
-//     endmethod
+        writeQ.enq(tuple3(virtBase, pcHash, enqTime));
+        repBram.rdReq(idx);
+    endmethod
 
-//     method Action rdReq(Addr virtBase, Bit#(64) targetTime) if(!isValid(pendReq_enq) && initDone);
-//         indexTagT idxTag = getIndexTag(virtBase);
-//         indexT idx = truncate(idxTag);
-//         tagT tag = truncateLSB(idxTag);
+    method Action rdReq(Addr virtBase, Bit#(64) targetTime) if(!isValid(pendReq_enq) && initDone);
+        indexTagT idxTag = getIndexTag(virtBase);
+        indexT idx = truncate(idxTag);
+        tagT tag = truncateLSB(idxTag);
 
-//         when(pendIndex != Valid (idx), noAction);
+        when(pendIndex != Valid (idx), noAction);
 
-//         for (Integer i = 0; i < valueof(numOfWays); i = i+1) begin
-//             tRam[i].rdReq(idx);
-//         end
+        for (Integer i = 0; i < valueof(numOfWays); i = i+1) begin
+            tRam[i].rdReq(idx);
+        end
         
-//         // Request replacement info as well for 
-//         repBramCopy.rdReq(idx);
+        // Request replacement info as well for 
+        repBramCopy.rdReq(idx);
         
-//         rdReqQ.enq(tuple2(idxTag, targetTime));
-//     endmethod
+        rdReqQ.enq(tuple2(idxTag, targetTime));
+    endmethod
 
-//     method ActionValue#(TimelinessTableResp) rdResp();
-//         rdRespQ.deq;
-//         return rdRespQ.first; 
-//     endmethod
+    method ActionValue#(TimelinessTableResp) rdResp();
+        rdRespQ.deq;
+        return rdRespQ.first; 
+    endmethod
 
 
-// endmodule
+endmodule
 
-// typedef Bit#(3) Depth;
+typedef Bit#(3) Depth;
 
-// typedef struct {
-//     Bool valid;
-//     Addr parentVirtBase;
-//     Bit#(offsetBits) parentOffset;
-//     Bit#(64) parentTime;
-//     Bit#(tagBits) tag;
-// } BackwardsEntry #(numeric type tagBits, numeric type offsetBits) deriving (Bits, Eq, FShow);
+typedef struct {
+    Bool valid;
+    Addr parentVirtBase;
+    Bit#(offsetBits) parentOffset;
+    Bit#(64) parentTime;
+    Bit#(tagBits) tag;
+} BackwardsEntry #(numeric type tagBits, numeric type offsetBits) deriving (Bits, Eq, FShow);
 
-// typedef struct {
-//     Bit#(offsetBits) parentOffset;
-//     Bit#(offsetBits) childOffset;
-//     Bit#(confidenceBits) confidence;
-//     PCHash childPCHash;
-//     Bit#(tagBits) tag; 
-// } PredictionEntry#(numeric type tagBits, numeric type offsetBits, numeric type confidenceBits) deriving (Bits, Eq, FShow);
+typedef struct {
+    Bit#(offsetBits) parentOffset;
+    Bit#(offsetBits) childOffset;
+    Bit#(confidenceBits) confidence;
+    PCHash childPCHash;
+    Bit#(tagBits) tag; 
+} PredictionEntry#(numeric type tagBits, numeric type offsetBits, numeric type confidenceBits) deriving (Bits, Eq, FShow);
 
-// typedef struct {
-//     PCHash pcHash;
-//     Bit#(offsetBits) parentOffset;
-//     Bit#(tagBits) tag; 
-// }  ConfidenceUpdateEntry#(numeric type tagBits, numeric type offsetBits) deriving (Bits, Eq, FShow);
+typedef struct {
+    PCHash pcHash;
+    Bit#(offsetBits) parentOffset;
+    Bit#(tagBits) tag; 
+}  ConfidenceUpdateEntry#(numeric type tagBits, numeric type offsetBits) deriving (Bits, Eq, FShow);
 
-// typedef struct {
-//     Bool valid;
-//     Bit#(tagBits) tag;
-// } PrefetchFilterEntry#(numeric type tagBits) deriving (Bits, Eq, FShow);
+typedef struct {
+    Bool valid;
+    Bit#(tagBits) tag;
+} PrefetchFilterEntry#(numeric type tagBits) deriving (Bits, Eq, FShow);
 
-// typedef struct {
-//     CapPipe cap;
-//     Maybe#(Bit#(offsetBits)) childOffset;
-//     predictionTableIdxTagT predIdxTag;
-//     PCHash childPCHash;
-//     Depth depth;
-// } TlbInfo#(numeric type offsetBits, type predictionTableIdxTagT) deriving (Bits, Eq, FShow);
+typedef struct {
+    CapPipe cap;
+    Maybe#(Bit#(offsetBits)) childOffset;
+    predictionTableIdxTagT predIdxTag;
+    PCHash childPCHash;
+    Depth depth;
+} TlbInfo#(numeric type offsetBits, type predictionTableIdxTagT) deriving (Bits, Eq, FShow);
 
-// module mkCapPCBackwards#(DTlbToPrefetcher toTlb, Parameter#(backwardsTableSize) _, Parameter#(timelinessTableWays) __, 
-//     Parameter#(timelinessTableSets) ___, Parameter#(predictionTableSize) ____, Parameter#(confidenceBits) _____,
-//     Parameter#(confidenceUpdateTableSize) ______, Parameter#(prefetchFilterTableSize) _______, Integer predictionReplacementConfidence, 
-//     Integer predictionPrefetchConfidence, Integer recursionDepth)(CheriPCPrefetcher) 
-// provisos (
-//     NumAlias#(backwardsTableIdxBits, TLog#(backwardsTableSize)),
-//     NumAlias#(backwardsTableTagBits, TSub#(64, backwardsTableIdxBits)),
-//     NumAlias#(backwardsTableIdxTagBits, TAdd#(backwardsTableIdxBits, backwardsTableTagBits)),
-//     NumAlias#(offsetBits, 64), // Could likely use a smaller number of bits for offset
+module mkCapPCBackwards#(DTlbToPrefetcher toTlb, Parameter#(backwardsTableSize) _, Parameter#(timelinessTableWays) __, 
+    Parameter#(timelinessTableSets) ___, Parameter#(predictionTableSize) ____, Parameter#(confidenceBits) _____,
+    Parameter#(confidenceUpdateTableSize) ______, Parameter#(prefetchFilterTableSize) _______, Integer predictionReplacementConfidence, 
+    Integer predictionPrefetchConfidence, Integer recursionDepth)(CheriPCPrefetcher) 
+provisos (
+    NumAlias#(backwardsTableIdxBits, TLog#(backwardsTableSize)),
+    NumAlias#(backwardsTableTagBits, TSub#(64, backwardsTableIdxBits)),
+    NumAlias#(backwardsTableIdxTagBits, TAdd#(backwardsTableIdxBits, backwardsTableTagBits)),
+    NumAlias#(offsetBits, 64), // Could likely use a smaller number of bits for offset
 
-//     NumAlias#(timelinessIdxBits, TLog#(timelinessTableSets)),
-//     NumAlias#(timelinessTagBits, TSub#(64, timelinessIdxBits)),
-//     NumAlias#(timelinessIdxTagBits, TAdd#(timelinessIdxBits, timelinessTagBits)),
+    NumAlias#(timelinessIdxBits, TLog#(timelinessTableSets)),
+    NumAlias#(timelinessTagBits, TSub#(64, timelinessIdxBits)),
+    NumAlias#(timelinessIdxTagBits, TAdd#(timelinessIdxBits, timelinessTagBits)),
     
-//     NumAlias#(predictionTableIdxBits, TLog#(predictionTableSize)),
-//     NumAlias#(predictionTableTagBits, TSub#(32, predictionTableIdxBits)),
-//     NumAlias#(predictionTableIdxTagBits, TAdd#(predictionTableIdxBits, predictionTableTagBits)),
+    NumAlias#(predictionTableIdxBits, TLog#(predictionTableSize)),
+    NumAlias#(predictionTableTagBits, TSub#(32, predictionTableIdxBits)),
+    NumAlias#(predictionTableIdxTagBits, TAdd#(predictionTableIdxBits, predictionTableTagBits)),
 
-//     NumAlias#(confidenceUpdateIdxBits, TLog#(confidenceUpdateTableSize)),
-//     NumAlias#(confidenceUpdateTagBits, TSub#(64, backwardsTableIdxBits)),
-//     NumAlias#(confidenceUpdateIdxTagBits, TAdd#(confidenceUpdateIdxBits, confidenceUpdateTagBits)),
+    NumAlias#(confidenceUpdateIdxBits, TLog#(confidenceUpdateTableSize)),
+    NumAlias#(confidenceUpdateTagBits, TSub#(64, backwardsTableIdxBits)),
+    NumAlias#(confidenceUpdateIdxTagBits, TAdd#(confidenceUpdateIdxBits, confidenceUpdateTagBits)),
 
-//     NumAlias#(prefetchFilterIdxBits, TLog#(prefetchFilterTableSize)),
-//     NumAlias#(prefetchFilterTagBits, TSub#(CLineAddrSz, prefetchFilterIdxBits)),
-//     NumAlias#(prefetchFilterIdxTagBits, TAdd#(prefetchFilterIdxBits, prefetchFilterTagBits)),
+    NumAlias#(prefetchFilterIdxBits, TLog#(prefetchFilterTableSize)),
+    NumAlias#(prefetchFilterTagBits, TSub#(CLineAddrSz, prefetchFilterIdxBits)),
+    NumAlias#(prefetchFilterIdxTagBits, TAdd#(prefetchFilterIdxBits, prefetchFilterTagBits)),
     
-//     Alias#(backwardsTableIdxT, Bit#(backwardsTableIdxBits)),
-//     Alias#(backwardsTableTagT, Bit#(backwardsTableTagBits)),
-//     Alias#(backwardsTableIdxTagT, Bit#(backwardsTableIdxTagBits)),
-//     Alias#(offsetT, Bit#(offsetBits)),
-//     Alias#(backwardsTableEntryT, BackwardsEntry#(backwardsTableTagBits, offsetBits)),
+    Alias#(backwardsTableIdxT, Bit#(backwardsTableIdxBits)),
+    Alias#(backwardsTableTagT, Bit#(backwardsTableTagBits)),
+    Alias#(backwardsTableIdxTagT, Bit#(backwardsTableIdxTagBits)),
+    Alias#(offsetT, Bit#(offsetBits)),
+    Alias#(backwardsTableEntryT, BackwardsEntry#(backwardsTableTagBits, offsetBits)),
 
-//     Alias#(timelinessTableT, TimelinessTable#(timelinessTableWays, timelinessTableSets)),
-//     Alias#(timelinessTableEntryT, TimelinessEntry),
+    Alias#(timelinessTableT, TimelinessTable#(timelinessTableWays, timelinessTableSets)),
+    Alias#(timelinessTableEntryT, TimelinessEntry),
 
-//     Alias#(predictionTableIdxT, Bit#(predictionTableIdxBits)),
-//     Alias#(predictionTableTagT, Bit#(predictionTableTagBits)),
-//     Alias#(predictionTableIdxTagT, Bit#(predictionTableIdxTagBits)),
-//     Alias#(predictionTableEntryT, PredictionEntry#(predictionTableTagBits, offsetBits, confidenceBits)),
+    Alias#(predictionTableIdxT, Bit#(predictionTableIdxBits)),
+    Alias#(predictionTableTagT, Bit#(predictionTableTagBits)),
+    Alias#(predictionTableIdxTagT, Bit#(predictionTableIdxTagBits)),
+    Alias#(predictionTableEntryT, PredictionEntry#(predictionTableTagBits, offsetBits, confidenceBits)),
 
-//     Alias#(confidenceUpdateIdxT, Bit#(confidenceUpdateIdxBits)),
-//     Alias#(confidenceUpdateTagT, Bit#(confidenceUpdateTagBits)),
-//     Alias#(confidenceUpdateTableIdxTagT, Bit#(confidenceUpdateIdxTagBits)),
-//     Alias#(confidenceUpdateTableEntryT, ConfidenceUpdateEntry#(confidenceUpdateTagBits, offsetBits)),
+    Alias#(confidenceUpdateIdxT, Bit#(confidenceUpdateIdxBits)),
+    Alias#(confidenceUpdateTagT, Bit#(confidenceUpdateTagBits)),
+    Alias#(confidenceUpdateTableIdxTagT, Bit#(confidenceUpdateIdxTagBits)),
+    Alias#(confidenceUpdateTableEntryT, ConfidenceUpdateEntry#(confidenceUpdateTagBits, offsetBits)),
 
-//     Alias#(prefetchFilterIdxT, Bit#(prefetchFilterIdxBits)),
-//     Alias#(prefetchFilterTagT, Bit#(prefetchFilterTagBits)),
-//     Alias#(prefetchFilterIdxTagT, Bit#(prefetchFilterIdxTagBits)),
-//     Alias#(prefetchFilterEntryT, PrefetchFilterEntry#(prefetchFilterTagBits)),
+    Alias#(prefetchFilterIdxT, Bit#(prefetchFilterIdxBits)),
+    Alias#(prefetchFilterTagT, Bit#(prefetchFilterTagBits)),
+    Alias#(prefetchFilterIdxTagT, Bit#(prefetchFilterIdxTagBits)),
+    Alias#(prefetchFilterEntryT, PrefetchFilterEntry#(prefetchFilterTagBits)),
 
-//     Alias#(tlbInfoT, TlbInfo#(offsetBits, predictionTableIdxTagT)),
+    Alias#(tlbInfoT, TlbInfo#(offsetBits, predictionTableIdxTagT)),
 
-//     Add#(a__, backwardsTableIdxBits, 64),
-//     Add#(1, b__, TDiv#(64, backwardsTableIdxTagBits)),
-//     Add#(c__, 64, TMul#(TDiv#(64, backwardsTableIdxTagBits), backwardsTableIdxTagBits)),
+    Add#(a__, backwardsTableIdxBits, 64),
+    Add#(1, b__, TDiv#(64, backwardsTableIdxTagBits)),
+    Add#(c__, 64, TMul#(TDiv#(64, backwardsTableIdxTagBits), backwardsTableIdxTagBits)),
 
-//     Add#(1, d__, timelinessTableWays),
-//     Add#(e__, TLog#(timelinessTableSets), 64),
-//     Add#(1, f__, TDiv#(64, timelinessIdxTagBits)),
-//     Add#(g__, 64, TMul#(TDiv#(64, timelinessIdxTagBits), timelinessIdxTagBits)),
+    Add#(1, d__, timelinessTableWays),
+    Add#(e__, TLog#(timelinessTableSets), 64),
+    Add#(1, f__, TDiv#(64, timelinessIdxTagBits)),
+    Add#(g__, 64, TMul#(TDiv#(64, timelinessIdxTagBits), timelinessIdxTagBits)),
 
-//     Add#(h__, predictionTableIdxBits, 32),
-//     Add#(1, i__, TDiv#(32, predictionTableIdxTagBits)),
-//     Add#(j_, 32, TMul#(TDiv#(32, predictionTableIdxTagBits), predictionTableIdxTagBits)),
-//     Add#(k__, CLineAddrSz, TMul#(TDiv#(CLineAddrSz, prefetchFilterIdxTagBits), prefetchFilterIdxTagBits)),
-//     Add#(1, j__, TDiv#(CLineAddrSz, prefetchFilterIdxTagBits)),
-//     Add#(TLog#(prefetchFilterTableSize), l__, CLineAddrSz)
-// );
-//     Fifo#(4, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) prefetchQueue <- mkOverflowBypassFifo;
+    Add#(h__, predictionTableIdxBits, 32),
+    Add#(1, i__, TDiv#(32, predictionTableIdxTagBits)),
+    Add#(j_, 32, TMul#(TDiv#(32, predictionTableIdxTagBits), predictionTableIdxTagBits)),
+    Add#(k__, CLineAddrSz, TMul#(TDiv#(CLineAddrSz, prefetchFilterIdxTagBits), prefetchFilterIdxTagBits)),
+    Add#(1, j__, TDiv#(CLineAddrSz, prefetchFilterIdxTagBits)),
+    Add#(TLog#(prefetchFilterTableSize), l__, CLineAddrSz)
+);
+    Fifo#(4, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) prefetchQueue <- mkOverflowBypassFifo;
 
-//     Fifo#(1, Tuple2#(backwardsTableIdxT, backwardsTableEntryT)) backwardsEntryToWrite <- mkOverflowBypassFifo;
-//     Fifo#(1, Tuple5#(backwardsTableIdxTagT, offsetT, PCHash, Bit#(64), PCHash)) dataForBtReadReq <- mkOverflowBypassFifo;
-//     Fifo#(1, Tuple5#(backwardsTableTagT, offsetT, PCHash, Bit#(64), PCHash)) dataForBtReadResp <- mkPipelineFifo;
-//     RWBramCore#(backwardsTableIdxT, backwardsTableEntryT) backwardsTable <- mkRWBramCoreForwarded;
+    Fifo#(1, Tuple2#(backwardsTableIdxT, backwardsTableEntryT)) backwardsEntryToWrite <- mkOverflowBypassFifo;
+    Fifo#(1, Tuple5#(backwardsTableIdxTagT, offsetT, PCHash, Bit#(64), PCHash)) dataForBtReadReq <- mkOverflowBypassFifo;
+    Fifo#(1, Tuple5#(backwardsTableTagT, offsetT, PCHash, Bit#(64), PCHash)) dataForBtReadResp <- mkPipelineFifo;
+    RWBramCore#(backwardsTableIdxT, backwardsTableEntryT) backwardsTable <- mkRWBramCoreForwarded;
     
-//     Fifo#(2, Tuple3#(Addr, PCHash, Bit#(64))) dataForTtWriteEnq <- mkOverflowBypassFifo;
-//     Fifo#(1, Tuple4#(Addr, offsetT, offsetT, PCHash)) dataForTtRead <- mkPipelineFifo;
-//     timelinessTableT timelinessTable <- mkTimelinessTable;
+    Fifo#(2, Tuple3#(Addr, PCHash, Bit#(64))) dataForTtWriteEnq <- mkOverflowBypassFifo;
+    Fifo#(1, Tuple4#(Addr, offsetT, offsetT, PCHash)) dataForTtRead <- mkPipelineFifo;
+    timelinessTableT timelinessTable <- mkTimelinessTable;
 
-//     Fifo#(1, Tuple4#(predictionTableIdxTagT, offsetT, offsetT, PCHash)) dataForPredReplacmentRd <- mkPipelineFifo;
-//     Fifo#(1, Tuple4#(predictionTableIdxTagT, Addr, Addr, Depth)) dataForPredRdResp <- mkPipelineFifo;
-//     RWBramCore#(predictionTableIdxT, predictionTableEntryT) predictionTable <- mkRWBramCoreForwarded;
-//     RWBramCore#(predictionTableIdxT, predictionTableEntryT) predictionTableCopy <- mkRWBramCoreForwarded;
+    Fifo#(1, Tuple4#(predictionTableIdxTagT, offsetT, offsetT, PCHash)) dataForPredReplacmentRd <- mkPipelineFifo;
+    Fifo#(1, Tuple4#(predictionTableIdxTagT, Addr, Addr, Depth)) dataForPredRdResp <- mkPipelineFifo;
+    RWBramCore#(predictionTableIdxT, predictionTableEntryT) predictionTable <- mkRWBramCoreForwarded;
+    RWBramCore#(predictionTableIdxT, predictionTableEntryT) predictionTableCopy <- mkRWBramCoreForwarded;
 
-//     Fifo#(1,  Tuple3#(predictionTableIdxTagT, Addr, Addr)) dataForPredRdReq <- mkOverflowBypassFifo;
-//     Fifo#(1,  Tuple4#(predictionTableIdxTagT, Addr, Addr, Depth)) dataForPredFromPrefetchRdReq <- mkOverflowBypassFifo;
+    Fifo#(1,  Tuple3#(predictionTableIdxTagT, Addr, Addr)) dataForPredRdReq <- mkOverflowBypassFifo;
+    Fifo#(1,  Tuple4#(predictionTableIdxTagT, Addr, Addr, Depth)) dataForPredFromPrefetchRdReq <- mkOverflowBypassFifo;
 
-//     RWBramCore#(confidenceUpdateIdxT, confidenceUpdateTableEntryT) confidenceUpdateTable <- mkRWBramCoreForwarded;
+    RWBramCore#(confidenceUpdateIdxT, confidenceUpdateTableEntryT) confidenceUpdateTable <- mkRWBramCoreForwarded;
 
-//     Fifo#(4, tlbInfoT) tlbLookupQueue <- mkOverflowPipelineFifo;
+    Fifo#(4, tlbInfoT) tlbLookupQueue <- mkOverflowPipelineFifo;
 
-//     Fifo#(2, tlbInfoT) dataForTlbLookupFromPrediction <- mkOverflowBypassFifo;
-//     Fifo#(2, tlbInfoT) dataForTlbLookupFromDataArrival <- mkOverflowBypassFifo;
+    Fifo#(2, tlbInfoT) dataForTlbLookupFromPrediction <- mkOverflowBypassFifo;
+    Fifo#(2, tlbInfoT) dataForTlbLookupFromDataArrival <- mkOverflowBypassFifo;
 
-//     Fifo#(1, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) dataForPrefetchFilterRdResp <- mkOverflowPipelineFifo;
-//     Fifo#(1, LineAddr) evictFromPrefetchFilterQ <- mkOverflowBypassFifo;
-//     Fifo#(1, LineAddr) dataForPrefetchFilterEvict <- mkPipelineFifo;
-//     RWBramCore#(prefetchFilterIdxT, prefetchFilterEntryT) prefetchFilterTable <- mkRWBramCoreForwarded;
+    Fifo#(1, Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) dataForPrefetchFilterRdResp <- mkOverflowPipelineFifo;
+    Fifo#(1, LineAddr) evictFromPrefetchFilterQ <- mkOverflowBypassFifo;
+    Fifo#(1, LineAddr) dataForPrefetchFilterEvict <- mkPipelineFifo;
+    RWBramCore#(prefetchFilterIdxT, prefetchFilterEntryT) prefetchFilterTable <- mkRWBramCoreForwarded;
 
-//     Reg#(Bool) initBackwardsDone <- mkReg(False);
-//     Reg#(backwardsTableIdxT) initBackwardsIndex <- mkReg(0);
+    Reg#(Bool) initBackwardsDone <- mkReg(False);
+    Reg#(backwardsTableIdxT) initBackwardsIndex <- mkReg(0);
 
-//     Reg#(Bool) initPredictionDone <- mkReg(False);
-//     Reg#(predictionTableIdxT) initPredictionIndex <- mkReg(0);
+    Reg#(Bool) initPredictionDone <- mkReg(False);
+    Reg#(predictionTableIdxT) initPredictionIndex <- mkReg(0);
 
-//     Reg#(Bool) initConfidenceUpdateDone <- mkReg(False);
-//     Reg#(confidenceUpdateIdxT) initConfidenceUpdateIndex <- mkReg(0);
+    Reg#(Bool) initConfidenceUpdateDone <- mkReg(False);
+    Reg#(confidenceUpdateIdxT) initConfidenceUpdateIndex <- mkReg(0);
 
-//     Reg#(Bool) initPrefetchFilterDone <- mkReg(False);
-//     Reg#(prefetchFilterIdxT) initPrefetchFilterIndex <- mkReg(0);
+    Reg#(Bool) initPrefetchFilterDone <- mkReg(False);
+    Reg#(prefetchFilterIdxT) initPrefetchFilterIndex <- mkReg(0);
 
-//     rule doBackwardsTableInit(!initBackwardsDone);
-//         backwardsTableEntryT be;
-//         be.valid = False;
-//         be.parentVirtBase = 0;
-//         be.parentOffset = 0;
-//         be.tag = 0;
-//         be.parentTime = 0;
+    rule doBackwardsTableInit(!initBackwardsDone);
+        backwardsTableEntryT be;
+        be.valid = False;
+        be.parentVirtBase = 0;
+        be.parentOffset = 0;
+        be.tag = 0;
+        be.parentTime = 0;
 
-//         backwardsTable.wrReq(initBackwardsIndex,  be);
+        backwardsTable.wrReq(initBackwardsIndex,  be);
 
-//         initBackwardsIndex <= initBackwardsIndex + 1;
-//         if(initBackwardsIndex == maxBound) begin
-//             initBackwardsDone <= True;
-//         end
-//     endrule
+        initBackwardsIndex <= initBackwardsIndex + 1;
+        if(initBackwardsIndex == maxBound) begin
+            initBackwardsDone <= True;
+        end
+    endrule
 
-//     rule doPredictionTableInit(!initPredictionDone);
-//         predictionTableEntryT pe;
-//         pe.parentOffset = 0;
-//         pe.childOffset = 0;
-//         pe.confidence = 0;
-//         pe.tag = 0;
+    rule doPredictionTableInit(!initPredictionDone);
+        predictionTableEntryT pe;
+        pe.parentOffset = 0;
+        pe.childOffset = 0;
+        pe.confidence = 0;
+        pe.tag = 0;
+        pe.childPCHash = 0;
         
-//         predictionTable.wrReq(initPredictionIndex, pe);
-//         predictionTableCopy.wrReq(initPredictionIndex, pe);
+        predictionTable.wrReq(initPredictionIndex, pe);
+        predictionTableCopy.wrReq(initPredictionIndex, pe);
 
-//         initPredictionIndex <= initPredictionIndex + 1;
-//         if(initPredictionIndex == maxBound) begin
-//             initPredictionDone <= True;
-//         end
-//     endrule
+        initPredictionIndex <= initPredictionIndex + 1;
+        if(initPredictionIndex == maxBound) begin
+            initPredictionDone <= True;
+        end
+    endrule
 
 
-//     rule doConfidenceUpdateTableInit(!initConfidenceUpdateDone);
-//         confidenceUpdateTableEntryT ce;
-//         ce.pcHash = 0;
-//         ce.parentOffset = 0;
-//         ce.tag = 0;
+    rule doConfidenceUpdateTableInit(!initConfidenceUpdateDone);
+        confidenceUpdateTableEntryT ce;
+        ce.pcHash = 0;
+        ce.parentOffset = 0;
+        ce.tag = 0;
 
-//         confidenceUpdateTable.wrReq(initConfidenceUpdateIndex,  ce);
+        confidenceUpdateTable.wrReq(initConfidenceUpdateIndex,  ce);
 
-//         initConfidenceUpdateIndex <= initConfidenceUpdateIndex + 1;
-//         if(initConfidenceUpdateIndex == maxBound) begin
-//             initConfidenceUpdateDone <= True;
-//         end
-//     endrule
+        initConfidenceUpdateIndex <= initConfidenceUpdateIndex + 1;
+        if(initConfidenceUpdateIndex == maxBound) begin
+            initConfidenceUpdateDone <= True;
+        end
+    endrule
 
-//     rule doPrefetchFilterTableInit(!initPrefetchFilterDone);
-//         prefetchFilterEntryT pe;
-//         pe.valid = False;
-//         pe.tag = 0;
+    rule doPrefetchFilterTableInit(!initPrefetchFilterDone);
+        prefetchFilterEntryT pe;
+        pe.valid = False;
+        pe.tag = 0;
 
-//         prefetchFilterTable.wrReq(initPrefetchFilterIndex, pe);
+        prefetchFilterTable.wrReq(initPrefetchFilterIndex, pe);
 
-//         initPrefetchFilterIndex <= initPrefetchFilterIndex + 1;
-//         if(initPrefetchFilterIndex == maxBound) begin
-//             initPrefetchFilterDone <= True;
-//         end
+        initPrefetchFilterIndex <= initPrefetchFilterIndex + 1;
+        if(initPrefetchFilterIndex == maxBound) begin
+            initPrefetchFilterDone <= True;
+        end
 
-//     endrule
+    endrule
 
-//     function Bool initsDone() = 
-//         initBackwardsDone && initPredictionDone && initConfidenceUpdateDone && initPrefetchFilterDone;
+    function Bool initsDone() = 
+        initBackwardsDone && initPredictionDone && initConfidenceUpdateDone && initPrefetchFilterDone;
 
-//     function backwardsTableIdxTagT getBackwardsIdxTag(Addr childVirtBase) = 
-//         hash(childVirtBase); 
+    function backwardsTableIdxTagT getBackwardsIdxTag(Addr childVirtBase) = 
+        hash(childVirtBase); 
 
-//     function predictionTableIdxTagT getPredictionIdxTag(PCHash pcHash) =
-//         hash(pcHash);
+    function predictionTableIdxTagT getPredictionIdxTag(PCHash pcHash) =
+        hash(pcHash);
 
-//     function prefetchFilterIdxTagT getPrefetchFilterIdxTag(LineAddr lineAddr) = 
-//         hash(lineAddr);
+    function prefetchFilterIdxTagT getPrefetchFilterIdxTag(LineAddr lineAddr) = 
+        hash(lineAddr);
 
-//     rule processPredictionReplacementRd;
-//         let {predIdxTag, parentOffset, childOffset, childPCHash} = dataForPredReplacmentRd.first;
-//         dataForPredReplacmentRd.deq;
+    rule processPredictionReplacementRd;
+        let {predIdxTag, parentOffset, childOffset, childPCHash} = dataForPredReplacmentRd.first;
+        dataForPredReplacmentRd.deq;
 
-//         predictionTableIdxT predIdx = truncate(predIdxTag);
-//         predictionTableTagT predTag = truncateLSB(predIdxTag);
+        predictionTableIdxT predIdx = truncate(predIdxTag);
+        predictionTableTagT predTag = truncateLSB(predIdxTag);
 
-//         predictionTableEntryT pe = predictionTable.rdResp;
-//         predictionTable.deqRdResp;
+        predictionTableEntryT pe = predictionTable.rdResp;
+        predictionTable.deqRdResp;
         
-//         if (`VERBOSE) $display("%t Prefetcher processPredictionReplacementRd inital response predIdxTag %h parentOffset %h childOffset %h confidence %h childPCHash %h", $time, predIdxTag, pe.parentOffset, pe.childOffset, pe.confidence, pe.childPCHash);
+        if (`VERBOSE) $display("%t Prefetcher processPredictionReplacementRd inital response predIdxTag %h parentOffset %h childOffset %h confidence %h childPCHash %h", $time, predIdxTag, pe.parentOffset, pe.childOffset, pe.confidence, pe.childPCHash);
 
 
-//         if (pe.tag == predTag && pe.parentOffset == parentOffset && pe.childOffset == childOffset && pe.childPCHash == childPCHash) begin
-//             if (`VERBOSE) $display("%t prefetecher processPredictionReplacementRd match +1 oldConfidence %h idx %h tag %h childPCHash %h",$time, pe.confidence, predIdx, predTag, childPCHash);
-//             if (pe.confidence < maxBound) begin
-//                 pe.confidence = pe.confidence + 1;
-//                 predictionTable.wrReq(predIdx, pe);
-//                 predictionTableCopy.wrReq(predIdx, pe);
-//             end
-//         end
-//         else begin // Decrease confidence or replace
-//             if (pe.confidence < fromInteger(predictionReplacementConfidence)) begin
-//                 if (`VERBOSE) $display("%t prefetecher processPredictionReplacementRd replacement idx %h tag %h newParentOffset %h newChildOffset %h newChildPCHash oldParentOffset %h oldChildOffset %h oldChildPCHash %h", 
-//                                             $time, predIdx, predTag, parentOffset, childOffset, childPCHash, pe.parentOffset, pe.childOffset, pe.childPCHash);
-//                 // Replace
-//                 predictionTableEntryT peReplacement;
-//                 peReplacement.parentOffset = parentOffset;
-//                 peReplacement.childOffset = childOffset;
-//                 peReplacement.confidence = 1;
-//                 peReplacement.tag = predTag;
-//                 peReplacement.childPCHash = childPCHash;
-//                 predictionTable.wrReq(predIdx, peReplacement);
-//                 predictionTableCopy.wrReq(predIdx, peReplacement);
+        if (pe.tag == predTag && pe.parentOffset == parentOffset && pe.childOffset == childOffset && pe.childPCHash == childPCHash) begin
+            if (`VERBOSE) $display("%t prefetecher processPredictionReplacementRd match +1 oldConfidence %h idx %h tag %h childPCHash %h",$time, pe.confidence, predIdx, predTag, childPCHash);
+            if (pe.confidence < maxBound) begin
+                pe.confidence = pe.confidence + 1;
+                predictionTable.wrReq(predIdx, pe);
+                predictionTableCopy.wrReq(predIdx, pe);
+            end
+        end
+        else begin // Decrease confidence or replace
+            if (pe.confidence < fromInteger(predictionReplacementConfidence)) begin
+                if (`VERBOSE) $display("%t prefetecher processPredictionReplacementRd replacement idx %h tag %h newParentOffset %h newChildOffset %h newChildPCHash oldParentOffset %h oldChildOffset %h oldChildPCHash %h", 
+                                            $time, predIdx, predTag, parentOffset, childOffset, childPCHash, pe.parentOffset, pe.childOffset, pe.childPCHash);
+                // Replace
+                predictionTableEntryT peReplacement;
+                peReplacement.parentOffset = parentOffset;
+                peReplacement.childOffset = childOffset;
+                peReplacement.confidence = 1;
+                peReplacement.tag = predTag;
+                peReplacement.childPCHash = childPCHash;
+                predictionTable.wrReq(predIdx, peReplacement);
+                predictionTableCopy.wrReq(predIdx, peReplacement);
 
-//             end 
-//             else begin
-//                     if (`VERBOSE) $display("%t   confidence oldConfidence %h idx %h tag %h oldParentOffset %h oldChildOffset %h", 
-//                                         $time, pe.confidence, predIdx, predTag, pe.parentOffset, pe.childOffset);
-//                 // Decrease confidence
-//                 doAssert(pe.confidence > 0, "Old confidence should be greater than 0");
-//                 pe.confidence = pe.confidence - 1;
-//                 predictionTable.wrReq(predIdx, pe);
-//                 predictionTableCopy.wrReq(predIdx, pe);
+            end 
+            else begin
+                    if (`VERBOSE) $display("%t   confidence oldConfidence %h idx %h tag %h oldParentOffset %h oldChildOffset %h", 
+                                        $time, pe.confidence, predIdx, predTag, pe.parentOffset, pe.childOffset);
+                // Decrease confidence
+                doAssert(pe.confidence > 0, "Old confidence should be greater than 0");
+                pe.confidence = pe.confidence - 1;
+                predictionTable.wrReq(predIdx, pe);
+                predictionTableCopy.wrReq(predIdx, pe);
 
-//             end 
-//         end
-//     endrule
+            end 
+        end
+    endrule
 
-//     rule processTimelinessTableResp if (initsDone());
-//         // TODO: remove parentVirtBase as may be unecessary
-//         let {parentVirtBase, parentOffset, childOffset, childPCHash} = dataForTtRead.first;
-//         dataForTtRead.deq;
+    rule processTimelinessTableResp if (initsDone());
+        // TODO: remove parentVirtBase as may be unecessary
+        let {parentVirtBase, parentOffset, childOffset, childPCHash} = dataForTtRead.first;
+        dataForTtRead.deq;
 
-//         let tResp <- timelinessTable.rdResp;
-//         case (tResp) matches
-//             tagged Valid .x: begin
-//                 if (`VERBOSE) $display("%t Prefetcher timeliness table hit pcHash %h", $time, x.pcHash);
+        let tResp <- timelinessTable.rdResp;
+        case (tResp) matches
+            tagged Valid .x: begin
+                if (`VERBOSE) $display("%t Prefetcher timeliness table hit pcHash %h", $time, x.pcHash);
 
-//                 predictionTableIdxTagT predIdxTag = getPredictionIdxTag(x.pcHash);
-//                 predictionTableIdxT predIdx = truncate(predIdxTag);
-//                 predictionTableTagT predTag = truncateLSB(predIdxTag);
+                predictionTableIdxTagT predIdxTag = getPredictionIdxTag(x.pcHash);
+                predictionTableIdxT predIdx = truncate(predIdxTag);
+                predictionTableTagT predTag = truncateLSB(predIdxTag);
                 
-//                 // Read existing predicition as only replace if below confidence
-//                 dataForPredReplacmentRd.enq(tuple4(predIdxTag, parentOffset, childOffset, childPCHash));
-//                 predictionTable.rdReq(predIdx);
-//             end
-//             tagged Invalid:
-//                 if (`VERBOSE) $display("%t Prefetcher timeliness table miss", $time);
-//                 // No ways with valid and tagged matching values
-//         endcase
-//     endrule
+                // Read existing predicition as only replace if below confidence
+                dataForPredReplacmentRd.enq(tuple4(predIdxTag, parentOffset, childOffset, childPCHash));
+                predictionTable.rdReq(predIdx);
+            end
+            tagged Invalid:
+                if (`VERBOSE) $display("%t Prefetcher timeliness table miss", $time);
+                // No ways with valid and tagged matching values
+        endcase
+    endrule
 
-//     rule processBtReadReq if (initsDone());
-//         let {bIdxTag, childOffset, pcHash, childMissArrivalTime, childPCHash} = dataForBtReadReq.first;
-//         dataForBtReadReq.deq;
+    rule processBtReadReq if (initsDone());
+        let {bIdxTag, childOffset, pcHash, childMissArrivalTime, childPCHash} = dataForBtReadReq.first;
+        dataForBtReadReq.deq;
 
-//         backwardsTableIdxT bIdx = truncate(bIdxTag);
-//         backwardsTableTagT bTag = truncateLSB(bIdxTag);
+        backwardsTableIdxT bIdx = truncate(bIdxTag);
+        backwardsTableTagT bTag = truncateLSB(bIdxTag);
         
-//         dataForBtReadResp.enq(tuple5(bTag, childOffset, pcHash, childMissArrivalTime, childPCHash));
-//         backwardsTable.rdReq(bIdx);
-//     endrule
+        dataForBtReadResp.enq(tuple5(bTag, childOffset, pcHash, childMissArrivalTime, childPCHash));
+        backwardsTable.rdReq(bIdx);
+    endrule
 
-//     rule processBtResp if (initsDone());
-//         let {bTag, childOffset, pcHash, childMissArrivalTime, childPCHash} = dataForBtReadResp.first;
-//         dataForBtReadResp.deq;
-//         let bResp = backwardsTable.rdResp;
-//         backwardsTable.deqRdResp;
+    rule processBtResp if (initsDone());
+        let {bTag, childOffset, pcHash, childMissArrivalTime, childPCHash} = dataForBtReadResp.first;
+        dataForBtReadResp.deq;
+        let bResp = backwardsTable.rdResp;
+        backwardsTable.deqRdResp;
 
 
-//         if (bResp.tag == bTag && bResp.valid) begin
-//             if (`VERBOSE) $display("%t Prefetcher backwards table hit tag %h parentVirtBase %h parentOffset %h childOffset %h childMissTime %h", $time, bResp.tag, bResp.parentVirtBase, bResp.parentOffset, childOffset, childMissArrivalTime);
-//             dataForTtRead.enq(tuple4(bResp.parentVirtBase, bResp.parentOffset, childOffset, childPCHash));
+        if (bResp.tag == bTag && bResp.valid) begin
+            if (`VERBOSE) $display("%t Prefetcher backwards table hit tag %h parentVirtBase %h parentOffset %h childOffset %h childMissTime %h", $time, bResp.tag, bResp.parentVirtBase, bResp.parentOffset, childOffset, childMissArrivalTime);
+            dataForTtRead.enq(tuple4(bResp.parentVirtBase, bResp.parentOffset, childOffset, childPCHash));
 
-//             timelinessTable.rdReq(bResp.parentVirtBase, (bResp.parentTime << 1) - childMissArrivalTime); 
-//         end
-//         else begin
-//             if (`VERBOSE) $display("%t Prefetcher backwards table collision or invalid tableTag %h ourTag %h valid %h", $time, bResp.tag, bTag, bResp.valid);
-//         end
-//     endrule
+            timelinessTable.rdReq(bResp.parentVirtBase, bResp.parentTime - (childMissArrivalTime - bResp.parentTime)); 
+        end
+        else begin
+            if (`VERBOSE) $display("%t Prefetcher backwards table collision or invalid tableTag %h ourTag %h valid %h", $time, bResp.tag, bTag, bResp.valid);
+        end
+    endrule
 
-//     // Prediction read to attempt prefetch
-//     rule processPredictionResponse;
-//         dataForPredRdResp.deq;
-//         let {predIdxTag, boundsLength, boundsVirtBase, depth} = dataForPredRdResp.first;
-//         predictionTableTagT predTag = truncateLSB(predIdxTag);
+    // Prediction read to attempt prefetch
+    rule processPredictionResponse;
+        dataForPredRdResp.deq;
+        let {predIdxTag, boundsLength, boundsVirtBase, depth} = dataForPredRdResp.first;
+        predictionTableTagT predTag = truncateLSB(predIdxTag);
 
-//         predictionTableCopy.deqRdResp;
-//         let predResp = predictionTableCopy.rdResp;
+        predictionTableCopy.deqRdResp;
+        let predResp = predictionTableCopy.rdResp;
 
-//         if (`VERBOSE) $display("%t Prefetcher processPredictionResponse inital response predIdxTag %h parentOffset %h childOffset %h confidence %h", $time, predIdxTag, predResp.parentOffset, predResp.childOffset, predResp.confidence);
+        if (`VERBOSE) $display("%t Prefetcher processPredictionResponse inital response predIdxTag %h parentOffset %h childOffset %h confidence %h", $time, predIdxTag, predResp.parentOffset, predResp.childOffset, predResp.confidence);
 
-//         if (predResp.tag == predTag && predResp.confidence >= fromInteger(predictionPrefetchConfidence)
-//              && predResp.parentOffset < boundsLength) begin // TODO: check if off by one on offset check
-//             if (`VERBOSE) $display("%t Prefetcher processPredictionResponse tag match and valid offset predIdxTag %h parentOffset %h childOffset %h confidence %h virtBase %h", $time, predIdxTag, predResp.parentOffset, predResp.childOffset, predResp.confidence, boundsVirtBase);
+        if (predResp.tag == predTag && predResp.confidence >= fromInteger(predictionPrefetchConfidence)
+             && predResp.parentOffset < boundsLength) begin // TODO: check if off by one on offset check
+            if (`VERBOSE) $display("%t Prefetcher processPredictionResponse tag match and valid offset predIdxTag %h parentOffset %h childOffset %h confidence %h virtBase %h", $time, predIdxTag, predResp.parentOffset, predResp.childOffset, predResp.confidence, boundsVirtBase);
 
-//             CapPipe cp = almightyCap;
-//             let cp1 = setAddr(cp, boundsVirtBase);
-//             let cp2 = setBounds(cp1.value, boundsLength);
-//             let cp3 = setOffset(cp2.value, predResp.parentOffset);
+            CapPipe cp = almightyCap;
+            let cp1 = setAddr(cp, boundsVirtBase);
+            let cp2 = setBounds(cp1.value, boundsLength);
+            let cp3 = setOffset(cp2.value, predResp.parentOffset);
 
-//             tlbInfoT tlbInfo;
-//             tlbInfo.cap = cp3.value;
-//             tlbInfo.childOffset = Valid (predResp.childOffset);
-//             tlbInfo.predIdxTag = predIdxTag;
-//             tlbInfo.childPCHash = predResp.childPCHash;
-//             tlbInfo.depth = depth;
+            tlbInfoT tlbInfo;
+            tlbInfo.cap = cp3.value;
+            tlbInfo.childOffset = Valid (predResp.childOffset);
+            tlbInfo.predIdxTag = predIdxTag;
+            tlbInfo.childPCHash = predResp.childPCHash;
+            tlbInfo.depth = depth;
             
 
-//             dataForTlbLookupFromPrediction.enq(tlbInfo);
-//         end
-//     endrule
+            dataForTlbLookupFromPrediction.enq(tlbInfo);
+        end
+    endrule
 
-//     // Need to add additional rule to prevent back-pressure and merge request from prediction response and data arrival
-//     rule tlbLookupFromPrediction if (initsDone());
-//         let tlbInfo = dataForTlbLookupFromPrediction.first;
-//         dataForTlbLookupFromPrediction.deq;
+    // Need to add additional rule to prevent back-pressure and merge request from prediction response and data arrival
+    rule tlbLookupFromPrediction if (initsDone());
+        let tlbInfo = dataForTlbLookupFromPrediction.first;
+        dataForTlbLookupFromPrediction.deq;
 
-// `ifndef PREFETCHER_RUN_ASIDE
-//         tlbLookupQueue.enq(tlbInfo);
-// `endif    
-//     endrule
+`ifndef PREFETCHER_RUN_ASIDE
+        tlbLookupQueue.enq(tlbInfo);
+`endif    
+    endrule
 
-//     rule tlbLookupFromDataArrival if (initsDone());
-//         let tlbInfo = dataForTlbLookupFromDataArrival.first;
-//         dataForTlbLookupFromDataArrival.deq;
+    rule tlbLookupFromDataArrival if (initsDone());
+        let tlbInfo = dataForTlbLookupFromDataArrival.first;
+        dataForTlbLookupFromDataArrival.deq;
 
-// `ifndef PREFETCHER_RUN_ASIDE
-//         tlbLookupQueue.enq(tlbInfo);
-// `endif
-//     endrule
+`ifndef PREFETCHER_RUN_ASIDE
+        tlbLookupQueue.enq(tlbInfo);
+`endif
+    endrule
 
-//     rule processPrefetchFilterRdResp if (initsDone());
-//         let {prefetchAddr, cap, prefetchOtherInfo} = dataForPrefetchFilterRdResp.first;
-//         dataForPrefetchFilterRdResp.deq;
+    rule processPrefetchFilterRdResp if (initsDone());
+        let {prefetchAddr, cap, prefetchOtherInfo} = dataForPrefetchFilterRdResp.first;
+        dataForPrefetchFilterRdResp.deq;
         
-//         prefetchFilterTable.deqRdResp;
-//         prefetchFilterEntryT prefetchFilterEntry = prefetchFilterTable.rdResp;
+        prefetchFilterTable.deqRdResp;
+        prefetchFilterEntryT prefetchFilterEntry = prefetchFilterTable.rdResp;
 
-//         prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(getLineAddr(prefetchAddr));
-//         prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
-//         prefetchFilterTagT prefetchFilterTag = truncateLSB(prefetchFilterIdxTag);
+        prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(getLineAddr(prefetchAddr));
+        prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
+        prefetchFilterTagT prefetchFilterTag = truncateLSB(prefetchFilterIdxTag);
 
-//         if (`VERBOSE) $display("%t prefetcher prefetchfilterRdResponse idx %h tag %h responseTag %h valid %h", $time, prefetchFilterIdx, prefetchFilterTag, prefetchFilterEntry.tag, prefetchFilterEntry.valid);
+        if (`VERBOSE) $display("%t prefetcher prefetchfilterRdResponse idx %h tag %h responseTag %h valid %h", $time, prefetchFilterIdx, prefetchFilterTag, prefetchFilterEntry.tag, prefetchFilterEntry.valid);
 
 
-//         if (!prefetchFilterEntry.valid || prefetchFilterEntry.tag != prefetchFilterTag) begin
-//             prefetchQueue.enq(tuple3(prefetchAddr, cap, prefetchOtherInfo));
+        if (!prefetchFilterEntry.valid || prefetchFilterEntry.tag != prefetchFilterTag) begin
+            prefetchQueue.enq(tuple3(prefetchAddr, cap, prefetchOtherInfo));
 
-//             prefetchFilterEntryT pe;
-//             pe.valid = True;
-//             pe.tag = prefetchFilterTag;
+            prefetchFilterEntryT pe;
+            pe.valid = True;
+            pe.tag = prefetchFilterTag;
 
-//             prefetchFilterTable.wrReq(prefetchFilterIdx, pe);
-//             if (`VERBOSE) $display("%t prefetcher prefetchfilter write idx %h tag %h valid %h", $time, prefetchFilterIdx, pe.tag, pe.valid);
-//         end
-//     endrule
+            prefetchFilterTable.wrReq(prefetchFilterIdx, pe);
+            if (`VERBOSE) $display("%t prefetcher prefetchfilter write idx %h tag %h valid %h", $time, prefetchFilterIdx, pe.tag, pe.valid);
+        end
+    endrule
 
-//     rule doTlbLookup;
-//         let tlbInfo = tlbLookupQueue.first;
-//         tlbLookupQueue.deq;
+    rule doTlbLookup;
+        let tlbInfo = tlbLookupQueue.first;
+        tlbLookupQueue.deq;
 
-//         toTlb.prefetcherReq(tlbInfo.cap, Valid(PrefetchOtherInfo {childOffset: tlbInfo.childOffset, pcHash: tlbInfo.predIdxTag, childPCHash: tlbInfo.childPCHash}));
-//         if (`VERBOSE) $display("%t Prefetcher doTlbLookup boundsVirtBase %h boundsOffset %h boundsLength %h childOffset %h", $time, getBase(tlbInfo.cap), getOffset(tlbInfo.cap), getLength(tlbInfo.cap), tlbInfo.childOffset);
+        toTlb.prefetcherReq(tlbInfo.cap, Valid(PrefetchOtherInfo {childOffset: tlbInfo.childOffset, pcHash: tlbInfo.predIdxTag, childPCHash: tlbInfo.childPCHash, depth: tlbInfo.depth}));
+        if (`VERBOSE) $display("%t Prefetcher doTlbLookup boundsVirtBase %h boundsOffset %h boundsLength %h childOffset %h", $time, getBase(tlbInfo.cap), getOffset(tlbInfo.cap), getLength(tlbInfo.cap), tlbInfo.childOffset);
 
-//     endrule
+    endrule
 
-//     rule getTlbResp;
-//         let resp = toTlb.prefetcherResp;
-//         toTlb.deqPrefetcherResp;
+    rule getTlbResp;
+        let resp = toTlb.prefetcherResp;
+        toTlb.deqPrefetcherResp;
 
-//         if (`VERBOSE) $display("%t Prefetcher got TLB response: ", $time, fshow(resp));
+        if (`VERBOSE) $display("%t Prefetcher got TLB response: ", $time, fshow(resp));
 
-//         doAssert(isValid(resp.prefetchOtherInfo), "TLB response should have tagged prefetchOtherInfo");
+        doAssert(isValid(resp.prefetchOtherInfo), "TLB response should have tagged prefetchOtherInfo");
 
-//         if (!resp.haveException && resp.paddr != 0) begin
-//             prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(getLineAddr(resp.paddr));
-//             prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
+        if (!resp.haveException && resp.paddr != 0) begin
+            prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(getLineAddr(resp.paddr));
+            prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
 
-//             if (`VERBOSE) $display("%t prefetcher prefetchfilter RdReq prediction idx %h", $time, prefetchFilterIdx);
-//             prefetchFilterTable.rdReq(prefetchFilterIdx);
-//             dataForPrefetchFilterRdResp.enq(tuple3(resp.paddr, resp.cap, fromMaybe(?, resp.prefetchOtherInfo)));
-//         end
-//     endrule
+            if (`VERBOSE) $display("%t prefetcher prefetchfilter RdReq prediction idx %h", $time, prefetchFilterIdx);
+            prefetchFilterTable.rdReq(prefetchFilterIdx);
+            dataForPrefetchFilterRdResp.enq(tuple3(resp.paddr, resp.cap, fromMaybe(?, resp.prefetchOtherInfo)));
+        end
+    endrule
 
-//     // (* descending_urgency = "processBtResp, processTimelinessTableResp, writeToTimeliness" *)
-//     rule writeToTimeliness;
-//         let {boundsVirtBase, pcHash, enqTime} = dataForTtWriteEnq.first;
-//         dataForTtWriteEnq.deq;
+    // (* descending_urgency = "processBtResp, processTimelinessTableResp, writeToTimeliness" *)
+    rule writeToTimeliness;
+        let {boundsVirtBase, pcHash, enqTime} = dataForTtWriteEnq.first;
+        dataForTtWriteEnq.deq;
 
-//         timelinessTable.wrReq(boundsVirtBase, pcHash, enqTime);
-//     endrule
+        timelinessTable.wrReq(boundsVirtBase, pcHash, enqTime);
+    endrule
 
-//     rule writeToBackwards if (initsDone());
-//         let {bIdx, be} = backwardsEntryToWrite.first;
-//         backwardsEntryToWrite.deq;
+    rule writeToBackwards if (initsDone());
+        let {bIdx, be} = backwardsEntryToWrite.first;
+        backwardsEntryToWrite.deq;
 
-//         backwardsTable.wrReq(bIdx, be); 
-//         if (`VERBOSE) $display("%t Prefetcher Item added to backwards table parentVirtBase %h parentOffset %h idx %h childTag %h ", $time, be.parentVirtBase, be.parentOffset, bIdx, be.tag);
+        backwardsTable.wrReq(bIdx, be); 
+        if (`VERBOSE) $display("%t Prefetcher Item added to backwards table parentVirtBase %h parentOffset %h idx %h childTag %h ", $time, be.parentVirtBase, be.parentOffset, bIdx, be.tag);
 
-//     endrule
+    endrule
 
-//     rule predictionTableReadRequest if (initsDone());
-//         let {predIdxTag, boundsLength, boundsVirtBase} = dataForPredRdReq.first;
-//         dataForPredRdReq.deq;
+    rule predictionTableReadRequest if (initsDone());
+        let {predIdxTag, boundsLength, boundsVirtBase} = dataForPredRdReq.first;
+        dataForPredRdReq.deq;
 
-//         predictionTableIdxT predIdx = truncate(predIdxTag);
+        predictionTableIdxT predIdx = truncate(predIdxTag);
 
-//         predictionTableCopy.rdReq(predIdx);
-//         dataForPredRdResp.enq(tuple4(predIdxTag, boundsLength, boundsVirtBase, 0));
-//     endrule
+        predictionTableCopy.rdReq(predIdx);
+        dataForPredRdResp.enq(tuple4(predIdxTag, boundsLength, boundsVirtBase, 0));
+    endrule
 
-//     rule predictionTableFromPrefetchReadRequest if (initsDone());
-//         let {predIdxTag, boundsLength, boundsVirtBase, depth} = dataForPredFromPrefetchRdReq.first;
-//         dataForPredFromPrefetchRdReq.deq;
+    rule predictionTableFromPrefetchReadRequest if (initsDone());
+        let {predIdxTag, boundsLength, boundsVirtBase, depth} = dataForPredFromPrefetchRdReq.first;
+        dataForPredFromPrefetchRdReq.deq;
 
-//         predictionTableIdxT predIdx = truncate(predIdxTag);
+        predictionTableIdxT predIdx = truncate(predIdxTag);
 
-//         predictionTableCopy.rdReq(predIdx);
-//         dataForPredRdResp.enq(tuple4(predIdxTag, boundsLength, boundsVirtBase, depth));
-//     endrule
+        predictionTableCopy.rdReq(predIdx);
+        dataForPredRdResp.enq(tuple4(predIdxTag, boundsLength, boundsVirtBase, depth));
+    endrule
     
-//     (* descending_urgency = "tlbLookupFromPrediction, tlbLookupFromDataArrival, evictFromPrefetchFilterReadRq" *)
-//     rule evictFromPrefetchFilterReadRq;
-//         let lineAddr = evictFromPrefetchFilterQ.first;
-//         evictFromPrefetchFilterQ.deq;
+    (* descending_urgency = "tlbLookupFromPrediction, tlbLookupFromDataArrival, evictFromPrefetchFilterReadRq" *)
+    rule evictFromPrefetchFilterReadRq;
+        let lineAddr = evictFromPrefetchFilterQ.first;
+        evictFromPrefetchFilterQ.deq;
 
-//         prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(lineAddr);
-//         prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
+        prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(lineAddr);
+        prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
 
-//         if (`VERBOSE) $display("%t Prefetcher prefetchFilter evictReadRq idx %h", $time, prefetchFilterIdx);
-//         prefetchFilterTable.rdReq(prefetchFilterIdx);
-//         dataForPrefetchFilterEvict.enq(lineAddr);
-//     endrule
+        if (`VERBOSE) $display("%t Prefetcher prefetchFilter evictReadRq idx %h", $time, prefetchFilterIdx);
+        prefetchFilterTable.rdReq(prefetchFilterIdx);
+        dataForPrefetchFilterEvict.enq(lineAddr);
+    endrule
 
-//     (* descending_urgency = "processPrefetchFilterRdResp, evictFromPrefetchFilterRead" *)
-//     rule evictFromPrefetchFilterRead;
-//         let lineAddr = dataForPrefetchFilterEvict.first;
-//         dataForPrefetchFilterEvict.deq;
+    (* descending_urgency = "processPrefetchFilterRdResp, evictFromPrefetchFilterRead" *)
+    rule evictFromPrefetchFilterRead;
+        let lineAddr = dataForPrefetchFilterEvict.first;
+        dataForPrefetchFilterEvict.deq;
 
-//         prefetchFilterTable.deqRdResp;
-//         prefetchFilterEntryT prefetchFilterEntry = prefetchFilterTable.rdResp;
+        prefetchFilterTable.deqRdResp;
+        prefetchFilterEntryT prefetchFilterEntry = prefetchFilterTable.rdResp;
 
-//         prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(lineAddr);
-//         prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
-//         prefetchFilterTagT prefetchFilterTag = truncateLSB(prefetchFilterIdxTag);
+        prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(lineAddr);
+        prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
+        prefetchFilterTagT prefetchFilterTag = truncateLSB(prefetchFilterIdxTag);
 
 
-//         if (prefetchFilterEntry.valid && prefetchFilterEntry.tag == prefetchFilterTag) begin
+        if (prefetchFilterEntry.valid && prefetchFilterEntry.tag == prefetchFilterTag) begin
             
-//             prefetchFilterEntry.valid = False;
+            prefetchFilterEntry.valid = False;
 
-//             if (`VERBOSE) $display("%t Prefetcher prefetchFilter evictWrite idx %h tag %h", $time, prefetchFilterIdx, prefetchFilterTag);
-//             prefetchFilterTable.wrReq(prefetchFilterIdx, prefetchFilterEntry);
-//         end
-//     endrule
+            if (`VERBOSE) $display("%t Prefetcher prefetchFilter evictWrite idx %h tag %h", $time, prefetchFilterIdx, prefetchFilterTag);
+            prefetchFilterTable.wrReq(prefetchFilterIdx, prefetchFilterEntry);
+        end
+    endrule
     
-//     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, MemOp op, 
-//         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
-//         $display("%t Prefetcher logReportAccess addr %h pcHash %h hitMiss %b boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h op %h", $time, addr, pcHash, hitMiss, boundsOffset, boundsLength, boundsVirtBase, capPerms, op);
-//         let enqTime <- $time;
-//         dataForTtWriteEnq.enq(tuple3(boundsVirtBase, pcHash, enqTime));
+    method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, MemOp op, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
+        $display("%t Prefetcher logReportAccess addr %h pcHash %h hitMiss %b boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h op %h", $time, addr, pcHash, hitMiss, boundsOffset, boundsLength, boundsVirtBase, capPerms, op);
+        let enqTime <- $time;
+        dataForTtWriteEnq.enq(tuple3(boundsVirtBase, pcHash, enqTime));
         
-//         predictionTableIdxTagT predIdxTag = getPredictionIdxTag(pcHash);
-//         dataForPredRdReq.enq(tuple3(predIdxTag, boundsLength, boundsVirtBase));
-//     endmethod
+        predictionTableIdxTagT predIdxTag = getPredictionIdxTag(pcHash);
+        dataForPredRdReq.enq(tuple3(predIdxTag, boundsLength, boundsVirtBase));
+    endmethod
 
-//     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-//         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
+    method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch, Bit#(64) startTime);
         
-//         LineMemDataOffset dataSel = getLineMemDataOffset(addr);
-//         MemTaggedData current = getTaggedDataAt(lineWithTags, dataSel);
-//         CapPipe selCap = fromMem(unpack(pack(current)));
+        LineMemDataOffset dataSel = getLineMemDataOffset(addr);
+        MemTaggedData current = getTaggedDataAt(lineWithTags, dataSel);
+        CapPipe selCap = fromMem(unpack(pack(current)));
 
-//         if (wasMiss && !wasPrefetch) begin 
-//             backwardsTableIdxTagT bIdxTag = getBackwardsIdxTag(boundsVirtBase);
+        if (wasMiss && !wasPrefetch) begin 
+            backwardsTableIdxTagT bIdxTag = getBackwardsIdxTag(boundsVirtBase);
 
-//             let childMissArrivalTime <- $time;
+            let childMissArrivalTime <- $time;
 
-//             dataForBtReadReq.enq(tuple5(bIdxTag, boundsOffset, pcHash, childMissArrivalTime, pcHash));
-//         end
+            dataForBtReadReq.enq(tuple5(bIdxTag, boundsOffset, pcHash, childMissArrivalTime, pcHash));
+        end
 
-//         // Populate backwards table
-//             // Prefetching from node to node so avoiding same virtBase
-//         if (!wasPrefetch && current.tag && getBase(selCap) != boundsVirtBase) begin
-//                     backwardsTableIdxTagT bIdxTag = getBackwardsIdxTag(getBase(selCap));
-//                     backwardsTableIdxT bIdx = truncate(bIdxTag);
-//                     backwardsTableTagT bTag = truncateLSB(bIdxTag);
+        // Populate backwards table
+            // Prefetching from node to node so avoiding same virtBase
+        if (!wasPrefetch && current.tag && getBase(selCap) != boundsVirtBase) begin
+                    backwardsTableIdxTagT bIdxTag = getBackwardsIdxTag(getBase(selCap));
+                    backwardsTableIdxT bIdx = truncate(bIdxTag);
+                    backwardsTableTagT bTag = truncateLSB(bIdxTag);
 
-//                     backwardsTableEntryT be;
-//                     be.valid = True;
-//                     be.parentVirtBase = boundsVirtBase;
-//                     be.parentOffset = truncate(boundsOffset);
-//                     be.tag = bTag;
-//                     let parentTime <- $time;
-//                     be.parentTime = parentTime;
+                    backwardsTableEntryT be;
+                    be.valid = True;
+                    be.parentVirtBase = boundsVirtBase;
+                    be.parentOffset = truncate(boundsOffset);
+                    be.tag = bTag;
+                    let parentTime <- $time;
+                    be.parentTime = parentTime;
         
-//                     backwardsEntryToWrite.enq(tuple2(bIdx, be));
-//         end
+                    backwardsEntryToWrite.enq(tuple2(bIdx, be));
+        end
 
     
-//         if (prefetchOtherInfo matches tagged Valid .prefetchInfo) begin
-//             if (prefetchInfo.childOffset matches tagged Valid .childOffset) begin
-//                 if (current.tag && childOffset < saturating_truncate(getLength(selCap))) begin
-//                     // Prefetch just loaded child cap at child offset. TODO: Validate saturating_truncate is valid
+        if (prefetchOtherInfo matches tagged Valid .prefetchInfo) begin
+            if (prefetchInfo.childOffset matches tagged Valid .childOffset) begin
+                if (current.tag && childOffset < saturating_truncate(getLength(selCap))) begin
+                    // Prefetch just loaded child cap at child offset. TODO: Validate saturating_truncate is valid
 
-//                     CapPipe cp = almightyCap;
-//                     let cp1 = setAddr(cp, getBase(selCap));
-//                     let cp2 = setBounds(cp1.value, saturating_truncate(getLength(selCap)));
-//                     let cp3 = setOffset(cp2.value, childOffset);    
+                    CapPipe cp = almightyCap;
+                    let cp1 = setAddr(cp, getBase(selCap));
+                    let cp2 = setBounds(cp1.value, saturating_truncate(getLength(selCap)));
+                    let cp3 = setOffset(cp2.value, childOffset);    
    
 
-//                     tlbInfoT tlbInfo;
-//                     tlbInfo.cap = cp3.value;
-//                     tlbInfo.childOffset = Invalid;
-//                     tlbInfo.predIdxTag = getPredictionIdxTag(prefetchInfo.pcHash);
+                    tlbInfoT tlbInfo;
+                    tlbInfo.cap = cp3.value;
+                    tlbInfo.childOffset = Invalid;
+                    tlbInfo.predIdxTag = getPredictionIdxTag(prefetchInfo.pcHash);
+                    tlbInfo.childPCHash = prefetchInfo.childPCHash;
+                    tlbInfo.depth = prefetchInfo.depth;
 
-//                     dataForTlbLookupFromDataArrival.enq(tlbInfo);       
-//                     if (`VERBOSE ) $display("%t Prefetch childPrefetch virtBase %h childOffset %h ", $time, getBase(selCap), childOffset, fshow(prefetchOtherInfo));
+                    dataForTlbLookupFromDataArrival.enq(tlbInfo);       
+                    if (`VERBOSE ) $display("%t Prefetch childPrefetch virtBase %h childOffset %h ", $time, getBase(selCap), childOffset, fshow(prefetchOtherInfo));
 
-//                 end
-//             end
-//             else if (prefetchInfo.depth <= 1) begin // Result of a child prefetch so start chaining
-//                 predictionTableIdxTagT predIdxTag = getPredictionIdxTag(prefetchInfo.childPCHash);
-//                 dataForPredFromPrefetchRdReq.enq(tuple4(predIdxTag, boundsLength, boundsVirtBase, prefetchInfo.depth + 1));
-//                 if (`VERBOSE ) $display("%t Prefetcher triggering chain childPCHash %h", prefetchInfo.childPCHash);
+                end
+            end
+            else if (prefetchInfo.depth <= 1) begin // Result of a child prefetch so start chaining
+                predictionTableIdxTagT predIdxTag = getPredictionIdxTag(prefetchInfo.childPCHash);
+                dataForPredFromPrefetchRdReq.enq(tuple4(predIdxTag, boundsLength, boundsVirtBase, prefetchInfo.depth + 1));
+                if (`VERBOSE ) $display("%t Prefetcher triggering chain childPCHash %h", $time, prefetchInfo.childPCHash);
 
-//             end
-//         end 
+            end
+        end 
 
-//         if (`VERBOSE) begin
+        if (`VERBOSE) begin
 
-//             MemTaggedData d1 = getTaggedDataAt(lineWithTags, 0);
-//             MemTaggedData d2 = getTaggedDataAt(lineWithTags, 1);
-//             MemTaggedData d3 = getTaggedDataAt(lineWithTags, 2);
-//             MemTaggedData d4 = getTaggedDataAt(lineWithTags, 3);
+            MemTaggedData d1 = getTaggedDataAt(lineWithTags, 0);
+            MemTaggedData d2 = getTaggedDataAt(lineWithTags, 1);
+            MemTaggedData d3 = getTaggedDataAt(lineWithTags, 2);
+            MemTaggedData d4 = getTaggedDataAt(lineWithTags, 3);
 
-//             CapPipe cap1 = fromMem(unpack(pack(d1)));
-//             CapPipe cap2 = fromMem(unpack(pack(d2)));
-//             CapPipe cap3 = fromMem(unpack(pack(d3)));
-//             CapPipe cap4 = fromMem(unpack(pack(d4)));
+            CapPipe cap1 = fromMem(unpack(pack(d1)));
+            CapPipe cap2 = fromMem(unpack(pack(d2)));
+            CapPipe cap3 = fromMem(unpack(pack(d3)));
+            CapPipe cap4 = fromMem(unpack(pack(d4)));
 
-//             $display("%t Prefetcher logReportDataArrival requestAddr %h pcHash %h wasMiss %b wasPrefetch %b boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h op %h", $time, addr, pcHash, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms, op);
-//             $display("%t Preftecher logReportDataArrivalCap capIndex 1 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d1.tag, getAddr(cap1), getOffset(cap1), getLength(cap1), getBase(cap1), getPerms(cap1));
-//             $display("%t Preftecher logReportDataArrivalCap capIndex 2 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d2.tag, getAddr(cap2), getOffset(cap2), getLength(cap2), getBase(cap2), getPerms(cap2));
-//             $display("%t Preftecher logReportDataArrivalCap capIndex 3 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d3.tag, getAddr(cap3), getOffset(cap3), getLength(cap3), getBase(cap3), getPerms(cap3));
-//             $display("%t Preftecher logReportDataArrivalCap capIndex 4 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d4.tag, getAddr(cap4), getOffset(cap4), getLength(cap4), getBase(cap4), getPerms(cap4));
-//             $display("%t Preftecher logReportDataArrivalSelectedCap capIndex %b tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, dataSel, current.tag, getAddr(selCap), getOffset(selCap), getLength(selCap), getBase(selCap), getPerms(selCap));
-//         end
-//     endmethod
+            $display("%t Prefetcher logReportDataArrival requestAddr %h pcHash %h wasMiss %b wasPrefetch %b boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h op %h", $time, addr, pcHash, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms, op);
+            $display("%t Preftecher logReportDataArrivalCap capIndex 1 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d1.tag, getAddr(cap1), getOffset(cap1), getLength(cap1), getBase(cap1), getPerms(cap1));
+            $display("%t Preftecher logReportDataArrivalCap capIndex 2 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d2.tag, getAddr(cap2), getOffset(cap2), getLength(cap2), getBase(cap2), getPerms(cap2));
+            $display("%t Preftecher logReportDataArrivalCap capIndex 3 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d3.tag, getAddr(cap3), getOffset(cap3), getLength(cap3), getBase(cap3), getPerms(cap3));
+            $display("%t Preftecher logReportDataArrivalCap capIndex 4 tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, d4.tag, getAddr(cap4), getOffset(cap4), getLength(cap4), getBase(cap4), getPerms(cap4));
+            $display("%t Preftecher logReportDataArrivalSelectedCap capIndex %b tag %b addr %h boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h", $time, dataSel, current.tag, getAddr(selCap), getOffset(selCap), getLength(selCap), getBase(selCap), getPerms(selCap));
+        end
+    endmethod
 
-//     method ActionValue#(Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) getNextPrefetchAddr;
-//         if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr %h", $time, tpl_1(prefetchQueue.first));
-//         prefetchQueue.deq;
+    method ActionValue#(Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) getNextPrefetchAddr;
+        if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr %h", $time, tpl_1(prefetchQueue.first));
+        prefetchQueue.deq;
 
-//         return prefetchQueue.first;
-//     endmethod
+        return prefetchQueue.first;
+    endmethod
 
-//     method Action reportCacheEviction(LineAddr lineAddr);
-//             evictFromPrefetchFilterQ.enq(lineAddr);
-//     endmethod
+    method Action reportCacheEviction(LineAddr lineAddr);
+            evictFromPrefetchFilterQ.enq(lineAddr);
+    endmethod
 
-// `ifdef PERFORMANCE_MONITORING
-//     method EventsPrefetcher events;
-//         return  unpack(0);
-//     endmethod
-// `endif
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return  unpack(0);
+    endmethod
+`endif
 
-// endmodule
-// `endif
+endmodule
+`endif
 
+`ifdef DATA_PREFETCHER_DEPENDENCE_PREFETCHER
 typedef struct {
     Bit#(offsetBits) childOffset;
     PCHash childPC;
@@ -3478,7 +3482,7 @@ provisos (
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch, Bit#(64) startTime);
 
         LineMemDataOffset dataSel = getLineMemDataOffset(addr);
         MemTaggedData current = getTaggedDataAt(lineWithTags, dataSel);
@@ -3608,3 +3612,4 @@ provisos (
             evictFromPrefetchFilterQ.enq(lineAddr);
     endmethod
 endmodule
+`endif

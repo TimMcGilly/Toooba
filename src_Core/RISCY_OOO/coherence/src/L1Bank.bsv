@@ -365,6 +365,8 @@ endfunction
     // we stop accepting cRq when we need to flush for security
     rule cRqTransfer_new(!cRqRetryIndexQ.notEmpty && flushDone);
         procRqT r <- toGet(rqFromCQ).get;
+        let startTime <- $time;
+        r.startTime = startTime;
         cRqIdxT n <- cRqMshr.cRqTransfer.getEmptyEntryInit(r);
         crqMshrEnqs <= crqMshrEnqs + 1;
         // send to pipeline
@@ -411,7 +413,7 @@ endfunction
         end
         if (resp.data matches tagged Valid .data)
             llcPrefetcher.reportCacheDataArrival(data, resp.addr, /*pcHash:*/0, /*op unknown*/ Ld,
-                True, resp.cameFromPrefetch, resp.boundsOffset, resp.boundsLength, resp.boundsVirtBase, /*capPerms:*/unpack(0), Invalid, False); // Assume no PrefetchInfo from LL currently
+                True, resp.cameFromPrefetch, resp.boundsOffset, resp.boundsLength, resp.boundsVirtBase, /*capPerms:*/unpack(0), Invalid, False, ?); // Assume no PrefetchInfo from LL currently, no pipeing of start time to LL currently
        if (verbose)
         $display("%t L1 %m pRsTransfer: ", $time, fshow(resp));
     endrule
@@ -421,6 +423,7 @@ endfunction
     (* descending_urgency = "pRqTransfer, cRqTransfer_retry, cRqTransfer_new, createPrefetchRq" *)
     rule createPrefetchRq(flushDone && crqMshrEnqs - crqMshrDeqs < 6);
         let {addr, cap, prefetchOtherInfo} <- prefetcher.getNextPrefetchAddr;
+        let startTime <- $time;
         procRqT r = ProcRq {
             id: ?, //Or maybe do 0 here
             addr: addr,
@@ -434,7 +437,8 @@ endfunction
             boundsOffset: getOffset(cap),
             boundsLength: saturating_truncate(getLength(cap)),
             boundsVirtBase: getBase(cap),
-            capPerms: getPerms(cap)
+            capPerms: getPerms(cap),
+            startTime: startTime
         };
         cRqIdxT n <- cRqMshr.cRqTransfer.getEmptyEntryInit(r);
         crqMshrEnqs <= crqMshrEnqs + 1;
@@ -745,10 +749,10 @@ endfunction
             if (req.op == Ld || req.op == St) begin
                 let otherPrefetchInfo = cRqIsPrefetch[n] ? Valid(cRqPrefetchOtherInfo[n]): Invalid;
                 Bool hitOnPrefetch = ram.info.other.wasPrefetch && !cRqIsPrefetch[n];
-                prefetcher.reportCacheDataArrival(curLine, req.addr, req.pcHash, req.op, wasMiss, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase, req.capPerms, otherPrefetchInfo, hitOnPrefetch);
+                prefetcher.reportCacheDataArrival(curLine, req.addr, req.pcHash, req.op, wasMiss, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase, req.capPerms, otherPrefetchInfo, hitOnPrefetch, req.startTime);
                 if (wasMiss == False) begin
                     llcPrefetcher.reportCacheDataArrival(curLine, req.addr, req.pcHash, req.op,
-                        False, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase, req.capPerms, otherPrefetchInfo, hitOnPrefetch);
+                        False, cRqIsPrefetch[n], req.boundsOffset, req.boundsLength, req.boundsVirtBase, req.capPerms, otherPrefetchInfo, hitOnPrefetch, req.startTime);
                 end
             end
             

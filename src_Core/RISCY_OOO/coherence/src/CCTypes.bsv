@@ -231,6 +231,7 @@ typedef struct {
     Addr boundsLength; //From capability sending the memory request. Used in prefetching.
     Addr boundsVirtBase; //From capability sending the memory request. Used in prefetching.
     Bit#(31) capPerms; //From capability sending the memory request. Used in prefetching.
+    Bit#(64) startTime;
 } ProcRq#(type idT) deriving(Bits, Eq, FShow);
 
 interface L1ProcReq#(type idT);

@@ -144,7 +144,7 @@ module mkCheriPCPrefetcherAdapter#(module#(PCPrefetcher) mkPrefetcher)(CheriPCPr
         p.reportAccess(addr, hash(pcHash), hitMiss, op);
     endmethod
     method Action reportCacheDataArrival(CLine lineWithTags, Addr accessAddr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
-        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
+        Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch, Bit#(64) startTime);
     endmethod
     method ActionValue#(Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) getNextPrefetchAddr;
         let addr <- p.getNextPrefetchAddr;
@@ -267,10 +267,10 @@ provisos ();
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op,
-        Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch);
+        Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch, Bit#(64) startTime);
 
-        p1.reportCacheDataArrival(lineWithTags, addr, pcHash, op, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms, prefetchOtherInfo, hitOnPrefetch);
-        p2.reportCacheDataArrival(lineWithTags, addr, pcHash, op, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms, prefetchOtherInfo, hitOnPrefetch);
+        p1.reportCacheDataArrival(lineWithTags, addr, pcHash, op, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms, prefetchOtherInfo, hitOnPrefetch, startTime);
+        p2.reportCacheDataArrival(lineWithTags, addr, pcHash, op, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase, capPerms, prefetchOtherInfo, hitOnPrefetch, startTime);
     endmethod
 
 `ifdef PERFORMANCE_MONITORING
@@ -476,8 +476,10 @@ module mkL1DPrefetcher#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         Parameter#(128) backwardsTableSize <- mkParameter;
         Parameter#(4) predictionTableWays <- mkParameter;
         Parameter#(64) predictionTableSets <- mkParameter;
+        Parameter#(1024) prefetchFilterTableSize <- mkParameter;
+        Parameter#(32) capSizeTableSize <- mkParameter;
         Integer recursionDepth = 1;
-        let m <- mkDependancePrefetcher(toTlb, backwardsTableSize, predictionTableWays, predictionTableSets, recursionDepth);
+        let m <- mkDependancePrefetcher(toTlb, backwardsTableSize, predictionTableWays, predictionTableSets, prefetchFilterTableSize, capSizeTableSize, recursionDepth);
     `endif
 `else 
     let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));
