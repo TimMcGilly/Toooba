@@ -2920,8 +2920,8 @@ typedef struct {
     PCHash parentPC;
     CapPipe filledCap; // TODO: optimised to use lineCaps and index 
     Bit#(depthBits) depth;
-    CLine lineWithTags;
-    LineAddr lineAddr;
+    // CLine lineWithTags;
+    // LineAddr lineAddr;
 } PredictionDepReadRespData#(numeric type depthBits) deriving (Bits, Eq, FShow);
 
 typedef struct {
@@ -3285,10 +3285,20 @@ provisos (
         let prefetchIdx = findIndex(canPrefetch, wayVec);
 
         if (prefetchIdx matches tagged Valid .idx) begin
-            predRespWaysUsed[idx] <= True;
-
             let predEntry = currentPredictionTableResp.first.entries[idx];
             let predRdRespData = currentPredictionTableRespData.first;
+
+            Vector#(predictionTableWays, Bool) predRespWaysUsedVec = predRespWaysUsed;
+
+            predRespWaysUsedVec[idx] = True;
+
+            // for (Integer i = 0; i < valueof(predictionTableWays); i = i+1) begin
+            //     if (currentPredictionTableResp.first.entries[i].childOffset == predEntry.childOffset) begin
+            //         predRespWaysUsedVec[i] = True;
+            //     end
+            // end
+
+            predRespWaysUsed <= predRespWaysUsedVec;
 
             Addr offset = extend(predEntry.childOffset);
             let cap = setOffset(predRdRespData.filledCap, offset).value;
@@ -3329,14 +3339,27 @@ provisos (
             // end
             // else begin
                 
-                // TODO: add permissions check
-                TlbInfo tlbInfo;
-                tlbInfo.cap = cap;
-                tlbInfo.childPC = predEntry.childPC;
-                tlbInfo.depth = predRdRespData.depth;
+            // TODO: add permissions check
+            TlbInfo tlbInfo;
+            tlbInfo.cap = cap;
+            tlbInfo.childPC = predEntry.childPC;
+            tlbInfo.depth = predRdRespData.depth;
 
-                tlbLookupQueue.enq(tlbInfo);
+            tlbLookupQueue.enq(tlbInfo);
             // end
+
+
+            capSizeTableIdxTagT cIdxTag = getCapSizeTableIdxTag(saturating_truncate(getLength(predRdRespData.filledCap)));
+            capSizeTableIdxT cIdx = truncate(cIdxTag);
+            capSizeTableTagT cTag = truncateLSB(cIdxTag);
+
+            capSizeTableEntryT ce;
+            ce.valid = True;
+            ce.recentPC = predRdRespData.parentPC;
+            ce.tag = cTag;
+
+            capSizeTable.wrReq(cIdx, ce);
+            
         end
 
     endrule
@@ -3493,19 +3516,6 @@ provisos (
 
                     dataForBtReadReq.enq(backwardsRespData);
                     if (`VERBOSE) $display("%t Prefetcher dataForBtReadReq enq", $time,fshow(backwardsRespData));
-                end
-
-                begin
-                    capSizeTableIdxTagT cIdxTag = getCapSizeTableIdxTag(boundsLength);
-                    capSizeTableIdxT cIdx = truncate(cIdxTag);
-                    capSizeTableTagT cTag = truncateLSB(cIdxTag);
-
-                    capSizeTableEntryT ce;
-                    ce.valid = True;
-                    ce.recentPC = pcHash;
-                    ce.tag = cTag;
-
-                    capSizeTable.wrReq(cIdx, ce);
                 end
         end
 
