@@ -846,6 +846,7 @@ module mkCommitStage#(CommitInput inIfc)(CommitStage);
 `ifdef INCLUDE_GDB_CONTROL
        end
 `endif
+    $finish;
     endrule
 
     // commit misspeculated load
