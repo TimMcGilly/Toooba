@@ -977,6 +977,7 @@ endfunction
         function Action cRqDrop;
         action
             cRqMshr.pipelineResp.releaseEntry(n);
+            crqMshrDeqs <= crqMshrDeqs + 1;
             pipeline.deqWrite(Invalid, pipeOut.ram, pipeOutNextInQueue, False);
         endaction
         endfunction
