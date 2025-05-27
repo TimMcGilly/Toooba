@@ -108,6 +108,10 @@ module mkAllInCapPrefetcher#(Parameter#(maxCapSizeToPrefetch) _)(CheriPCPrefetch
 
     endmethod
 
+    method Action reportCacheEviction(LineAddr lineAddr);
+        if (`VERBOSE) $display("%t Prefetch logCacheEviction lineAddr %h", lineAddr);
+    endmethod
+
 `ifdef PERFORMANCE_MONITORING
     method EventsPrefetcher events;
         return perf_events[0];
@@ -342,6 +346,10 @@ provisos(
         let addr = addrToPrefetch.first;
         if (`VERBOSE) $display("%t Stride Prefetcher getNextPrefetchAddr paddr %h", $time, addr);
         return tuple3(addr, almightyCap, ?);
+    endmethod
+
+    method Action reportCacheEviction(LineAddr lineAddr);
+        if (`VERBOSE) $display("%t Prefetch logCacheEviction lineAddr %h", lineAddr);
     endmethod
 
 `ifdef PERFORMANCE_MONITORING
@@ -595,6 +603,10 @@ module mkCapBitmapPrefetcherOld#(Parameter#(maxCapSizeToTrack) _, Parameter#(bit
     method ActionValue#(Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) getNextPrefetchAddr;
         pfQueue.deq;
         return tuple3({pfQueue.first, '0}, almightyCap, ?);
+    endmethod
+
+    method Action reportCacheEviction(LineAddr lineAddr);
+        if (`VERBOSE) $display("%t Prefetch logCacheEviction lineAddr %h", lineAddr);
     endmethod
 
 `ifdef PERFORMANCE_MONITORING
@@ -924,6 +936,9 @@ module mkCapBitmapPrefetcher#(Parameter#(maxCapSizeToTrack) _, Parameter#(bitmap
             addr, wasMiss, wasPrefetch, boundsOffset, boundsLength, boundsVirtBase);
     endmethod
     
+    method Action reportCacheEviction(LineAddr lineAddr);
+        if (`VERBOSE) $display("%t Prefetch logCacheEviction lineAddr %h", lineAddr);
+    endmethod
 
 `ifdef PERFORMANCE_MONITORING
     method EventsPrefetcher events;
@@ -1283,6 +1298,10 @@ module mkCapPtrPrefetcher#(DTlbToPrefetcher toTlb, Parameter#(ptrTableSize) _, P
         return prefetchQueue.first;
     endmethod
 
+    method Action reportCacheEviction(LineAddr lineAddr);
+        if (`VERBOSE) $display("%t Prefetch logCacheEviction lineAddr %h", lineAddr);
+    endmethod
+
 `ifdef PERFORMANCE_MONITORING
     method EventsPrefetcher events;
         return perf_events[0];
@@ -1313,6 +1332,10 @@ module mkCapPtrTestPrefetcher(CheriPCPrefetcher) provisos ();
         if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr %h", $time, prefetchRq.first);
         prefetchRq.deq;
         return tuple3(prefetchRq.first, almightyCap, ?);
+    endmethod
+
+    method Action reportCacheEviction(LineAddr lineAddr);
+        if (`VERBOSE) $display("%t Prefetch logCacheEviction lineAddr %h", lineAddr);
     endmethod
 
 `ifdef PERFORMANCE_MONITORING
@@ -1433,6 +1456,10 @@ module mkPCCapMeasurer(CheriPCPrefetcher) provisos (
         return unpack(0);
     endmethod
 
+    method Action reportCacheEviction(LineAddr lineAddr);
+        if (`VERBOSE) $display("%t Prefetch logCacheEviction lineAddr %h", lineAddr);
+    endmethod
+
 `ifdef PERFORMANCE_MONITORING
     method EventsPrefetcher events;
         return perf_events[0];
@@ -1520,6 +1547,10 @@ module mkCapPCMeasurer(CheriPCPrefetcher) provisos (
         return unpack(0);
     endmethod
 
+    method Action reportCacheEviction(LineAddr lineAddr);
+        if (`VERBOSE) $display("%t Prefetch logCacheEviction lineAddr %h", lineAddr);
+    endmethod
+
 `ifdef PERFORMANCE_MONITORING
     method EventsPrefetcher events;
         return perf_events[0];
@@ -1566,6 +1597,10 @@ module mkCapLoggingPrefetcher(CheriPCPrefetcher) provisos ();
         if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr %h", $time, prefetchRq.first);
         prefetchRq.deq;
         return tuple3(prefetchRq.first, almightyCap, ?);
+    endmethod
+
+    method Action reportCacheEviction(LineAddr lineAddr);
+        if (`VERBOSE) $display("%t Prefetch logCacheEviction lineAddr %h", lineAddr);
     endmethod
 
 `ifdef PERFORMANCE_MONITORING
@@ -1769,6 +1804,7 @@ provisos (
     endmethod
 
     method Action reportCacheEviction(LineAddr lineAddr);
+            if (`VERBOSE) $display("%t Prefetch logCacheEviction lineAddr %h", lineAddr);
             evictFromPrefetchFilterQ.enq(lineAddr);
     endmethod
 
@@ -2533,7 +2569,6 @@ provisos (
         
                     backwardsEntryToWrite.enq(tuple2(bIdx, be));
         end
-
     
         if (prefetchOtherInfo matches tagged Valid .prefetchInfo) begin
             if (prefetchInfo.childOffset matches tagged Valid .childOffset) begin
@@ -2595,6 +2630,7 @@ provisos (
     endmethod
 
     method Action reportCacheEviction(LineAddr lineAddr);
+            if (`VERBOSE) $display("%t Prefetch logCacheEviction lineAddr %h", lineAddr);
             evictFromPrefetchFilterQ.enq(lineAddr);
     endmethod
 
@@ -3400,8 +3436,7 @@ provisos (
         Vector#(capSizeQLineNumElements, capSizeQIdxT) idxVec = genWith(fromInteger);
         let capSizeQIndex = findIndex(isCapSizeQIdxValid, idxVec);
         if (`VERBOSE) $display("%t Prefetcher enqPredictionRdFromCapSize ", $time, fshow(capSizePrefetchQuery));
-
-
+        
         if (capSizeQIndex matches tagged Valid .idx) begin
             if (`VERBOSE) $display("%t Prefetcher enqPredictionRdFromCapSize foundMatch ", $time, fshow(capSizePrefetchQuery));
 
@@ -3609,7 +3644,8 @@ provisos (
     endmethod
 
     method Action reportCacheEviction(LineAddr lineAddr);
-            evictFromPrefetchFilterQ.enq(lineAddr);
+        if (`VERBOSE) $display("%t Prefetch logCacheEviction lineAddr %h", lineAddr);
+        evictFromPrefetchFilterQ.enq(lineAddr);
     endmethod
 endmodule
 `endif
