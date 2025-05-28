@@ -3019,7 +3019,8 @@ typedef struct {
 } CapSizePrefetchQuery deriving (Bits, Eq, FShow);
 
 module mkDependancePrefetcher#(DTlbToPrefetcher toTlb, Parameter#(backwardsTableSize) _, Parameter#(predictionTableWays) __, 
-    Parameter#(predictionTableSets) ___, Parameter#(prefetchFilterTableSize) ____, Parameter#(capSizeTableSize) _____, Integer recursionDepth)(CheriPCPrefetcher) 
+    Parameter#(predictionTableSets) ___, Parameter#(prefetchFilterTableSize) ____, Parameter#(capSizeTableSize) _____, Integer recursionDepth,
+    Integer maxCapSizeForDependence)(CheriPCPrefetcher) 
 provisos (
     NumAlias#(prefetchFilterIdxBits, TLog#(prefetchFilterTableSize)),
     NumAlias#(prefetchFilterTagBits, TSub#(CLineAddrSz, prefetchFilterIdxBits)),
@@ -3542,12 +3543,13 @@ provisos (
         doAssert(isValid(resp.prefetchOtherInfo), "TLB response should have tagged prefetchOtherInfo");
 
         if (!resp.haveException && resp.paddr != 0) begin
-            prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(getLineAddr(resp.paddr));
-            prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
+            // prefetchFilterIdxTagT prefetchFilterIdxTag = getPrefetchFilterIdxTag(getLineAddr(resp.paddr));
+            // prefetchFilterIdxT prefetchFilterIdx = truncate(prefetchFilterIdxTag);
 
-            if (`VERBOSE) $display("%t prefetcher prefetchfilter RdReq prediction idx %h", $time, prefetchFilterIdx);
-            prefetchFilterTable.rdReq(prefetchFilterIdx);
-            dataForPrefetchFilterRdResp.enq(tuple3(resp.paddr, resp.cap, fromMaybe(?, resp.prefetchOtherInfo)));
+            // if (`VERBOSE) $display("%t prefetcher prefetchfilter RdReq prediction idx %h", $time, prefetchFilterIdx);
+            // prefetchFilterTable.rdReq(prefetchFilterIdx);
+            // dataForPrefetchFilterRdResp.enq(tuple3(resp.paddr, resp.cap, fromMaybe(?, resp.prefetchOtherInfo)));
+            prefetchQueue.enq(tuple3(resp.paddr, resp.cap, fromMaybe(?, resp.prefetchOtherInfo)));
         end
     endrule
 
@@ -3653,7 +3655,7 @@ provisos (
             foundAnyCaps = foundAnyCaps || d.tag;
         end
         if (foundAnyCaps) begin
-            capSizePrefetchQueryQueue.enq(capSizeQueries);
+            // capSizePrefetchQueryQueue.enq(capSizeQueries);
             if (`VERBOSE) $display("$t Prefetcher reportDataArrival capSizePrefetchQuery enqueued ", fshow(capSizeQueries));
         end
 

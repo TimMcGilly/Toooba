@@ -479,7 +479,8 @@ module mkL1DPrefetcher#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         Parameter#(1024) prefetchFilterTableSize <- mkParameter;
         Parameter#(32) capSizeTableSize <- mkParameter;
         Integer recursionDepth = 1;
-        let m <- mkDependancePrefetcher(toTlb, backwardsTableSize, predictionTableWays, predictionTableSets, prefetchFilterTableSize, capSizeTableSize, recursionDepth);
+        Integer maxCapSizeForDependence = 8192;
+        let m <- mkDependancePrefetcher(toTlb, backwardsTableSize, predictionTableWays, predictionTableSets, prefetchFilterTableSize, capSizeTableSize, recursionDepth, maxCapSizeForDependence);
     `endif
 `else 
     let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));
@@ -565,6 +566,15 @@ module mkLLDPrefetcherInL1D#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkSignaturePathPrefetcher(
             "./div_table.memhex",
             stSets, stWays, ptEntries, prefetchThreshold, useFilter)));
+    `elsif DATA_PREFETCHER_DEPENDENCE_PREFETCHER
+        Parameter#(128) backwardsTableSize <- mkParameter;
+        Parameter#(4) predictionTableWays <- mkParameter;
+        Parameter#(64) predictionTableSets <- mkParameter;
+        Parameter#(1024) prefetchFilterTableSize <- mkParameter;
+        Parameter#(32) capSizeTableSize <- mkParameter;
+        Integer recursionDepth = 1;
+        Integer maxCapSizeForDependence = 8192;
+        let m <- mkDependancePrefetcher(toTlb, backwardsTableSize, predictionTableWays, predictionTableSets, prefetchFilterTableSize, capSizeTableSize, recursionDepth, maxCapSizeForDependence);
     `endif
 `else 
     let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));
