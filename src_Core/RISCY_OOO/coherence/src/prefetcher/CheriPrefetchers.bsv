@@ -2803,8 +2803,8 @@ module mkPredictionDepTable#(
         function Bool sameEntry(wayT w);
             let en = entryVec[w];
             Bool entry_match = en.tag == writeEntry.tag &&
-                             en.childOffset == writeEntry.childOffset;// &&  
-                             //en.childPC == writeEntry.childPC;
+                             en.childOffset == writeEntry.childOffset &&
+                             en.childPC == writeEntry.childPC;
             return validVec[w] && entry_match;
         endfunction
 
@@ -2817,15 +2817,15 @@ module mkPredictionDepTable#(
             // entry exists, update rep info
             repBram.wrReq(idx, lruBitUpdate(repInfo, way));
 
-            if (writeEntry.childPC != entryVec[way].childPC) begin
-                if (`VERBOSE) $display("%t Prefetcher processWrReq found same entry replace child old %h new %h ", $time, entryVec[way].childPC, writeEntry.childPC);
+            // if (writeEntry.childPC != entryVec[way].childPC) begin
+            //     if (`VERBOSE) $display("%t Prefetcher processWrReq found same entry replace child old %h new %h ", $time, entryVec[way].childPC, writeEntry.childPC);
                 
-                predictionDepSetAssocEntryT predSetEntry;
-                predSetEntry.valid = True;
-                predSetEntry.entry = writeEntry;
+            //     predictionDepSetAssocEntryT predSetEntry;
+            //     predSetEntry.valid = True;
+            //     predSetEntry.entry = writeEntry;
                 
-                predRam[way].wrReq(idx, predSetEntry);
-            end
+            //     predRam[way].wrReq(idx, predSetEntry);
+            // end
 
             if (`VERBOSE) $display("%t Prefetcher processWrReq found same entry rdReq lruBitUpdate %h entry ", $time, lruBitUpdate(repInfo, way), writeEntry);
 
