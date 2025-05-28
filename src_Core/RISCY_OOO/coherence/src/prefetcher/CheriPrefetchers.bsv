@@ -3471,10 +3471,21 @@ provisos (
         if (capSizeQIndex matches tagged Valid .idx) begin
             if (`VERBOSE) $display("%t Prefetcher enqPredictionRdFromCapSize foundMatch ", $time, fshow(capSizePrefetchQuery));
 
-            currentCapSizePrefetchQueryUsed[idx] <= True;
             let capSizeQEl = currentCapSizePrefetchQuery.first[idx]; 
 
-            capSizeTableIdxTagT capSizeIdxTag = getCapSizeTableIdxTag(saturating_truncate(getLength(capSizeQEl.cap)));
+            Vector#(capSizeQLineNumElements, Bool) currentCapSizePrefetchQueryUsedVec = currentCapSizePrefetchQueryUsed;
+            let matchedCapSize = getLength(capSizeQEl.cap);
+            for (Integer i = 0; i < valueof(capSizeQLineNumElements); i = i+1) begin
+                let otherCapSize = getLength(currentCapSizePrefetchQuery.first[i].cap);
+                
+                if (otherCapSize == matchedCapSize) begin
+                    currentCapSizePrefetchQueryUsedVec[i] = True;
+                end
+            end
+
+            currentCapSizePrefetchQueryUsed <= currentCapSizePrefetchQueryUsedVec;
+
+            capSizeTableIdxTagT capSizeIdxTag = getCapSizeTableIdxTag(saturating_truncate(matchedCapSize));
             capSizeTableIdxT capSizeIdx = truncate(capSizeIdxTag);
 
             dataForCapSizeRdResp.enq(capSizeQEl);
