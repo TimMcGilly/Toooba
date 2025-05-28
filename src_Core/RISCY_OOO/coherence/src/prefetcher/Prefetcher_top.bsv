@@ -453,7 +453,7 @@ module mkL1DPrefetcher#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
     `elsif DATA_PREFETCHER_MEASURER
         let m <- mkPCCapMeasurer;
     `elsif DATA_PREFETCHER_LOGGING
-        let m <- mkCapLoggingPrefetcher;
+        let m <- mkCapLoggingPrefetcher(1);
     `elsif DATA_PREFETCHER_CAP_PC_BACKWARDS
         Parameter#(256) backwardsTableSize <- mkParameter;
         Parameter#(8) timelinessTableWays <- mkParameter;
@@ -605,9 +605,8 @@ module mkLLDPrefetcher(Prefetcher);
         let m <- mkSignaturePathPrefetcher(
             "./div_table.memhex",
             stSets, stWays, ptEntries, prefetchThreshold, useFilter);
-    `elsif DATA_PREFETCHER_LOGGING
-        Parameter#(2) cacheLevel <- mkParameter;
-        let m <- mkCapLoggingPrefetcher();
+    `elsif DATA_PREFETCHER_LOGGING_EXTRA
+        let m <- mkSimpleLogging(2);
     `endif
 `else 
     let m <- mkDoNothingPrefetcher;

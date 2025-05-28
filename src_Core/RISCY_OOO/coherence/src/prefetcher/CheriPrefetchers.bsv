@@ -1560,11 +1560,16 @@ module mkCapPCMeasurer(CheriPCPrefetcher) provisos (
 endmodule
 
 
-module mkCapLoggingPrefetcher(CheriPCPrefetcher) provisos ();
+module mkCapLoggingPrefetcher#(Integer cacheLevel)(CheriPCPrefetcher) provisos ();
     Fifo#(4, Addr) prefetchRq <- mkOverflowPipelineFifo;
     method Action reportAccess(Addr addr, PCHash pcHash, HitOrMiss hitMiss, MemOp op, 
         Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms);
-        $display("%t Prefetcher logReportAccess addr %h pcHash %h hitMiss %b boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h op %h", $time, addr, pcHash, hitMiss, boundsOffset, boundsLength, boundsVirtBase, capPerms, op);
+        if (cacheLevel == 1) begin
+            $display("%t Prefetcher L1ReportAccess addr %h pcHash %h hitMiss %b boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h op %h", $time, addr, pcHash, hitMiss, boundsOffset, boundsLength, boundsVirtBase, capPerms, op);
+        end
+        else begin
+            $display("%t Prefetcher LLReportAccess addr %h pcHash %h hitMiss %b boundsOffset %h boundsLength %h boundsVirtBase %h capPerms %h op %h", $time, addr, pcHash, hitMiss, boundsOffset, boundsLength, boundsVirtBase, capPerms, op);
+        end
     endmethod
 
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op, Bool wasMiss, Bool wasPrefetch, 
@@ -1610,6 +1615,32 @@ module mkCapLoggingPrefetcher(CheriPCPrefetcher) provisos ();
 `endif
 
 endmodule
+
+module mkSimpleLogging#(Integer cacheLevel)(Prefetcher) provisos ();
+    Fifo#(4, Addr) prefetchRq <- mkOverflowPipelineFifo;
+    method Action reportAccess(Addr addr, HitOrMiss hitMiss, MemOp op);
+        if (cacheLevel == 1) begin
+            $display("%t Prefetcher L1ReportAccess addr %h hitMiss %b op %h", $time, addr, hitMiss, op);
+        end
+        else begin
+            $display("%t Prefetcher LLReportAccess addr %h hitMiss %b op %h", $time, addr, hitMiss, op);
+        end
+    endmethod
+
+    method ActionValue#(Addr) getNextPrefetchAddr if (False);
+        if (`VERBOSE) $display("%t Prefetcher getNextPrefetchAddr %h", $time, prefetchRq.first);
+        prefetchRq.deq;
+        return prefetchRq.first;
+    endmethod
+
+`ifdef PERFORMANCE_MONITORING
+    method EventsPrefetcher events;
+        return  unpack(0);
+    endmethod
+`endif
+
+endmodule
+
 
 `ifdef DATA_PREFETCHER_ALL_PREFETCH_FILTER
 
