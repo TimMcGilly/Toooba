@@ -3567,7 +3567,7 @@ provisos (
 
         if (!wasPrefetch) begin
                 // Write new access to backwards table
-                if (current.tag) begin
+                if (current.tag && getLength(selCap) <= fromInteger(maxCapSizeForDependence)) begin
 
                     backwardsTableIdxTagT bIdxTag = getBackwardsIdxTag(getBase(selCap)); // virt base of new child
                     backwardsTableIdxT bIdx = truncate(bIdxTag);
@@ -3585,7 +3585,7 @@ provisos (
 
                 // Update prediction table based on access
                 // First needs to read from backwards table to find parent
-                begin
+                if (boundsLength <= fromInteger(maxCapSizeForDependence)) begin
                     backwardsTableIdxTagT bIdxTag = getBackwardsIdxTag(boundsVirtBase); // virt base of old child for lookup
                     backwardsTableIdxT bIdx = truncate(bIdxTag);
                     backwardsTableTagT bTag = truncateLSB(bIdxTag);
@@ -3603,7 +3603,7 @@ provisos (
         // Read from prediction table as can now chain next prefetch
         depthT newDepth = 0;
 
-        if (current.tag) begin
+        if (current.tag && getLength(selCap) <= fromInteger(maxCapSizeForDependence)) begin
             if (wasPrefetch) begin
                 if (prefetchOtherInfo matches tagged Valid .prefetchInfo) begin
                     if (prefetchInfo.depth <= fromInteger(recursionDepth)) begin
