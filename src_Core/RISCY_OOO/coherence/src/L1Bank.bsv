@@ -920,6 +920,11 @@ endfunction
                 perf_events[4] <= events;
                 */
             end
+
+            if (ram.info.other.wasPrefetch && !cRqIsPrefetch[n]) begin
+                $display ("%t L1 miss no replacement on prefetched cache line. Something is wrong", $time);
+            end
+
         endaction
         endfunction
 
@@ -956,6 +961,11 @@ endfunction
             if(linkAddr == Valid (repLineAddr)) begin
                 linkAddr <= Invalid;
             end
+
+            if (ram.info.other.wasPrefetch && !cRqIsPrefetch[n]) begin
+                $display ("%t L1 miss replacement on prefetched cache line addr %h", $time, procRq.addr);
+            end
+
         endaction
         endfunction
 

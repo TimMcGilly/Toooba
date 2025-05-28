@@ -116,7 +116,7 @@
     // L1
     `define LOG_L1_LINES 6 // 4KB
     `define LOG_L1_WAYS 1 // 2 ways
-    `define L1D_CRQ_NUM 8 // 8 L1D MSHRs
+    `define L1D_CRQ_NUM 16 // 8 L1D MSHRs
 
     // LLC
     `define LOG_LLC_LINES 8 // 8KB
@@ -127,12 +127,12 @@
 `ifdef CACHE_SMALL
 
     // L1
-    `define LOG_L1_LINES 8 // 16KB
+    `define LOG_L1_LINES 7 // 8KB
     `define LOG_L1_WAYS 2 // 4 ways
     `define L1D_CRQ_NUM 8 // 8 L1D MSHRs
 
     // LLC
-    `define LOG_LLC_LINES 12 // 256KB
+    `define LOG_LLC_LINES 11 // 128KB
     `define LOG_LLC_WAYS 4 // 16 ways
 
 `endif
