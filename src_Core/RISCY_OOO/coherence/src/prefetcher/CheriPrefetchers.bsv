@@ -3691,5 +3691,12 @@ provisos (
         if (`VERBOSE) $display("%t Prefetch logCacheEviction lineAddr %h", lineAddr);
         evictFromPrefetchFilterQ.enq(lineAddr);
     endmethod
+
+
+    `ifdef PERFORMANCE_MONITORING
+        method EventsPrefetcher events;
+            return  unpack(0);
+        endmethod
+    `endif
 endmodule
 `endif
