@@ -369,11 +369,11 @@ endfunction
             addr: req.addr,
             mshrIdx: n
         }));
-       if (verbose)
-        $display("%t LL %m cRqTransfer_retry: ", $time,
-            fshow(n), " ; ",
-            fshow(req)
-        );
+    //    if (verbose)
+    //     $display("%t LL %m cRqTransfer_retry: ", $time,
+    //         fshow(n), " ; ",
+    //         fshow(req)
+    //     );
     endrule
 
     // round-robin for accepting new cRq from child and DMA
@@ -434,15 +434,15 @@ endfunction
             cRqIsPrefetch[n] <= r.isPrefetchRq;
             // change round robin
             flipPriorNewCRqSrc;
-            if (verbose)
-                $display("%t LL %m cRqTransfer_new_child: ", $time,
-                    fshow(n), " ; ",
-                    fshow(r), " ; ",
-                    fshow(cRq)
-                );
+            // if (verbose)
+            //     $display("%t LL %m cRqTransfer_new_child: ", $time,
+            //         fshow(n), " ; ",
+            //         fshow(r), " ; ",
+            //         fshow(cRq)
+            //     );
         end
         else begin
-            $display ("%t LL crqTransfer_new_child: postponing prefetch rq, mshr entries: %d", $time, crqMshrEnqs - crqMshrDeqs);
+            // $display ("%t LL crqTransfer_new_child: postponing prefetch rq, mshr entries: %d", $time, crqMshrEnqs - crqMshrDeqs);
             overflowPrefetchQueue.enq(tuple5(r.addr, r.child, r.boundsOffset, r.boundsLength, r.boundsVirtBase));
         end
     endrule
@@ -475,11 +475,11 @@ endfunction
         cRqIsPrefetch[n] <= True;
         // change round robin
         //flipPriorNewCRqSrc;
-       if (verbose)
-        $display("%t LL %m createDataPrefetchRqFromQueue: ", $time,
-            fshow(n), " ; ",
-            fshow(cRq)
-        );
+    //    if (verbose)
+    //     $display("%t LL %m createDataPrefetchRqFromQueue: ", $time,
+    //         fshow(n), " ; ",
+    //         fshow(cRq)
+    //     );
     endrule
 
     // create new request from data prefetcher and send to pipeline
@@ -513,11 +513,11 @@ endfunction
         cRqIsPrefetch[n] <= True;
         // change round robin
         flipPriorNewCRqSrc;
-       if (verbose)
-        $display("%t LL %m createDataPrefetchRq: ", $time,
-            fshow(n), " ; ",
-            fshow(cRq)
-        );
+    //    if (verbose)
+    //     $display("%t LL %m createDataPrefetchRq: ", $time,
+    //         fshow(n), " ; ",
+    //         fshow(cRq)
+    //     );
     endrule
 
     // create new request from instruction prefetcher and send to pipeline
@@ -551,11 +551,11 @@ endfunction
         cRqIsPrefetch[n] <= True;
         // change round robin
         flipPriorNewCRqSrc;
-       if (verbose)
-        $display("%t LL %m createInstrPrefetchRq: ", $time,
-            fshow(n), " ; ",
-            fshow(cRq)
-        );
+    //    if (verbose)
+    //     $display("%t LL %m createInstrPrefetchRq: ", $time,
+    //         fshow(n), " ; ",
+    //         fshow(cRq)
+    //     );
     endrule
 
 `ifdef PERF_COUNT
@@ -612,12 +612,12 @@ endfunction
         }));
         // change round robin
         flipPriorNewCRqSrc;
-       if (verbose)
-        $display("%t LL %m cRqTransfer_new_dma: ", $time,
-            fshow(n), " ; ",
-            fshow(r), " ; ",
-            fshow(cRq)
-        );
+    //    if (verbose)
+    //     $display("%t LL %m cRqTransfer_new_dma: ", $time,
+    //         fshow(n), " ; ",
+    //         fshow(r), " ; ",
+    //         fshow(cRq)
+    //     );
 `ifdef PERF_COUNT
         if(doStats) begin
             if(write) begin
@@ -661,8 +661,8 @@ endfunction
         rsFromCQ.deq;
         cRsFromCT cRs = rsFromCQ.first;
         pipeline.send(CRs (cRs));
-       if (verbose)
-        $display("%t LL %m cRsTransfer: ", $time, fshow(cRs));
+    //    if (verbose)
+    //     $display("%t LL %m cRsTransfer: ", $time, fshow(cRs));
 `ifdef PERF_COUNT
         if(doStats) begin
             downRespCnt.incr(1);
@@ -710,12 +710,12 @@ endfunction
             data: respData,
             way: cSlot.way
         }));
-       if (verbose)
-        $display("%t LL %m mRsTransfer: ", $time,
-            fshow(mRs), " ; ",
-            fshow(cRq), " ; ",
-            fshow(cSlot), " ; "
-        );
+    //    if (verbose)
+    //     $display("%t LL %m mRsTransfer: ", $time,
+    //         fshow(mRs), " ; ",
+    //         fshow(cRq), " ; ",
+    //         fshow(cSlot), " ; "
+    //     );
         // performance counter: normal miss lat and cnt
         // Check lowest bit of child ID to determine if this was an ICache access
         if (!cRqIsPrefetch[n]) begin
@@ -732,8 +732,8 @@ endfunction
     rule mRsDeq_nonRefill(!rsFromMQ.first.id.refill);
         rsFromMQ.deq;
         memRsT mRs = rsFromMQ.first;
-       if (verbose)
-        $display("%t LL %m mRsDeq_nonRefill: ", $time, fshow(mRs));
+    //    if (verbose)
+    //     $display("%t LL %m mRsDeq_nonRefill: ", $time, fshow(mRs));
         // save data into cRq mshr & send to DMA resp IndexQ
         cRqMshr.mRsDeq.setData(mRs.id.mshrIdx, Valid (mRs.data));
         rsLdToDmaIndexQ_mRsDeq.enq(mRs.id.mshrIdx);
@@ -751,14 +751,14 @@ endfunction
         cRqT cRq = cRqMshr.sendToM.getRq(n);
         cRqSlotT cSlot = cRqMshr.sendToM.getSlot(n);
         Maybe#(Line) data = cRqMshr.sendToM.getData(n);
-       if (verbose)
-        $display("%t LL %m sendToM: ", $time,
-            fshow(toMInfoQ.first), " ; ",
-            fshow(cRq), " ; ",
-            fshow(cSlot), " ; ",
-            fshow(data), " ; ",
-            fshow(doLdAfterReplace)
-        );
+    //    if (verbose)
+    //     $display("%t LL %m sendToM: ", $time,
+    //         fshow(toMInfoQ.first), " ; ",
+    //         fshow(cRq), " ; ",
+    //         fshow(cSlot), " ; ",
+    //         fshow(data), " ; ",
+    //         fshow(doLdAfterReplace)
+    //     );
         // take actions according to type
         if(t == Ld) begin
             // only load mem: can be child or dma req
@@ -774,8 +774,8 @@ endfunction
             });
             toMQ.enq(msg);
             toMInfoQ.deq; // deq info
-           if (verbose)
-            $display("%t LL %m sendToM: load only: ", $time, fshow(msg));
+        //    if (verbose)
+        //     $display("%t LL %m sendToM: load only: ", $time, fshow(msg));
             doAssert(!isValid(data), "cannot have data");
             doAssert(!doLdAfterReplace, "doLdAfterReplace should be false");
             // performance counter: start miss timer
@@ -797,8 +797,8 @@ endfunction
             toMInfoQ.deq; // deq info
             // dma write can be resp (i.e. mshr entry can be released)
             rsStToDmaIndexQ_sendToM.enq(n);
-           if (verbose)
-            $display("%t LL %m sendToM: dma write: ", $time, fshow(msg));
+        //    if (verbose)
+        //     $display("%t LL %m sendToM: dma write: ", $time, fshow(msg));
             doAssert(isRqFromDma(cRq.id), "must be dma write");
             doAssert(isValid(data), "dma write must have data");
             doAssert(!doLdAfterReplace, "doLdAfterReplace should be false");
@@ -822,8 +822,8 @@ endfunction
                 // whole thing is done, reset bit and deq info
                 toMInfoQ.deq;
                 doLdAfterReplace <= False;
-               if (verbose)
-                $display("%t LL %m sendToM: rep then ld: ld: ", $time, fshow(msg));
+            //    if (verbose)
+            //     $display("%t LL %m sendToM: rep then ld: ld: ", $time, fshow(msg));
                 // performance counter: start miss timer
                 latTimer.start(n);
             end
@@ -841,8 +841,8 @@ endfunction
                 events.evt_ST_MISS = 1;
                 perf_events[0] <= events;
 `endif
-               if (verbose)
-                $display("%t LL %m sendToM: rep then ld: rep: ", $time, fshow(msg));
+            //    if (verbose)
+            //     $display("%t LL %m sendToM: rep then ld: rep: ", $time, fshow(msg));
             end
             doAssert(isRqFromC(cRq.id), "must be child req");
             doAssert(isValid(data), "replace must have data");
@@ -858,12 +858,12 @@ endfunction
         cRqIndexT n = rsLdToDmaIndexQ.first;
         cRqT cRq = cRqMshr.sendRsToDmaC.getRq(n);
         Maybe#(Line) data = cRqMshr.sendRsToDmaC.getData(n);
-       if (verbose)
-        $display("%t LL %m sendRsToDma: Ld: ", $time,
-            fshow(n), " ; ",
-            fshow(cRq), " ; ",
-            fshow(data)
-        );
+    //    if (verbose)
+    //     $display("%t LL %m sendRsToDma: Ld: ", $time,
+    //         fshow(n), " ; ",
+    //         fshow(cRq), " ; ",
+    //         fshow(data)
+    //     );
         doAssert(isValid(data), "dma read req always has valid data");
         // send DMA resp
         doAssert(isRqFromDma(cRq.id), "cRq should be DMA req");
@@ -884,11 +884,11 @@ endfunction
         rsStToDmaIndexQ.deq;
         cRqIndexT n = rsStToDmaIndexQ.first;
         cRqT cRq = cRqMshr.sendRsToDmaC.getRq(n);
-       if (verbose)
-        $display("%t LL %m sendRsToDma: St: ", $time,
-            fshow(n), " ; ",
-            fshow(cRq)
-        );
+    //    if (verbose)
+    //     $display("%t LL %m sendRsToDma: St: ", $time,
+    //         fshow(n), " ; ",
+    //         fshow(cRq)
+    //     );
         // send DMA resp
         doAssert(isRqFromDma(cRq.id), "cRq should be DMA req");
         doAssert(cRq.byteEn != replicate(replicate(False)) && cRq.toState == M,
@@ -909,13 +909,13 @@ endfunction
         Msi toState = rsToCIndexQ.first.toState;
         cRqT cRq = cRqMshr.sendRsToDmaC.getRq(n);
         Maybe#(Line) rsData = cRqMshr.sendRsToDmaC.getData(n);
-       if (verbose)
-        $display("%t LL %m sendRsToC: ", $time,
-            fshow(n), " ; ",
-            fshow(cRq), " ; ",
-            fshow(rsData), " ; ",
-            fshow(toState)
-        );
+    //    if (verbose)
+    //     $display("%t LL %m sendRsToC: ", $time,
+    //         fshow(n), " ; ",
+    //         fshow(cRq), " ; ",
+    //         fshow(rsData), " ; ",
+    //         fshow(toState)
+    //     );
         // send resp to child
         doAssert(isRqFromC(cRq.id), "cRq should be child req");
         cRqIdT cRqId = getIdFromC(cRq.id);
@@ -1021,14 +1021,14 @@ endfunction
             waitP: cSlot.waitP,
             dirPend: newDirPend
         });
-       if (verbose)
-        $display("%t LL %m sendRqToC: ", $time,
-            fshow(n), " ; ",
-            fshow(cRq), " ; ",
-            fshow(cSlot), " ; ",
-            fshow(cState), " ; ",
-            fshow(req)
-        );
+    //    if (verbose)
+    //     $display("%t LL %m sendRqToC: ", $time,
+    //         fshow(n), " ; ",
+    //         fshow(cRq), " ; ",
+    //         fshow(cSlot), " ; ",
+    //         fshow(cState), " ; ",
+    //         fshow(req)
+    //     );
         // change round-robin
         whichCRq <= whichCRq == fromInteger(valueOf(cRqNum) - 1) ? 0 : whichCRq + 1;
 `ifdef PERF_COUNT
@@ -1055,11 +1055,11 @@ endfunction
     // function to process cRq hit (MSHR slot may have garbage)
     function Action cRqFromCHit(cRqIndexT n, cRqT cRq, Bool isMRs, Bool wasMiss);
     action
-       if (verbose)
-        $display("%t LL %m pipelineResp: cRq from child Hit func: ", $time,
-            fshow(n), " ; ",
-            fshow(cRq)
-        );
+    //    if (verbose)
+    //     $display("%t LL %m pipelineResp: cRq from child Hit func: ", $time,
+    //         fshow(n), " ; ",
+    //         fshow(cRq)
+    //     );
         doAssert(n == pipeOutCRqIdx, "must match pipe out cRq idx");
         doAssert(isRqFromC(cRq.id), "should be cRq from child");
         doAssert(ram.info.tag == getTag(cRq.addr) && ram.info.cs > I,
@@ -1136,11 +1136,11 @@ endfunction
     // function to process DMA req hit (MSHR slot may have garbage)
     function Action cRqFromDmaHit(cRqIndexT n, cRqT cRq);
     action
-       if (verbose)
-        $display("%t LL %m pipelineResp: cRq from dma Hit func: ", $time,
-            fshow(n), " ; ",
-            fshow(cRq)
-        );
+    //    if (verbose)
+    //     $display("%t LL %m pipelineResp: cRq from dma Hit func: ", $time,
+    //         fshow(n), " ; ",
+    //         fshow(cRq)
+    //     );
         doAssert(n == pipeOutCRqIdx, "must match pipe out cRq idx");
         doAssert(isRqFromDma(cRq.id), "should be cRq from dma");
         doAssert(ram.info.tag == getTag(cRq.addr) && ram.info.cs > I,
@@ -1243,13 +1243,13 @@ endfunction
 
     // handle cRq
     rule pipelineResp_cRq(pipeOut.cmd matches tagged LLCRq .n);
-       if (verbose)
-        $display("%t LL %m pipelineResp: ", $time, fshow(pipeOut));
+    //    if (verbose)
+    //     $display("%t LL %m pipelineResp: ", $time, fshow(pipeOut));
         // cs and dir in ram have been merged with modification caused by mRs/cRs cmd
 
         cRqT cRq = pipeOutCRq;
-       if (verbose)
-        $display("%t LL %m pipelineResp: cRq: ", $time, fshow(n), " ; ", fshow(cRq));
+    //    if (verbose)
+    //     $display("%t LL %m pipelineResp: cRq: ", $time, fshow(n), " ; ", fshow(cRq));
 
         // find end of dependency chain
         Maybe#(cRqIndexT) cRqEOC = cRqMshr.pipelineResp.searchEndOfChain(cRq.addr);
@@ -1442,20 +1442,20 @@ endfunction
                     // add to same addr dependency
                     cRqMshr.pipelineResp.setAddrSucc(m, Valid (n));
                     cRqSetDepNoCacheChange;
-                   if (verbose)
-                    $display("%t LL %m pipelineResp: cRq: own by other cRq, same addr dep: ", $time,
-                        fshow(cOwner), " ; ", fshow(cRqEOC)
-                    );
+                //    if (verbose)
+                //     $display("%t LL %m pipelineResp: cRq: own by other cRq, same addr dep: ", $time,
+                //         fshow(cOwner), " ; ", fshow(cRqEOC)
+                //     );
                 end
                 else begin
                     // must be hitting on a line being replaced
                     // add to rep dependency
                     cRqMshr.pipelineResp.setRepSucc(cOwner.mshrIdx, Valid (n));
                     cRqSetDepNoCacheChange;
-                   if (verbose)
-                    $display("%t LL %m pipelineResp: cRq: own by other cRq, rep dep: ", $time,
-                        fshow(cOwner)
-                    );
+                //    if (verbose)
+                //     $display("%t LL %m pipelineResp: cRq: own by other cRq, rep dep: ", $time,
+                //         fshow(cOwner)
+                //     );
                     doAssert(cOwner.replacing, "line must be replacing");
                 end
             end
@@ -1474,15 +1474,15 @@ endfunction
                     // req from child, get dir pend
                     Vector#(childNum, DirPend) dirPend = getDirPendNonCompatForChild;
                     if(dirPend == replicate(Invalid) && (cRq.toState == T || ram.info.cs >= S)) begin
-                       if (verbose)
-                        $display("%t LL %m pipelineResp: cRq from child: own by itself, hit", $time);
+                    //    if (verbose)
+                    //     $display("%t LL %m pipelineResp: cRq from child: own by itself, hit", $time);
                         cRqFromCHit(n, cRq, False, False);
                     end
                     else begin
-                       if (verbose)
-                        $display("%t LL %m pipelineResp: cRq from child: own by itself, miss no replace: ", $time,
-                            fshow(dirPend)
-                        );
+                    //    if (verbose)
+                    //     $display("%t LL %m pipelineResp: cRq from child: own by itself, miss no replace: ", $time,
+                    //         fshow(dirPend)
+                    //     );
                         cRqFromCMissNoReplacement(dirPend, cRq.toState >= S);
                     end
                 end
@@ -1490,13 +1490,13 @@ endfunction
                     // req from DMA, get dir pend
                     Vector#(childNum, DirPend) dirPend = getDirPendNonCompatForDma;
                     if(dirPend == replicate(Invalid) && (cRq.toState == T || ram.info.cs >= S)) begin
-                       if (verbose)
-                        $display("%t LL %m pipelineResp: cRq from dma: own by itself, hit", $time);
+                    //    if (verbose)
+                    //     $display("%t LL %m pipelineResp: cRq from dma: own by itself, hit", $time);
                         cRqFromDmaHit(n, cRq);
                     end
                     else begin
-                       if (verbose)
-                        $display("%t LL %m pipelineResp: cRq from dma: own by itself, miss by children: ", $time);
+                    //    if (verbose)
+                    //     $display("%t LL %m pipelineResp: cRq from dma: own by itself, miss by children: ", $time);
                         cRqFromDmaMissByChildren(dirPend);
                     end
                 end
@@ -1511,11 +1511,11 @@ endfunction
 
             // only check for cRqEOC to append to dependency chain when firt time go through tag match
             if(cRqEOC matches tagged Valid .m &&& cState == Init) begin
-               if (verbose)
-                $display("%t LL %m pipelineResp: cRq: no owner, depend on cRq ", $time,
-                    fshow(cState), " ; ",
-                    fshow(cRqEOC)
-                );
+            //    if (verbose)
+            //     $display("%t LL %m pipelineResp: cRq: no owner, depend on cRq ", $time,
+            //         fshow(cState), " ; ",
+            //         fshow(cRqEOC)
+            //     );
                 cRqMshr.pipelineResp.setAddrSucc(m, Valid (n));
                 cRqSetDepNoCacheChange;
             end
@@ -1527,25 +1527,25 @@ endfunction
                         // No Replacement necessary, check dir
                         Vector#(childNum, DirPend) dirPend = getDirPendNonCompatForChild;
                         if(ram.info.cs > I && dirPend == replicate(Invalid) && (cRq.toState == T || ram.info.cs >= S)) begin
-                           if (verbose)
-                            $display("%t LL %m pipelineResp: cRq: no owner, hit", $time);
+                        //    if (verbose)
+                        //     $display("%t LL %m pipelineResp: cRq: no owner, hit", $time);
                             cRqFromCHit(n, cRq, False, False);
                         end
                         else begin
-                           if (verbose)
-                            $display("%t LL %m pipelineResp: cRq: no owner, miss no replace: ", $time,
-                                fshow(dirPend)
-                            );
+                        //    if (verbose)
+                        //     $display("%t LL %m pipelineResp: cRq: no owner, miss no replace: ", $time,
+                        //         fshow(dirPend)
+                        //     );
                             cRqFromCMissNoReplacement(dirPend, cRq.toState >= S);
                         end
                     end
                     else begin
                         // need replacement, check dir
                         Vector#(childNum, DirPend) dirPend = getDirPendNonI;
-                       if (verbose)
-                        $display("%t LL %m pipelineResp: cRq: no owner, replace: ", $time,
-                            fshow(dirPend)
-                        );
+                    //    if (verbose)
+                    //     $display("%t LL %m pipelineResp: cRq: no owner, replace: ", $time,
+                    //         fshow(dirPend)
+                    //     );
                         cRqFromCReplacement(dirPend);
                     end
                 end
@@ -1563,8 +1563,8 @@ endfunction
                     end
                     else begin
                         // miss in LLC, so req mem and req is done!
-                       if (verbose)
-                        $display("%t LL %m pipelineResp: cRq from dma: no owner, miss req mem", $time);
+                    //    if (verbose)
+                    //     $display("%t LL %m pipelineResp: cRq from dma: no owner, miss req mem", $time);
                         toMInfoQ.enq(ToMemInfo {
                             mshrIdx: n,
                             t: cRq.toState == M ? DmaWr : Ld
@@ -1594,12 +1594,12 @@ endfunction
         // process cRq
         cRqT cRq = pipeOutCRq;
         cRqSlotT cSlot = pipeOutCSlot;
-       if (verbose)
-        $display("%t LL %m pipelineResp: mRs: ", $time,
-            fshow(cOwner), " ; ",
-            fshow(cRq), " ; ",
-            fshow(cSlot)
-        );
+    //    if (verbose)
+    //     $display("%t LL %m pipelineResp: mRs: ", $time,
+    //         fshow(cOwner), " ; ",
+    //         fshow(cRq), " ; ",
+    //         fshow(cSlot)
+    //     );
         doAssert(isRqFromC(cRq.id), "only child req gets mem resp that refills the cache");
         doAssert(ram.info.cs >= cRq.toState && ram.info.tag == getTag(cRq.addr),
             "mRs must be tag match & have enough cs"
@@ -1620,8 +1620,8 @@ endfunction
         // cRs from child
         // XXX CCPipe has already updated ram.info and ram.line properly,
         // particularly for E->M case.
-       if (verbose)
-        $display("%t LL %m pipelineResp: cRs: ", $time, fshow(child));
+    //    if (verbose)
+    //     $display("%t LL %m pipelineResp: cRs: ", $time, fshow(child));
         // cs should be not I
         doAssert(ram.info.cs > I, "cRs should hit on a line");
         // check owner of the line
@@ -1629,13 +1629,13 @@ endfunction
             cRqT cRq = pipeOutCRq;
             cRqSlotT cSlot = pipeOutCSlot;
             LLCRqState cState = pipeOutCState;
-           if (verbose)
-            $display("%t LL %m pipelineResp: cRs: match cRq: ", $time,
-                fshow(cOwner), " ; ",
-                fshow(cRq), " ; ",
-                fshow(cSlot), " ; ",
-                fshow(cState)
-            );
+        //    if (verbose)
+        //     $display("%t LL %m pipelineResp: cRs: match cRq: ", $time,
+        //         fshow(cOwner), " ; ",
+        //         fshow(cRq), " ; ",
+        //         fshow(cSlot), " ; ",
+        //         fshow(cState)
+        //     );
             doAssert(cSlot.way == pipeOut.way, "cRs way should match MSHR slot");
             // check replacing bit
             if(cOwner.replacing) begin
@@ -1654,10 +1654,10 @@ endfunction
                     // replacement done, evict line
                     Maybe#(cRqIndexT) repSucc = pipeOutRepSucc;
                     cRqFromCEvict(cOwner.mshrIdx, cRq, repSucc);
-                   if (verbose)
-                    $display("%t LL %m pipelineResp: cRs: match cRq: replace done: ", $time,
-                        fshow(repSucc)
-                    );
+                //    if (verbose)
+                //     $display("%t LL %m pipelineResp: cRs: match cRq: replace done: ", $time,
+                //         fshow(repSucc)
+                //     );
                 end
                 else begin
                     // replacement is still ongoing, just deq pipe & write ram & update dirPend
@@ -1668,10 +1668,10 @@ endfunction
                         waitP: cSlot.waitP,
                         dirPend: newDirPend
                     });
-                   if (verbose)
-                    $display("%t LL %m pipelineResp: cRs: match cRq: replace not done: ", $time,
-                        fshow(newDirPend)
-                    );
+                //    if (verbose)
+                //     $display("%t LL %m pipelineResp: cRs: match cRq: replace not done: ", $time,
+                //         fshow(newDirPend)
+                //     );
                 end
             end
             else begin
@@ -1693,10 +1693,10 @@ endfunction
                         end
                     end
                 endcase
-               if (verbose)
-                $display("%t LL %m pipelineResp: cRs: match cRq: cRq in WaitSt: ", $time,
-                    fshow(newDirPend)
-                );
+            //    if (verbose)
+            //     $display("%t LL %m pipelineResp: cRs: match cRq: cRq in WaitSt: ", $time,
+            //         fshow(newDirPend)
+            //     );
                 // check hit or miss
                 if(newDirPend == replicate(Invalid)) begin
                     if(cRq.id matches tagged Child ._i) begin
@@ -1720,8 +1720,8 @@ endfunction
         end
         else begin
             // does not match any cRq, so just deq pipe & write ram
-           if (verbose)
-            $display("%t LL %m pipelineResp: cRs: no owner: ", $time);
+        //    if (verbose)
+        //     $display("%t LL %m pipelineResp: cRs: no owner: ", $time);
             pipeline.deqWrite(Invalid, ram, False);
         end
     endrule

@@ -353,11 +353,11 @@ endfunction
             mshrIdx: n
         }));
         cRqIsPrefetch[n] <= False;
-       if (verbose)
-        $display("%t L1 %m cRqTransfer_retry: ", $time,
-            fshow(n), " ; ",
-            fshow(req)
-        );
+    //    if (verbose)
+    //     $display("%t L1 %m cRqTransfer_retry: ", $time,
+    //         fshow(n), " ; ",
+    //         fshow(req)
+    //     );
     endrule
 
     // although D$ may not have cRq at every cycle
@@ -377,11 +377,11 @@ endfunction
         cRqIsPrefetch[n] <= False;
         // performance counter: cRq type
         incrReqCnt(r.op, r.boundsOffset, r.boundsLength);
-       if (verbose)
-        $display("%t L1 %m cRqTransfer_new: ", $time,
-            fshow(n), " ; ",
-            fshow(r)
-        );
+    //    if (verbose)
+    //     $display("%t L1 %m cRqTransfer_new: ", $time,
+    //         fshow(n), " ; ",
+    //         fshow(r)
+    //     );
     endrule
 
     (* descending_urgency = "pRqTransfer, cRqTransfer_retry, cRqTransfer_new" *)
@@ -393,11 +393,11 @@ endfunction
             addr: req.addr,
             mshrIdx: n
         }));
-       if (verbose)
-        $display("%t L1 %m pRqTransfer: ", $time,
-            fshow(n), " ; ",
-            fshow(req)
-        );
+    //    if (verbose)
+    //     $display("%t L1 %m pRqTransfer: ", $time,
+    //         fshow(n), " ; ",
+    //         fshow(req)
+    //     );
     endrule
 
     (* descending_urgency = "pRsTransfer, cRqTransfer_retry, cRqTransfer_new" *)
@@ -414,8 +414,8 @@ endfunction
         if (resp.data matches tagged Valid .data)
             llcPrefetcher.reportCacheDataArrival(data, resp.addr, /*pcHash:*/0, /*op unknown*/ Ld,
                 True, resp.cameFromPrefetch, resp.boundsOffset, resp.boundsLength, resp.boundsVirtBase, /*capPerms:*/unpack(0), Invalid, False, ?); // Assume no PrefetchInfo from LL currently, no pipeing of start time to LL currently
-       if (verbose)
-        $display("%t L1 %m pRsTransfer: ", $time, fshow(resp));
+    //    if (verbose)
+    //     $display("%t L1 %m pRsTransfer: ", $time, fshow(resp));
     endrule
 
 
@@ -450,11 +450,11 @@ endfunction
         cRqIsPrefetch[n] <= True;
         cRqPrefetchOtherInfo[n] <= prefetchOtherInfo;
         // performance counter: cRq type
-       if (verbose)
-        $display("%t L1 %m createPrefetchRq: ", $time,
-            fshow(n), " ; ",
-            fshow(r)
-        );
+    //    if (verbose)
+    //     $display("%t L1 %m createPrefetchRq: ", $time,
+    //         fshow(n), " ; ",
+    //         fshow(r)
+    //     );
     endrule
 
 `ifdef SECURITY_CACHES
@@ -491,9 +491,9 @@ endfunction
                 flushReqDone <= True;
             end
         end
-       if (verbose)
-        $display("%t L1 %m flushTransfer: ", $time, fshow(n), " ; ",
-                 fshow(flushIndex), " ; ", fshow(flushWay));
+    //    if (verbose)
+    //     $display("%t L1 %m flushTransfer: ", $time, fshow(n), " ; ",
+    //              fshow(flushIndex), " ; ", fshow(flushWay));
     endrule
 `endif
 
@@ -527,12 +527,12 @@ endfunction
         procResp.evict(getLineAddr(resp.addr));
         prefetcher.reportCacheEviction(getLineAddr(req.addr));
 
-       if (verbose)
-        $display("%t L1 %m sendRsToP: ", $time,
-            fshow(rsToPIndexQ.first)," ; ",
-            fshow(req), " ; ",
-            fshow(resp)
-        );
+    //    if (verbose)
+    //     $display("%t L1 %m sendRsToP: ", $time,
+    //         fshow(rsToPIndexQ.first)," ; ",
+    //         fshow(req), " ; ",
+    //         fshow(resp)
+    //     );
     endrule
 
     rule sendRsToP_pRq(rsToPIndexQ.first matches tagged PRq .n);
@@ -552,12 +552,12 @@ endfunction
         procResp.evict(getLineAddr(resp.addr));
         prefetcher.reportCacheEviction(getLineAddr(req.addr));
 
-       if (verbose)
-        $display("%t L1 %m sendRsToP: ", $time,
-            fshow(rsToPIndexQ.first), " ; ",
-            fshow(req), " ; ",
-            fshow(resp)
-        );
+    //    if (verbose)
+    //     $display("%t L1 %m sendRsToP: ", $time,
+    //         fshow(rsToPIndexQ.first), " ; ",
+    //         fshow(req), " ; ",
+    //         fshow(resp)
+    //     );
     endrule
 
     (* descending_urgency = "sendRqToP, sendPrefetchRqToP" *)
@@ -578,10 +578,10 @@ endfunction
 
         };
         rqToPQ.enq(cRqToP);
-        if (verbose)
-            $display("%t L1 %m sendPrefetchRqToP: ", $time,
-                fshow(cRqToP)
-            );
+        // if (verbose)
+        //     $display("%t L1 %m sendPrefetchRqToP: ", $time,
+        //         fshow(cRqToP)
+        //     );
     endrule
     rule sendRqToP;
         rqToPIndexQ.deq;
@@ -602,13 +602,13 @@ endfunction
             capPerms: req.capPerms
         };
         rqToPQ.enq(cRqToP);
-       if (verbose)
-        $display("%t L1 %m sendRqToP: ", $time,
-            fshow(n), " ; ",
-            fshow(req), " ; ",
-            fshow(slot), " ; ",
-            fshow(cRqToP)
-        );
+    //    if (verbose)
+    //     $display("%t L1 %m sendRqToP: ", $time,
+    //         fshow(n), " ; ",
+    //         fshow(req), " ; ",
+    //         fshow(slot), " ; ",
+    //         fshow(cRqToP)
+    //     );
         // performance counter: start miss timer
         latTimer.start(n);
     endrule
@@ -640,11 +640,11 @@ endfunction
     // function to process cRq hit (MSHR slot may have garbage)
     function Action cRqHit(cRqIdxT n, procRqT req, Bool wasMiss);
     action
-       if (verbose)
-        $display("%t L1 %m pipelineResp: Hit func: ", $time,
-            fshow(n), " ; ",
-            fshow(req)
-        );
+    //    if (verbose)
+    //     $display("%t L1 %m pipelineResp: Hit func: ", $time,
+    //         fshow(n), " ; ",
+    //         fshow(req)
+    //     );
         // check tag & cs: even this function is called by pRs, tag should match,
         // because tag is written into cache before sending req to parent
         doAssert(ram.info.tag == getTag(req.addr) && enoughCacheState(ram.info.cs, req.toState),
@@ -673,7 +673,7 @@ endfunction
                     if (req.loadTags) begin
                         procResp.respLd(req.id, getTagsAt(curLine));
                     end else begin
-                        if (verbose) $display("%t L1Bank hit tags: ", $time, fshow(curLine.tag));
+                        // if (verbose) $display("%t L1Bank hit tags: ", $time, fshow(curLine.tag));
                         incrTagCnt(extend(countElem(True, curLine.tag)));
                         procResp.respLd(req.id, getTaggedDataAt(curLine, dataSel));
                     end
@@ -732,12 +732,12 @@ endfunction
                 line: newLine // write new data into cache
             }, isValid(succ) ? pipeOutNextInQueue : pipeOutSecondInQueue, True); // hit, so update rep info
             if (!isValid(succ) &&& pipeOutNextInQueue matches tagged Valid .nextInQueue) begin
-                if (verbose)
-                    $display("%t L1 %m pipelineResp: Hit func: dequeuing req: mshr: %d, queueSucc: ",
-                        $time,
-                        nextInQueue,
-                        fshow(pipeOutSecondInQueue)
-                    );
+                // if (verbose)
+                    // $display("%t L1 %m pipelineResp: Hit func: dequeuing req: mshr: %d, queueSucc: ",
+                    //     $time,
+                    //     nextInQueue,
+                    //     fshow(pipeOutSecondInQueue)
+                    // );
                 cRqRetryIndexQ.enq(nextInQueue);
                 cRqMshr.manageQueue.resetEntry(nextInQueue);
             end
@@ -756,11 +756,11 @@ endfunction
                 end
             end
             
-           if (verbose)
-            $display("%t L1 %m pipelineResp: Hit func: update ram: ", $time,
-                fshow(newLine), " ; ",
-                fshow(succ)
-            );
+        //    if (verbose)
+            // $display("%t L1 %m pipelineResp: Hit func: update ram: ", $time,
+            //     fshow(newLine), " ; ",
+            //     fshow(succ)
+            // );
             // release MSHR entry
             cRqMshr.pipelineResp.releaseEntry(n);
             crqMshrDeqs <= crqMshrDeqs + 1;
@@ -772,8 +772,8 @@ endfunction
                 succ: succ,
                 nextInQueue: pipeOutNextInQueue
             });
-           if (verbose)
-            $display("%t L1 %m pipelineResp: Hit func: AMO process in next cycle", $time);
+        //    if (verbose)
+        //     $display("%t L1 %m pipelineResp: Hit func: AMO process in next cycle", $time);
         end
     endaction
     endfunction
@@ -820,11 +820,11 @@ endfunction
             line: newLine // write new data into cache
         }, amoHit.nextInQueue, True); // hit, so update rep info
         doAssert(req.toState == M, "AMO must req for M");
-       if (verbose)
-        $display("%t L1 %m processAmo: update ram: ", $time,
-            fshow(newLine), " ; ",
-            fshow(succ)
-        );
+    //    if (verbose)
+    //     $display("%t L1 %m processAmo: update ram: ", $time,
+    //         fshow(newLine), " ; ",
+    //         fshow(succ)
+    //     );
         // release MSHR entry
         cRqMshr.pipelineResp.releaseEntry(n);
         crqMshrDeqs <= crqMshrDeqs + 1;
@@ -833,12 +833,12 @@ endfunction
     endrule
 
     rule pipelineResp_cRq(!isValid(processAmo) &&& pipeOut.cmd matches tagged L1CRq .n);
-       if (verbose)
-        $display("%t L1 %m pipelineResp: ", $time, fshow(pipeOut));
+    //    if (verbose)
+    //     $display("%t L1 %m pipelineResp: ", $time, fshow(pipeOut));
 
         procRqT procRq = pipeOutCRq;
-       if (verbose)
-        $display("%t L1 %m pipelineResp: cRq: ", $time, fshow(n), " ; ", fshow(procRq));
+    //    if (verbose)
+    //     $display("%t L1 %m pipelineResp: cRq: ", $time, fshow(n), " ; ", fshow(procRq));
 
         // find end of dependency chain
         Maybe#(cRqIdxT) cRqDependEOC = cRqMshr.pipelineResp.searchDependEndOfChain(procRq.addr);
@@ -871,11 +871,11 @@ endfunction
             // release MSHR entry
             cRqMshr.pipelineResp.releaseEntry(n);
             crqMshrDeqs <= crqMshrDeqs + 1;
-           if (verbose)
-            $display("%t L1 %m pipelineResp: Sc early fail func: ", $time,
-                fshow(resetOwner), " ; ",
-                fshow(succ)
-            );
+        //    if (verbose)
+        //     $display("%t L1 %m pipelineResp: Sc early fail func: ", $time,
+        //         fshow(resetOwner), " ; ",
+        //         fshow(succ)
+        //     );
         endaction
         endfunction
 
@@ -1016,10 +1016,10 @@ endfunction
                         cRqMshr.pipelineResp.setSucc(fromMaybe(?, cRqDependEOC), Valid (n));
                         cRqSetDepNoCacheChange;
                     end
-                    if (verbose)
-                        $display("%t L1 %m pipelineResp: cRq: own by other cRq ", $time,
-                            fshow(cOwner), ", depend on cRq ", fshow(cRqDependEOC)
-                        );
+                    // if (verbose)
+                    //     $display("%t L1 %m pipelineResp: cRq: own by other cRq ", $time,
+                    //         fshow(cOwner), ", depend on cRq ", fshow(cRqDependEOC)
+                    //     );
                 end 
                 // If the tags don't match then we want to queue the cRq
                 else begin
@@ -1033,10 +1033,10 @@ endfunction
                         end
                         cRqQueue;
                     end
-                    if (verbose)
-                        $display("%t L1 %m pipelineResp: cRq: all ways owned, queuing ", $time,
-                            fshow(n), " after ", fshow(cRqQueuedEOC)
-                        );
+                    // if (verbose)
+                    //     $display("%t L1 %m pipelineResp: cRq: all ways owned, queuing ", $time,
+                    //         fshow(n), " after ", fshow(cRqQueuedEOC)
+                    //     );
                 end
             end
             else begin
@@ -1048,23 +1048,23 @@ endfunction
                 );
                 // Hit or Miss (but no replacement)
                 if(enough_cs_to_hit) begin
-                   if (verbose)
-                    $display("%t L1 %m pipelineResp: cRq: own by itself, hit", $time);
+                //    if (verbose)
+                //     $display("%t L1 %m pipelineResp: cRq: own by itself, hit", $time);
                     cRqHit(n, procRq, False);
                 end
                 else if(scFail) begin
                     // Sc already fails, so we don't need to req parent.  Since
                     // Sc is the owner of the line, we need to reset owner to
                     // Invalid.
-                   if (verbose)
-                    $display("%t L1 %m pipelineResp: cRq: own by itself, Sc early fails, ",
-                        $time, fshow(linkAddr)
-                    );
+                //    if (verbose)
+                //     $display("%t L1 %m pipelineResp: cRq: own by itself, Sc early fails, ",
+                //         $time, fshow(linkAddr)
+                //     );
                     cRqScEarlyFail(True);
                 end
                 else begin
-                  if (verbose)
-                   $display("%t L1 %m pipelineResp: cRq: own by itself, miss no replace", $time);
+                //   if (verbose)
+                //    $display("%t L1 %m pipelineResp: cRq: own by itself, miss no replace", $time);
                   cRqMissNoReplacement;
                 end
             end
@@ -1083,29 +1083,29 @@ endfunction
             if(tag_match && enough_cs_to_hit) begin
                 // Hit
                 doAssert(cs_valid, "hit, so cs must > I");
-                if (verbose)
-                $display("%t L1 %m pipelineResp: cRq: no owner, hit", $time);
+                // if (verbose)
+                // $display("%t L1 %m pipelineResp: cRq: no owner, hit", $time);
                     cRqHit(n, procRq, False);
             end
             else if(scFail) begin
                 // Sc already fails, so we don't need to req parent.  Since
                 // there is no owner of the line, we can reset owner to
                 // Invalid.
-                if (verbose)
-                $display("%t L1 %m pipelineResp: cRq: no owner, Sc early fails, ",
-                    $time, fshow(linkAddr)
-                );
+                // if (verbose)
+                // $display("%t L1 %m pipelineResp: cRq: no owner, Sc early fails, ",
+                //     $time, fshow(linkAddr)
+                // );
                 cRqScEarlyFail(True);
             end
             else if(cs_valid && !tag_match) begin
                 // Req parent, need replacement
-                if (verbose)
-                $display("%t L1 %m pipelineResp: cRq: no owner, replace", $time);
+                // if (verbose)
+                // $display("%t L1 %m pipelineResp: cRq: no owner, replace", $time);
                 cRqReplacement;
             end
             else begin
-                if (verbose)
-                $display("%t L1 %m pipelineResp: cRq: no owner, miss no replace", $time);
+                // if (verbose)
+                // $display("%t L1 %m pipelineResp: cRq: no owner, miss no replace", $time);
                 // Req parent, no replacement needed
                 cRqMissNoReplacement;
             end
@@ -1113,10 +1113,10 @@ endfunction
     endrule
 
     rule pipelineResp_pRs(!isValid(processAmo) &&& pipeOut.cmd == L1PRs);
-       if (verbose) begin
-        $display("%t L1 %m pipelineResp: ", $time, fshow(pipeOut));
-        $display("%t L1 %m pipelineResp: pRs: ", $time);
-       end
+    //    if (verbose) begin
+    //     $display("%t L1 %m pipelineResp: ", $time, fshow(pipeOut));
+    //     $display("%t L1 %m pipelineResp: pRs: ", $time);
+    //    end
 
         if(ram.info.owner matches tagged Valid .cOwner) begin
             procRqT procRq = pipeOutCRq;
@@ -1127,7 +1127,7 @@ endfunction
             // performance counter: miss cRq
             if (!cRqIsPrefetch[cOwner]) begin
                 incrMissCnt(procRq.op, cOwner, procRq.boundsOffset, procRq.boundsLength);
-                $display("%t L1 incrMissCnt", $time);
+                // $display("%t L1 incrMissCnt", $time);
             end
             else begin
                 EventsL1D events = unpack (0);
@@ -1142,16 +1142,16 @@ endfunction
 
     rule pipelineResp_pRq(!isValid(processAmo) &&& pipeOut.cmd matches tagged L1PRq .n);
         pRqFromPT pRq = pRqMshr.pipelineResp.getRq(n);
-       if (verbose)
-        $display("%t L1 %m pipelineResp: pRq: ", $time, fshow(n), " ; ", fshow(pRq));
+    //    if (verbose)
+    //     $display("%t L1 %m pipelineResp: pRq: ", $time, fshow(n), " ; ", fshow(pRq));
 
         // pRq is never in dependency chain, so it is never swapped in
         // pRq must go through tag match, which either returns a tag matched way or asserts pRqMiss
         // and pRq is always directly handled: either dropped or Done
 
         if(pipeOut.pRqMiss || ram.info.cs <= pRq.toState || ram.info.tag != getTag(pRq.addr)) begin
-           if (verbose)
-            $display("%t L1 %m pipelineResp: pRq: drop", $time);
+        //    if (verbose)
+        //     $display("%t L1 %m pipelineResp: pRq: drop", $time);
             // pRq can be directly dropped
             // must go through tag match, no successor
             pRqMshr.pipelineResp.releaseEntry(n);
@@ -1168,13 +1168,13 @@ endfunction
             // must be the case the pRq overtakes cRq
             L1CRqState cState = pipeOutCState;
             cRqSlotT cSlot = pipeOutCSlot;
-           if (verbose)
-            $display("%t L1 %m pipelineResp: pRq: overtake cRq: ", $time,
-                fshow(cOwner), " ; ",
-                fshow(cRq), " ; ",
-                fshow(cState), " ; ",
-                fshow(cSlot)
-            );
+        //    if (verbose)
+        //     $display("%t L1 %m pipelineResp: pRq: overtake cRq: ", $time,
+        //         fshow(cOwner), " ; ",
+        //         fshow(cRq), " ; ",
+        //         fshow(cState), " ; ",
+        //         fshow(cSlot)
+        //     );
             doAssert(ram.info.cs == S && cRq.toState > S && pRq.toState == I && cState == WaitSt && cSlot.waitP,
                 ("pRq overtakes CRq")
             );
@@ -1200,8 +1200,8 @@ endfunction
             });
         end
         else begin
-           if (verbose)
-            $display("%t L1 %m pipelineResp: pRq: valid process", $time);
+        //    if (verbose)
+        //     $display("%t L1 %m pipelineResp: pRq: valid process", $time);
             // line must NOT be owned
             doAssert(ram.info.owner == Invalid,
                 ("pRq cannot hit on line owned by pRq (even itself)")
@@ -1222,12 +1222,12 @@ endfunction
                 line: ram.line
             }, pipeOutSecondInQueue, False);
             if (pipeOutNextInQueue matches tagged Valid .nextInQueue) begin
-                if (verbose)
-                    $display("%t L1 %m pipelineResp: pRq: dequeuing req: mshr: %d, queueSucc: ",
-                        $time,
-                        nextInQueue,
-                        fshow(pipeOutSecondInQueue)
-                    );
+                // if (verbose)
+                //     $display("%t L1 %m pipelineResp: pRq: dequeuing req: mshr: %d, queueSucc: ",
+                //         $time,
+                //         nextInQueue,
+                //         fshow(pipeOutSecondInQueue)
+                //     );
                 cRqRetryIndexQ.enq(nextInQueue);
                 cRqMshr.manageQueue.resetEntry(nextInQueue);
             end
@@ -1247,8 +1247,8 @@ endfunction
         pipeOut.cmd matches tagged L1Flush .flush
     );
         pRqIdxT n = flush.mshrIdx;
-       if (verbose)
-        $display("%t L1 %m pipelineResp: flush: ", $time, fshow(flush));
+    //    if (verbose)
+    //     $display("%t L1 %m pipelineResp: flush: ", $time, fshow(flush));
 
         // During flush, cRq MSHR is empty, so cache line cannot have owner
         doAssert(ram.info.owner == Invalid, "flushing line cannot have owner");
@@ -1257,14 +1257,14 @@ endfunction
         // flush always goes through cache pipeline, and is directly handled
         // here: either dropped or Done
         if(ram.info.cs == I) begin
-           if (verbose)
-            $display("%t L1 %m pipelineResp: flush: drop", $time);
+        //    if (verbose)
+        //     $display("%t L1 %m pipelineResp: flush: drop", $time);
             // flush can be directly dropped
             pRqMshr.pipelineResp.releaseEntry(n);
         end
         else begin
-           if (verbose)
-            $display("%t L1 %m pipelineResp: flush: valid process", $time);
+        //    if (verbose)
+        //     $display("%t L1 %m pipelineResp: flush: valid process", $time);
             pRqMshr.pipelineResp.setDone_setData(n, ram.info.cs == M ? Valid (ram.line) : Invalid);
             rsToPIndexQ.enq(PRq (n));
             // record the flushed addr in MSHR so that sendRsToP rule knows
