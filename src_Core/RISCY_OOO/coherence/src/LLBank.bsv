@@ -1130,6 +1130,8 @@ endfunction
                         truncateLSB(cRq.child), cRq.addr, HIT, Ld);
             end
         end
+        $display("%t Prefetcher LLBankReportAccess addr %h wasMiss %b wasPrefetch %b", $time, cRq.addr, HIT, cRqIsPrefetch[n]);
+
     endaction
     endfunction
 
@@ -1335,6 +1337,7 @@ endfunction
                             truncateLSB(cRq.child), cRq.addr, MISS, Ld);
                 end
             end
+            $display("%t Prefetcher LLBankReportAccess addr %h wasMiss %b wasPrefetch %b", $time, cRq.addr, MISS, cRqIsPrefetch[n]);
         endaction
         endfunction
 
@@ -1413,6 +1416,8 @@ endfunction
                             truncateLSB(cRq.child), cRq.addr, MISS, Ld);
                 end
             end
+            $display("%t Prefetcher LLBankReportAccess addr %h wasMiss %b wasPrefetch %b", $time, cRq.addr, MISS, cRqIsPrefetch[n]);
+
         endaction
         endfunction
 
