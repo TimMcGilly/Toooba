@@ -1047,7 +1047,6 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
     );
         // set wait bit
         waitLrScAmoMMIOResp <= Lr;
-        let startTime <- $time;
         // send to mem
         ProcRq#(DProcReqId) req = ProcRq {
             id: 0, // id does not matter
@@ -1075,7 +1074,7 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
             boundsLength: ?,
             boundsVirtBase: ?,
             capPerms: ?,
-            startTime: startTime
+            startTime: 0
         };
         reqLrScAmoQ.enq(req);
         if(verbose) $display("[doDeqLdQ_Lr_issue] ", fshow(lsqDeqLd), "; ", fshow(req));
@@ -1403,7 +1402,6 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
     );
         // set wait bit
         waitLrScAmoMMIOResp <= ScAmo;
-        let startTime <- $time;
         // send to mem
         ProcRq#(DProcReqId) req = ProcRq {
             id: 0, // id does not matter
@@ -1429,7 +1427,7 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
             boundsLength: ?,
             boundsVirtBase: ?,
             capPerms: ?,
-            startTime: startTime
+            startTime: 0
         };
         reqLrScAmoQ.enq(req);
         if(verbose) $display("[doDeqStQ_ScAmo_issue] ", fshow(lsqDeqSt), "; ", fshow(req));
@@ -1644,7 +1642,6 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
     // send req to D$
     rule sendLdToMem;
         ReqLdQEntry rq <- toGet(reqLdQ).get;
-        let startTime <- $time;
         dMem.procReq.req(ProcRq {
             id: zeroExtend(rq.tag),
             addr: rq.paddr,
@@ -1659,7 +1656,7 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
             boundsLength: rq.boundsLength,
             boundsVirtBase: rq.boundsVirtBase,
             capPerms: rq.capPerms,
-            startTime: startTime
+            startTime: 0
         });
     endrule
     (* descending_urgency = "sendLdToMem, sendStToMem" *) // prioritize Ld over St
@@ -1671,7 +1668,6 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
         let rq <- toGet(reqStQ).get;
         DProcReqId id = zeroExtend(rq.sbIdx);
 `endif
-        let startTime <- $time;
         dMem.procReq.req(ProcRq {
             id: id,
             addr: rq.paddr,
@@ -1686,7 +1682,7 @@ module mkMemExePipeline#(MemExeInput inIfc)(MemExePipeline);
             boundsLength: rq.boundsLength,
             boundsVirtBase: rq.boundsVirtBase,
             capPerms: rq.capPerms,
-            startTime: startTime
+            startTime: 0
         });
     endrule
     (* descending_urgency = "sendLrScAmoToMem, sendStToMem" *) // prioritize Lr/Sc/Amo over St

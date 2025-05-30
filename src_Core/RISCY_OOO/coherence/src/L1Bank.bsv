@@ -365,8 +365,8 @@ endfunction
     // we stop accepting cRq when we need to flush for security
     rule cRqTransfer_new(!cRqRetryIndexQ.notEmpty && flushDone);
         procRqT r <- toGet(rqFromCQ).get;
-        let startTime <- $time;
-        r.startTime = startTime;
+        // let startTime <- $time;
+        // r.startTime = startTime;
         cRqIdxT n <- cRqMshr.cRqTransfer.getEmptyEntryInit(r);
         crqMshrEnqs <= crqMshrEnqs + 1;
         // send to pipeline
@@ -423,7 +423,7 @@ endfunction
     (* descending_urgency = "pRqTransfer, cRqTransfer_retry, cRqTransfer_new, createPrefetchRq" *)
     rule createPrefetchRq(flushDone && crqMshrEnqs - crqMshrDeqs < 6);
         let {addr, cap, prefetchOtherInfo} <- prefetcher.getNextPrefetchAddr;
-        let startTime <- $time;
+        // let startTime <- $time;
         procRqT r = ProcRq {
             id: ?, //Or maybe do 0 here
             addr: addr,
@@ -438,7 +438,7 @@ endfunction
             boundsLength: saturating_truncate(getLength(cap)),
             boundsVirtBase: getBase(cap),
             capPerms: getPerms(cap),
-            startTime: startTime
+            startTime: 0
         };
         cRqIdxT n <- cRqMshr.cRqTransfer.getEmptyEntryInit(r);
         crqMshrEnqs <= crqMshrEnqs + 1;
@@ -837,6 +837,11 @@ endfunction
     //     $display("%t L1 %m pipelineResp: ", $time, fshow(pipeOut));
 
         procRqT procRq = pipeOutCRq;
+
+        if (procRq.startTime != 0) begin
+            let startTime <- $time;
+            procRq.startTime = startTime;
+        end
     //    if (verbose)
     //     $display("%t L1 %m pipelineResp: cRq: ", $time, fshow(n), " ; ", fshow(procRq));
 
