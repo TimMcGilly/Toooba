@@ -464,7 +464,7 @@ module mkL1DPrefetcher#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         Parameter#(3) confidenceBits <- mkParameter;
         Integer predictionReplacementConfidence = 1;
         Integer predictionPrefetchConfidence = 1;
-        Integer recursionDepth = 1;
+        Integer recursionDepth = ;
 
         let m <- mkCapPCBackwards(toTlb, backwardsTableSize, timelinessTableWays, timelinessTableSets,
                                     predictionTableSize, confidenceBits, confidenceUpdateTableSize, prefetchFilterTableSize, predictionReplacementConfidence, predictionPrefetchConfidence,
@@ -566,6 +566,21 @@ module mkLLDPrefetcherInL1D#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkSignaturePathPrefetcher(
             "./div_table.memhex",
             stSets, stWays, ptEntries, prefetchThreshold, useFilter)));
+    `elsif DATA_PREFETCHER_CAP_PC_BACKWARDS
+        Parameter#(256) backwardsTableSize <- mkParameter;
+        Parameter#(8) timelinessTableWays <- mkParameter;
+        Parameter#(256) timelinessTableSets <- mkParameter;
+        Parameter#(256) predictionTableSize <- mkParameter;
+        Parameter#(1024) prefetchFilterTableSize <- mkParameter;
+        Parameter#(32) confidenceUpdateTableSize <- mkParameter;
+        Parameter#(3) confidenceBits <- mkParameter;
+        Integer predictionReplacementConfidence = 1;
+        Integer predictionPrefetchConfidence = 1;
+        Integer recursionDepth = 0;
+
+        let m <- mkCapPCBackwards(toTlb, backwardsTableSize, timelinessTableWays, timelinessTableSets,
+                                    predictionTableSize, confidenceBits, confidenceUpdateTableSize, prefetchFilterTableSize, predictionReplacementConfidence, predictionPrefetchConfidence,
+                                    recursionDepth);
     `elsif DATA_PREFETCHER_DEPENDENCE_PREFETCHER
         Parameter#(128) backwardsTableSize <- mkParameter;
         Parameter#(4) predictionTableWays <- mkParameter;
@@ -575,6 +590,7 @@ module mkLLDPrefetcherInL1D#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         Integer recursionDepth = 1;
         Integer maxCapSizeForDependence = 8192;
         let m <- mkDependancePrefetcher(toTlb, backwardsTableSize, predictionTableWays, predictionTableSets, prefetchFilterTableSize, capSizeTableSize, recursionDepth, maxCapSizeForDependence);
+
     `endif
 `else 
     let m <- mkCheriPCPrefetcherAdapter(mkPCPrefetcherAdapter(mkDoNothingPrefetcher));
