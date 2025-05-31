@@ -326,9 +326,14 @@ typedef struct {
     Addr boundsVirtBase;
 } PRsMsg#(type idT, type childT) deriving(Bits, Eq, FShow);
 
+typedef struct {
+    LineAddr lineAddr;
+} PEvictMsg deriving(Bits, Eq, FShow);
+
 typedef union tagged {
     PRqMsg#(childT) PRq;
     PRsMsg#(idT, childT) PRs;
+    PEvictMsg PEvict;
 } PRqRsMsg#(type idT, type childT) deriving(Bits, Eq, FShow);
 
 interface ChildCacheToParent#(type cRqIdT, type childT);

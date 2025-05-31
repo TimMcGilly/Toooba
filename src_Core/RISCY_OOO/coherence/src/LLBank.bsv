@@ -225,6 +225,8 @@ module mkLLBank#(
     FIFO#(cRqIndexT) rsLdToDmaIndexQ_pipelineResp <- mkFIFO;
     FIFO#(cRqIndexT) rsStToDmaIndexQ_pipelineResp <- mkFIFO;
 
+    Fifo#(2, PEvictMsg) pEvictMsgQ <- mkOverflowBypassFifo;
+
 `ifdef DEBUG_DMA
     // these FIFOs are enqueued when DMA req really takes effect
     // FIFOs has 0 cycle latency to match L1Bank resp latency
@@ -1240,8 +1242,20 @@ endfunction
             },
             line: ? // data is no longer used
         }, False);
+
+        pEvictMsgQ.enq(PEvictMsg {lineAddr: getLineAddr(cRq.addr)});
     endaction
     endfunction
+    
+    (* descending_urgency = "sendRsToC, sendRqToC, sendEvictToC" *)
+    rule sendEvictToC;
+        let pEvictMsg = pEvictMsgQ.first;
+        pEvictMsgQ.deq;
+
+        pRqRsToCT req = PEvict (pEvictMsg);
+        
+        toCQ.enq(req);
+    endrule
 
     // handle cRq
     rule pipelineResp_cRq(pipeOut.cmd matches tagged LLCRq .n);

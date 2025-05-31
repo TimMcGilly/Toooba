@@ -418,6 +418,16 @@ endfunction
     //     $display("%t L1 %m pRsTransfer: ", $time, fshow(resp));
     endrule
 
+    rule processPEvictMsg(fromPQ.first matches tagged PEvict .resp);
+        fromPQ.deq;
+
+`ifdef DATA_PREFETCHER_IN_LLL1
+        prefetcher.reportCacheEviction(getLineAddr(resp.addr));
+        llcPrefetcher.reportCacheEviction(getLineAddr(resp.addr));
+`endif
+
+    endrule
+
 
     (* descending_urgency = "pRsTransfer, cRqTransfer_retry, cRqTransfer_new, createPrefetchRq" *)
     (* descending_urgency = "pRqTransfer, cRqTransfer_retry, cRqTransfer_new, createPrefetchRq" *)
@@ -525,8 +535,11 @@ endfunction
         });
         // inform processor of line eviction
         procResp.evict(getLineAddr(resp.addr));
-        prefetcher.reportCacheEviction(getLineAddr(req.addr));
 
+`ifdef DATA_PREFETCHER_IN_L1
+        prefetcher.reportCacheEviction(getLineAddr(req.addr));
+        llcPrefetcher.reportCacheEviction(getLineAddr(req.addr));
+`endif
     //    if (verbose)
     //     $display("%t L1 %m sendRsToP: ", $time,
     //         fshow(rsToPIndexQ.first)," ; ",
@@ -550,8 +563,9 @@ endfunction
         pRqMshr.sendRsToP_pRq.releaseEntry(n); // mshr entry released
         // inform processor of line eviction
         procResp.evict(getLineAddr(resp.addr));
+`ifdef DATA_PREFETCHER_IN_L1
         prefetcher.reportCacheEviction(getLineAddr(req.addr));
-
+`endif
     //    if (verbose)
     //     $display("%t L1 %m sendRsToP: ", $time,
     //         fshow(rsToPIndexQ.first), " ; ",
