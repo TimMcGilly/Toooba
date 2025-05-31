@@ -422,7 +422,8 @@ endfunction
             boundsOffset: r.boundsOffset,
             boundsLength: r.boundsLength,
             boundsVirtBase: r.boundsVirtBase,
-            capPerms: r.capPerms
+            capPerms: r.capPerms,
+            prefetchOtherInfo: r.prefetchOtherInfo
         };
         if (!r.isPrefetchRq || (crqMshrEnqs - crqMshrDeqs < 12)) begin
             // setup new MSHR entry
@@ -464,7 +465,8 @@ endfunction
             boundsOffset: boundsOffset,
             boundsLength: boundsLength,
             boundsVirtBase: boundsVirtBase,
-            capPerms: ?
+            capPerms: ?,
+            prefetchOtherInfo: Invalid
         };
         // setup new MSHR entry
         cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, Invalid);
@@ -502,7 +504,8 @@ endfunction
             boundsOffset: ?,
             boundsLength: ?,
             boundsVirtBase: ?,
-            capPerms: ?
+            capPerms: ?,
+            prefetchOtherInfo: Invalid
         };
         // setup new MSHR entry
         cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, Invalid);
@@ -540,7 +543,8 @@ endfunction
             boundsOffset: ?,
             boundsLength: ?,
             boundsVirtBase: ?,
-            capPerms: ?
+            capPerms: ?,
+            prefetchOtherInfo: Invalid
         };
         // setup new MSHR entry
         cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, Invalid);
@@ -577,7 +581,8 @@ endfunction
             boundsOffset: r.boundsOffset,
             boundsLength: r.boundsLength,
             boundsVirtBase: r.boundsVirtBase,
-            capPerms: r.capPerms
+            capPerms: r.capPerms,
+            prefetchOtherInfo: r.prefetchOtherInfo
         };
         if(!cRqMshr.transfer.hasEmptyEntry(cRq)) begin
             mshrBlocks.incr(1);
@@ -601,7 +606,8 @@ endfunction
             boundsOffset: ?,
             boundsLength: ?,
             boundsVirtBase: ?,
-            capPerms: ?
+            capPerms: ?,
+            prefetchOtherInfo: Invalid
         };
         // setup new MSHR entry and data
         cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, write ? Valid (r.data) : Invalid);
@@ -650,7 +656,8 @@ endfunction
             boundsOffset: ?,
             boundsLength: ?,
             boundsVirtBase: ?,
-            capPerms: ?
+            capPerms: ?,
+            prefetchOtherInfo: Invalid
         };
         if(!cRqMshr.transfer.hasEmptyEntry(cRq)) begin
             mshrBlocks.incr(1);
@@ -930,7 +937,8 @@ endfunction
             cameFromPrefetch: cRqIsPrefetch[n],
             boundsOffset: cRq.boundsOffset,
             boundsLength: cRq.boundsLength,
-            boundsVirtBase: cRq.boundsVirtBase
+            boundsVirtBase: cRq.boundsVirtBase,
+            prefetchOtherInfo: cRq.prefetchOtherInfo
         }));
         // release MSHR entry
         cRqMshr.sendRsToDmaC.releaseEntry(n);

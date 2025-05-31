@@ -413,7 +413,7 @@ endfunction
         end
         if (resp.data matches tagged Valid .data)
             llcPrefetcher.reportCacheDataArrival(data, resp.addr, /*pcHash:*/0, /*op unknown*/ Ld,
-                True, resp.cameFromPrefetch, resp.boundsOffset, resp.boundsLength, resp.boundsVirtBase, /*capPerms:*/unpack(0), Invalid, False, ?); // Assume no PrefetchInfo from LL currently, no pipeing of start time to LL currently
+                True, resp.cameFromPrefetch, resp.boundsOffset, resp.boundsLength, resp.boundsVirtBase, /*capPerms:*/unpack(0), resp.prefetchOtherInfo, False, ?); // Assume no pipeing of start time to LL currently
     //    if (verbose)
     //     $display("%t L1 %m pRsTransfer: ", $time, fshow(resp));
     endrule
@@ -460,11 +460,11 @@ endfunction
         cRqIsPrefetch[n] <= True;
         cRqPrefetchOtherInfo[n] <= prefetchOtherInfo;
         // performance counter: cRq type
-    //    if (verbose)
-    //     $display("%t L1 %m createPrefetchRq: ", $time,
-    //         fshow(n), " ; ",
-    //         fshow(r)
-    //     );
+       if (verbose)
+        $display("%t L1 %m createPrefetchRq: ", $time,
+            fshow(n), " ; ",
+            fshow(r)
+        );
     endrule
 
 `ifdef SECURITY_CACHES
@@ -588,8 +588,8 @@ endfunction
             boundsOffset: getOffset(cap),
             boundsLength: saturating_truncate(getLength(cap)),
             boundsVirtBase: getBase(cap),
-            capPerms: getPerms(cap)
-
+            capPerms: getPerms(cap),
+            prefetchOtherInfo: Valid(prefetchOtherInfo)
         };
         rqToPQ.enq(cRqToP);
         // if (verbose)
@@ -613,7 +613,8 @@ endfunction
             boundsOffset: req.boundsOffset,
             boundsLength: req.boundsLength,
             boundsVirtBase: req.boundsVirtBase,
-            capPerms: req.capPerms
+            capPerms: req.capPerms,
+            prefetchOtherInfo: Invalid
         };
         rqToPQ.enq(cRqToP);
     //    if (verbose)

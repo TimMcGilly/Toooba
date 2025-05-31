@@ -299,6 +299,7 @@ typedef struct {
     Addr boundsLength;
     Addr boundsVirtBase;
     Bit#(31) capPerms;
+    Maybe#(PrefetchOtherInfo) prefetchOtherInfo;
 } CRqMsg#(type idT, type childT) deriving(Bits, Eq, FShow);
 
 typedef struct {
@@ -324,6 +325,7 @@ typedef struct {
     Addr boundsOffset;
     Addr boundsLength;
     Addr boundsVirtBase;
+    Maybe#(PrefetchOtherInfo) prefetchOtherInfo;
 } PRsMsg#(type idT, type childT) deriving(Bits, Eq, FShow);
 
 typedef struct {
@@ -371,6 +373,7 @@ typedef struct {
     Addr boundsLength;
     Addr boundsVirtBase;
     Bit#(31) capPerms;
+    Maybe#(PrefetchOtherInfo) prefetchOtherInfo;
 } LLRq#(type cRqIdT, type dmaRqIdT, type childT) deriving(Bits, Eq, FShow);
 
 // memory msg
