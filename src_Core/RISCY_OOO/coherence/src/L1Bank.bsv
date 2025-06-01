@@ -420,10 +420,11 @@ endfunction
 
     rule processPEvictMsg(fromPQ.first matches tagged PEvict .resp);
         fromPQ.deq;
+        $display("%t processPEvictMsg addr %h", resp.lineAddr);
 
-`ifdef DATA_PREFETCHER_IN_LLL1
-        prefetcher.reportCacheEviction(getLineAddr(resp.addr));
-        llcPrefetcher.reportCacheEviction(getLineAddr(resp.addr));
+`ifdef DATA_PREFETCHER_IN_L1LL
+        prefetcher.reportCacheEviction(resp.lineAddr);
+        llcPrefetcher.reportCacheEviction(resp.lineAddr);
 `endif
 
     endrule
@@ -565,6 +566,7 @@ endfunction
         procResp.evict(getLineAddr(resp.addr));
 `ifdef DATA_PREFETCHER_IN_L1
         prefetcher.reportCacheEviction(getLineAddr(req.addr));
+        llcPrefetcher.reportCacheEviction(getLineAddr(req.addr));
 `endif
     //    if (verbose)
     //     $display("%t L1 %m sendRsToP: ", $time,

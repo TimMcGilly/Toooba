@@ -65,6 +65,7 @@ interface CheriPCPrefetcher;
     method Action reportCacheDataArrival(CLine lineWithTags, Addr addr, PCHash pcHash, MemOp op,
         Bool wasMiss, Bool wasPrefetch, Addr boundsOffset, Addr boundsLength, Addr boundsVirtBase, Bit#(31) capPerms, Maybe#(PrefetchOtherInfo) prefetchOtherInfo, Bool hitOnPrefetch, Bit#(64) startTime);
     method ActionValue#(Tuple3#(Addr, CapPipe, PrefetchOtherInfo)) getNextPrefetchAddr();
+    (* always_ready *)
     method Action reportCacheEviction(LineAddr lineAddr);
 `ifdef PERFORMANCE_MONITORING
     method EventsPrefetcher events();

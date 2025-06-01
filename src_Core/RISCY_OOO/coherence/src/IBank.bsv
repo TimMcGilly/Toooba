@@ -438,7 +438,8 @@ module mkIBank#(
             boundsOffset: 0,
             boundsLength: 0,
             boundsVirtBase: 0,
-            capPerms: 0
+            capPerms: 0,
+            prefetchOtherInfo: Invalid
         };
         rqToPQ.enq(cRqToP);
         if (verbose)
@@ -463,7 +464,8 @@ module mkIBank#(
             boundsOffset: 0,
             boundsLength: 0,
             boundsVirtBase: 0,
-            capPerms: 0
+            capPerms: 0,
+            prefetchOtherInfo: Invalid
         };
         rqToPQ.enq(cRqToP);
        if (verbose)

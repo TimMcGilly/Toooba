@@ -245,7 +245,7 @@ module mkLLBank#(
     Vector#(cRqNum, Reg#(Bool)) cRqIsPrefetch <- replicateM(mkReg(?));
     PrefetcherVector#(TDiv#(childNum, 2)) dataPrefetchers <- mkPrefetcherVector(mkLLDPrefetcher);
     PrefetcherVector#(TDiv#(childNum, 2)) instrPrefetchers <- mkPrefetcherVector(mkLLIPrefetcher);
-    Fifo#(32, Tuple5#(Addr, childT, Addr, Addr, Addr)) overflowPrefetchQueue <- mkOverflowBypassFifo;
+    Fifo#(32, Tuple6#(Addr, childT, Addr, Addr, Addr, Maybe#(PrefetchOtherInfo))) overflowPrefetchQueue <- mkOverflowBypassFifo;
 
     Reg#(Bit#(64)) crqMshrEnqs <- mkConfigReg(0);
     Reg#(Bit#(64)) crqMshrDeqs <- mkConfigReg(0);
@@ -446,13 +446,13 @@ endfunction
         end
         else begin
             // $display ("%t LL crqTransfer_new_child: postponing prefetch rq, mshr entries: %d", $time, crqMshrEnqs - crqMshrDeqs);
-            overflowPrefetchQueue.enq(tuple5(r.addr, r.child, r.boundsOffset, r.boundsLength, r.boundsVirtBase));
+            overflowPrefetchQueue.enq(tuple6(r.addr, r.child, r.boundsOffset, r.boundsLength, r.boundsVirtBase, r.prefetchOtherInfo));
         end
     endrule
 
     rule createDataPrefetchRqFromQueue if (crqMshrEnqs - crqMshrDeqs < 12);
         overflowPrefetchQueue.deq;
-        match {.addr, .child, .boundsOffset, .boundsLength, .boundsVirtBase} = overflowPrefetchQueue.first;
+        match {.addr, .child, .boundsOffset, .boundsLength, .boundsVirtBase, .prefetchOtherInfo} = overflowPrefetchQueue.first;
         //Request from L1D of cacheIdx-th core
         cRqT cRq = LLRq {
             addr: addr,
@@ -466,7 +466,7 @@ endfunction
             boundsLength: boundsLength,
             boundsVirtBase: boundsVirtBase,
             capPerms: ?,
-            prefetchOtherInfo: Invalid
+            prefetchOtherInfo: prefetchOtherInfo
         };
         // setup new MSHR entry
         cRqIndexT n <- cRqMshr.transfer.getEmptyEntryInit(cRq, Invalid);
