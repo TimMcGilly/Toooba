@@ -420,11 +420,11 @@ endfunction
 
     rule processPEvictMsg(fromPQ.first matches tagged PEvict .resp);
         fromPQ.deq;
-        $display("%t processPEvictMsg addr %h", resp.lineAddr);
+        $display("%t processPEvictMsg addr %h", resp.addr);
 
 `ifdef DATA_PREFETCHER_IN_L1LL
-        prefetcher.reportCacheEviction(resp.lineAddr);
-        llcPrefetcher.reportCacheEviction(resp.lineAddr);
+        prefetcher.reportCacheEviction(getLineAddr(resp.addr));
+        llcPrefetcher.reportCacheEviction(getLineAddr(resp.addr));
 `endif
 
     endrule
@@ -594,10 +594,10 @@ endfunction
             prefetchOtherInfo: Valid(prefetchOtherInfo)
         };
         rqToPQ.enq(cRqToP);
-        // if (verbose)
-        //     $display("%t L1 %m sendPrefetchRqToP: ", $time,
-        //         fshow(cRqToP)
-        //     );
+        if (verbose)
+            $display("%t L1 %m sendPrefetchRqToP: ", $time,
+                fshow(cRqToP)
+            );
     endrule
     rule sendRqToP;
         rqToPIndexQ.deq;
@@ -1571,6 +1571,10 @@ module mkL1Cache#(
                 let r <- toGet(pRqRsFromPQ).get;
                 banks[i].to_parent.fromP.enq(r);
             endrule
+            rule sendPEvict(pRqRsFromPQ.first matches tagged PEvict .evict &&& getBankId(evict.addr) == fromInteger(i));
+                let r <- toGet(pRqRsFromPQ).get;
+                banks[i].to_parent.fromP.enq(r);
+            endrule       
         end
 
         toParentIfc = (interface ChildCacheToParent;

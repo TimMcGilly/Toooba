@@ -50,7 +50,8 @@ module mkL1LLConnect#(
                 boundsOffset: r.boundsOffset,
                 boundsLength: r.boundsLength,
                 boundsVirtBase: r.boundsVirtBase,
-                capPerms: r.capPerms
+                capPerms: r.capPerms,
+                prefetchOtherInfo: r.prefetchOtherInfo
             }
         };
     endfunction
@@ -93,8 +94,15 @@ module mkL1LLConnect#(
                 cameFromPrefetch: rs.cameFromPrefetch,
                 boundsOffset: rs.boundsOffset,
                 boundsLength: rs.boundsLength,
-                boundsVirtBase: rs.boundsVirtBase
-
+                boundsVirtBase: rs.boundsVirtBase,
+                prefetchOtherInfo: rs.prefetchOtherInfo
+            }));
+        endrule
+        rule sendPEvict(llc.toC.first matches tagged PEvict .evict &&& evict.child == fromInteger(i));
+            llc.toC.deq;
+            l1[i].fromP.enq(PEvict (PEvictMsg {
+                addr: evict.addr,
+                child: ?
             }));
         endrule
     end

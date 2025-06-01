@@ -329,13 +329,14 @@ typedef struct {
 } PRsMsg#(type idT, type childT) deriving(Bits, Eq, FShow);
 
 typedef struct {
-    LineAddr lineAddr;
-} PEvictMsg deriving(Bits, Eq, FShow);
+    Addr addr;
+    childT child; // to which child
+} PEvictMsg#(type childT) deriving(Bits, Eq, FShow);
 
 typedef union tagged {
     PRqMsg#(childT) PRq;
     PRsMsg#(idT, childT) PRs;
-    PEvictMsg PEvict;
+    PEvictMsg#(childT) PEvict;
 } PRqRsMsg#(type idT, type childT) deriving(Bits, Eq, FShow);
 
 interface ChildCacheToParent#(type cRqIdT, type childT);

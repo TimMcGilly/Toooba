@@ -225,7 +225,7 @@ module mkLLBank#(
     FIFO#(cRqIndexT) rsLdToDmaIndexQ_pipelineResp <- mkFIFO;
     FIFO#(cRqIndexT) rsStToDmaIndexQ_pipelineResp <- mkFIFO;
 
-    Fifo#(2, PEvictMsg) pEvictMsgQ <- mkOverflowBypassFifo;
+    Fifo#(2, pRqRsToCT) pEvictMsgQ <- mkOverflowBypassFifo;
 
 `ifdef DEBUG_DMA
     // these FIFOs are enqueued when DMA req really takes effect
@@ -480,10 +480,10 @@ endfunction
         // change round robin
         //flipPriorNewCRqSrc;
     //    if (verbose)
-    //     $display("%t LL %m createDataPrefetchRqFromQueue: ", $time,
-    //         fshow(n), " ; ",
-    //         fshow(cRq)
-    //     );
+        $display("%t LL %m createDataPrefetchRqFromQueue: ", $time,
+            fshow(n), " ; ",
+            fshow(cRq)
+        );
     endrule
 
     // create new request from data prefetcher and send to pipeline
@@ -1251,7 +1251,12 @@ endfunction
             line: ? // data is no longer used
         }, False);
 
-        pEvictMsgQ.enq(PEvictMsg {lineAddr: getLineAddr(cRq.addr)});
+        pEvictMsgQ.enq(PEvict (PEvictMsg {
+            addr: cRq.addr,
+            child: cRq.child
+            }));
+        $display("%t LL %m cRqFromCEvict pEvictMsgQ enq lineAddr %h", $time, getLineAddr(cRq.addr));
+
     endaction
     endfunction
     
@@ -1260,9 +1265,8 @@ endfunction
         let pEvictMsg = pEvictMsgQ.first;
         pEvictMsgQ.deq;
 
-        pRqRsToCT req = PEvict (pEvictMsg);
-        
-        toCQ.enq(req);
+        $display("%t LL %m sendEvictToC ", $time, fshow(pEvictMsg));        
+        toCQ.enq(pEvictMsg);
     endrule
 
     // handle cRq

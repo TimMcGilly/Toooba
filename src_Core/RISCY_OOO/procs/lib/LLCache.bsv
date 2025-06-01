@@ -373,7 +373,9 @@ module mkLLCache(LLCache);
                         y.addr = secureRotateAddr(x.addr);
                         return PRs (y);
                     end
-                    default: return ?;
+                    tagged PEvict .x: begin
+                        return PEvict (x);
+                    end
                 endcase
             endmethod
         endinterface

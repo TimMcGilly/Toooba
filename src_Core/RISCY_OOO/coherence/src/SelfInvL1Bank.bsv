@@ -340,6 +340,13 @@ module mkSelfInvL1Bank#(
         doAssert(isValid(resp.data), "msut have data");
     endrule
 
+    (* descending_urgency = "cRqTransfer, pEvictTransfer" *)
+    rule pEvictTransfer(fromPQ.first matches tagged PEvict .resp);
+        fromPQ.deq;
+        
+        if (verbose) $display("%t I %m pEvictTransfer: currently dropping as no prefetcher support", $time, fshow(resp));
+    endrule
+
     rule sendRsToP_cRq(rsToPIndexQ.first matches tagged CRq .n);
         rsToPIndexQ.deq;
         // get cRq replacement info
@@ -1203,6 +1210,10 @@ module mkSelfInvL1Cache#(
                 banks[i].to_parent.fromP.enq(r);
             endrule
             rule sendPRs(pRqRsFromPQ.first matches tagged PRs .rs &&& getBankId(rs.addr) == fromInteger(i));
+                let r <- toGet(pRqRsFromPQ).get;
+                banks[i].to_parent.fromP.enq(r);
+            endrule
+            rule sendPEvict(pRqRsFromPQ.first matches tagged PEvict .evict);
                 let r <- toGet(pRqRsFromPQ).get;
                 banks[i].to_parent.fromP.enq(r);
             endrule

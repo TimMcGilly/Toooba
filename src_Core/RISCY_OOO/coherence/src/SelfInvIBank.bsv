@@ -246,6 +246,13 @@ module mkSelfInvIBank#(
         doAssert(resp.toState == S && isValid(resp.data), "I$ must upgrade to S with data");
     endrule
 
+    (* descending_urgency = "cRqTransfer, pEvictTransfer" *)
+    rule pEvictTransfer(fromPQ.first matches tagged PEvict .resp);
+        fromPQ.deq;
+        
+        if (verbose) $display("%t I %m pEvictTransfer: currently dropping as no prefetcher support", $time, fshow(resp));
+    endrule
+
     rule sendRqToP;
         rqToPIndexQ.deq;
         cRqIdxT n = rqToPIndexQ.first;

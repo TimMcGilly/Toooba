@@ -3688,7 +3688,7 @@ provisos (
     endmethod
 
     method Action reportCacheEviction(LineAddr lineAddr);
-        if (`VERBOSE) $display("%t Prefetch logCacheEviction lineAddr %h", lineAddr);
+        if (`VERBOSE) $display("%t Prefetch logCacheEviction lineAddr %h", $time, lineAddr);
         evictFromPrefetchFilterQ.enq(lineAddr);
     endmethod
 
