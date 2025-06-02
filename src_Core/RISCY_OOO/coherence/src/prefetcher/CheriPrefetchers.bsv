@@ -2624,7 +2624,7 @@ provisos (
 
                 end
             end
-            else if (prefetchInfo.depth <= fromInteger(recursionDepth)) begin // Result of a child prefetch so start chaining
+            else if (prefetchInfo.depth < fromInteger(recursionDepth)) begin // Result of a child prefetch so start chaining
                 predictionTableIdxTagT predIdxTag = getPredictionIdxTag(prefetchInfo.childPCHash);
                 dataForPredFromPrefetchRdReq.enq(tuple4(predIdxTag, boundsLength, boundsVirtBase, prefetchInfo.depth + 1));
                 if (`VERBOSE ) $display("%t Prefetcher triggering chain childPCHash %h", $time, prefetchInfo.childPCHash);
