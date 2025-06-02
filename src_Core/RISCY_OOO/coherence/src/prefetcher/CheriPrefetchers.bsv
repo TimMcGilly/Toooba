@@ -3525,7 +3525,7 @@ provisos (
     endrule
 
     // Tlb
-
+    
     rule doTlbLookup;
         let tlbInfo = tlbLookupQueue.first;
         tlbLookupQueue.deq;
@@ -3603,12 +3603,11 @@ provisos (
         end
 
         // Read from prediction table as can now chain next prefetch
-        depthT newDepth = 0;
 
         if (current.tag && getLength(selCap) <= fromInteger(maxCapSizeForDependence)) begin
             if (wasPrefetch) begin
                 if (prefetchOtherInfo matches tagged Valid .prefetchInfo) begin
-                    if (prefetchInfo.depth <= fromInteger(recursionDepth)) begin
+                    if (prefetchInfo.depth < fromInteger(recursionDepth)) begin
                         predictionDepReadRespDataT predRdRespData;
                         
                         predRdRespData.parentPC = prefetchInfo.childPC; // Chain PCs
