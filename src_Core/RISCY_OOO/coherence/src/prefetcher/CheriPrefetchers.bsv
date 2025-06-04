@@ -3190,8 +3190,8 @@ provisos (
     function prefetchFilterIdxTagT getPrefetchFilterIdxTag(LineAddr lineAddr) = 
         hash(lineAddr);
 
-    function capSizeTableIdxTagT getCapSizeTableIdxTag(Addr boundsLength) = 
-        hash(boundsLength);
+    function capSizeTableIdxTagT getCapSizeTableIdxTag(Addr boundsLength, Addr boundsOffset) = 
+        hash(boundsLength ^ boundsOffset);
 
     function Bool canPrefetch(predictionWayT way) = 
         !predRespWaysUsed[way] && currentPredictionTableResp.first.hit[way];
@@ -3440,7 +3440,7 @@ provisos (
             // end
 
 
-            capSizeTableIdxTagT cIdxTag = getCapSizeTableIdxTag(saturating_truncate(getLength(predRdRespData.filledCap)));
+            capSizeTableIdxTagT cIdxTag = getCapSizeTableIdxTag(saturating_truncate(getLength(predRdRespData.filledCap)), getOffset(predRdRespData.filledCap));
             capSizeTableIdxT cIdx = truncate(cIdxTag);
             capSizeTableTagT cTag = truncateLSB(cIdxTag);
 
@@ -3505,7 +3505,7 @@ provisos (
 
             currentCapSizePrefetchQueryUsed <= currentCapSizePrefetchQueryUsedVec;
 
-            capSizeTableIdxTagT capSizeIdxTag = getCapSizeTableIdxTag(saturating_truncate(matchedCapSize));
+            capSizeTableIdxTagT capSizeIdxTag = getCapSizeTableIdxTag(saturating_truncate(matchedCapSize), getOffset(capSizeQEl.cap));
             capSizeTableIdxT capSizeIdx = truncate(capSizeIdxTag);
 
             dataForCapSizeRdResp.enq(capSizeQEl);
@@ -3521,7 +3521,7 @@ provisos (
         capSizeTable.deqRdResp;
 
 
-        capSizeTableIdxTagT capSizeIdxTag = getCapSizeTableIdxTag(saturating_truncate(getLength(capSizeQEl.cap)));
+        capSizeTableIdxTagT capSizeIdxTag = getCapSizeTableIdxTag(saturating_truncate(getLength(capSizeQEl.cap)), getOffset(capSizeQEl.cap));
         capSizeTableTagT capSizeTag = truncateLSB(capSizeIdxTag);
 
         if (`VERBOSE) $display("%t Prefetcher processCapSizeRdResp: ", $time, fshow(capSizeQEl));
