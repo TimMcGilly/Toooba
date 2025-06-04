@@ -3202,6 +3202,15 @@ provisos (
         return any(canPrefetch, wayVec);
     endfunction
 
+    function Bool isEmpty(predictionWayT way) = 
+        !predictionTable.rdResp().hit[way];
+
+    function predRdRespEmpty();
+        Vector#(predictionTableWays, predictionWayT) wayVec = genWith(fromInteger);
+
+        return all(isEmpty, wayVec);
+    endfunction
+
     // Rules
     // Prefetch Filter
     (* descending_urgency = "processPrefetchFilterRdResp, evictFromPrefetchFilterRead" *)
@@ -3340,6 +3349,16 @@ provisos (
 
         if (`VERBOSE) $display("%t Prefetcher predictionTableReadResp response ", $time, predTableResp);
 
+    endrule
+
+    (* descending_urgency = "deqEmptyPredRdRespEarly, predictionTableReadResp" *)
+    rule deqEmptyPredRdRespEarly if (predRdRespEmpty());
+        let predRespData = dataForPredRdResp.first;
+        dataForPredRdResp.deq;
+        
+        predictionDepTableRespT predTableResp = predictionTable.rdResp();
+        predictionTable.deqResp(predTableResp.hit);
+        if (`VERBOSE) $display("%t Prefetcher deqEmptyPredRdRespEarly response ", $time, fshow(predTableResp));
     endrule
     
     rule deqPredRdResp if (!canDoAnyPrefetch);
