@@ -464,7 +464,7 @@ module mkL1DPrefetcher#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         Parameter#(3) confidenceBits <- mkParameter;
         Integer predictionReplacementConfidence = 1;
         Integer predictionPrefetchConfidence = 1;
-        Integer recursionDepth = ;
+        Integer recursionDepth = 1;
 
         let m <- mkCapPCBackwards(toTlb, backwardsTableSize, timelinessTableWays, timelinessTableSets,
                                     predictionTableSize, confidenceBits, confidenceUpdateTableSize, prefetchFilterTableSize, predictionReplacementConfidence, predictionPrefetchConfidence,
@@ -476,7 +476,7 @@ module mkL1DPrefetcher#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         Parameter#(128) backwardsTableSize <- mkParameter;
         Parameter#(4) predictionTableWays <- mkParameter;
         Parameter#(64) predictionTableSets <- mkParameter;
-        Parameter#(1024) prefetchFilterTableSize <- mkParameter;
+        Parameter#(32) prefetchFilterTableSize <- mkParameter;
         Parameter#(32) capSizeTableSize <- mkParameter;
         Integer recursionDepth = 1;
         Integer maxCapSizeForDependence = 8192;
@@ -576,7 +576,7 @@ module mkLLDPrefetcherInL1D#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         Parameter#(3) confidenceBits <- mkParameter;
         Integer predictionReplacementConfidence = 1;
         Integer predictionPrefetchConfidence = 1;
-        Integer recursionDepth = 0;
+        Integer recursionDepth = 1;
 
         let m <- mkCapPCBackwards(toTlb, backwardsTableSize, timelinessTableWays, timelinessTableSets,
                                     predictionTableSize, confidenceBits, confidenceUpdateTableSize, prefetchFilterTableSize, predictionReplacementConfidence, predictionPrefetchConfidence,
@@ -585,7 +585,7 @@ module mkLLDPrefetcherInL1D#(DTlbToPrefetcher toTlb)(CheriPCPrefetcher);
         Parameter#(128) backwardsTableSize <- mkParameter;
         Parameter#(4) predictionTableWays <- mkParameter;
         Parameter#(64) predictionTableSets <- mkParameter;
-        Parameter#(1024) prefetchFilterTableSize <- mkParameter;
+        Parameter#(32) prefetchFilterTableSize <- mkParameter;
         Parameter#(32) capSizeTableSize <- mkParameter;
         Integer recursionDepth = 1;
         Integer maxCapSizeForDependence = 8192;

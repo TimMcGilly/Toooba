@@ -2624,7 +2624,7 @@ provisos (
 
                 end
             end
-            else if (prefetchInfo.depth <= fromInteger(recursionDepth)) begin // Result of a child prefetch so start chaining
+            else if (prefetchInfo.depth < fromInteger(recursionDepth)) begin // Result of a child prefetch so start chaining
                 predictionTableIdxTagT predIdxTag = getPredictionIdxTag(prefetchInfo.childPCHash);
                 dataForPredFromPrefetchRdReq.enq(tuple4(predIdxTag, boundsLength, boundsVirtBase, prefetchInfo.depth + 1));
                 if (`VERBOSE ) $display("%t Prefetcher triggering chain childPCHash %h", $time, prefetchInfo.childPCHash);
@@ -3377,61 +3377,65 @@ provisos (
 
             if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp foundPrefetch childOffset %h", $time, predEntry.childOffset);
             
-            Addr prefetchAddr = getAddr(cap);
+            if (isInBounds(cap, True)) begin // TODO: double check that top included is correct
+                Addr prefetchAddr = getAddr(cap);
 
-            // if (getLineAddr(prefetchAddr) == predRdRespData.lineAddr) begin
-            //     if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut lineAddr %h", $time, predRdRespData.lineAddr);
+                // if (getLineAddr(prefetchAddr) == predRdRespData.lineAddr) begin
+                //     if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut lineAddr %h", $time, predRdRespData.lineAddr);
 
-            //     LineMemDataOffset dataSel = getLineMemDataOffset(prefetchAddr);
-            //     MemTaggedData current = getTaggedDataAt(predRdRespData.lineWithTags, dataSel);
-            //     CapPipe shortcutChildCap = fromMem(unpack(pack(current)));
+                //     LineMemDataOffset dataSel = getLineMemDataOffset(prefetchAddr);
+                //     MemTaggedData current = getTaggedDataAt(predRdRespData.lineWithTags, dataSel);
+                //     CapPipe shortcutChildCap = fromMem(unpack(pack(current)));
 
-            //     if (current.tag) begin
-            //         if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut tag valid shortcutCap ", $time, fshow(shortcutChildCap));
-            //         if (predRdRespData.depth <= fromInteger(recursionDepth)) begin
+                //     if (current.tag) begin
+                //         if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut tag valid shortcutCap ", $time, fshow(shortcutChildCap));
+                //         if (predRdRespData.depth <= fromInteger(recursionDepth)) begin
 
-            //             predictionDepReadRespDataT shortcutPredRdRespData;
-            //             shortcutPredRdRespData.parentPC = predEntry.childPC; // Chain PCs
-            //             shortcutPredRdRespData.depth = predRdRespData.depth + 1; // Should depth be increased
-            //             shortcutPredRdRespData.filledCap = shortcutChildCap; // TODO: add check we have permission to access this capability
-            //             shortcutPredRdRespData.lineWithTags = predRdRespData.lineWithTags;
-            //             shortcutPredRdRespData.lineAddr = predRdRespData.lineAddr;
+                //             predictionDepReadRespDataT shortcutPredRdRespData;
+                //             shortcutPredRdRespData.parentPC = predEntry.childPC; // Chain PCs
+                //             shortcutPredRdRespData.depth = predRdRespData.depth + 1; // Should depth be increased
+                //             shortcutPredRdRespData.filledCap = shortcutChildCap; // TODO: add check we have permission to access this capability
+                //             shortcutPredRdRespData.lineWithTags = predRdRespData.lineWithTags;
+                //             shortcutPredRdRespData.lineAddr = predRdRespData.lineAddr;
 
-            //             dataForPredRdReqFromShortcut.enq(shortcutPredRdRespData);
-            //             if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut submit", $time);
+                //             dataForPredRdReqFromShortcut.enq(shortcutPredRdRespData);
+                //             if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut submit", $time);
 
-            //         end
-            //         else begin
-            //             if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut skipped due to depth", $time);
-            //         end
-            //     end 
-            //     else begin
-            //         if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut tag invalid", $time);
-            //     end
-            // end
-            // else begin
-                
-            // TODO: add permissions check
-            TlbInfo tlbInfo;
-            tlbInfo.cap = cap;
-            tlbInfo.childPC = predEntry.childPC;
-            tlbInfo.depth = predRdRespData.depth;
+                //         end
+                //         else begin
+                //             if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut skipped due to depth", $time);
+                //         end
+                //     end 
+                //     else begin
+                //         if (`VERBOSE) $display("%t Prefetcher processCurrentPredictionTableResp shortcut tag invalid", $time);
+                //     end
+                // end
+                // else begin
+                    
+                // TODO: add permissions check
+                TlbInfo tlbInfo;
+                tlbInfo.cap = cap;
+                tlbInfo.childPC = predEntry.childPC;
+                tlbInfo.depth = predRdRespData.depth;
 
-            tlbLookupQueue.enq(tlbInfo);
-            // end
+                tlbLookupQueue.enq(tlbInfo);
+                // end
 
 
-            capSizeTableIdxTagT cIdxTag = getCapSizeTableIdxTag(saturating_truncate(getLength(predRdRespData.filledCap)));
-            capSizeTableIdxT cIdx = truncate(cIdxTag);
-            capSizeTableTagT cTag = truncateLSB(cIdxTag);
+                capSizeTableIdxTagT cIdxTag = getCapSizeTableIdxTag(saturating_truncate(getLength(predRdRespData.filledCap)));
+                capSizeTableIdxT cIdx = truncate(cIdxTag);
+                capSizeTableTagT cTag = truncateLSB(cIdxTag);
 
-            capSizeTableEntryT ce;
-            ce.valid = True;
-            ce.recentPC = predRdRespData.parentPC;
-            ce.tag = cTag;
+                capSizeTableEntryT ce;
+                ce.valid = True;
+                ce.recentPC = predRdRespData.parentPC;
+                ce.tag = cTag;
 
-            capSizeTable.wrReq(cIdx, ce);
-            
+                capSizeTable.wrReq(cIdx, ce);
+            end
+            else begin
+                $display("%t Not in bounds on prefetch", $time, fshow(cap));
+            end
         end
 
     endrule
@@ -3525,7 +3529,7 @@ provisos (
     endrule
 
     // Tlb
-
+    
     rule doTlbLookup;
         let tlbInfo = tlbLookupQueue.first;
         tlbLookupQueue.deq;
@@ -3567,9 +3571,15 @@ provisos (
         MemTaggedData current = getTaggedDataAt(lineWithTags, dataSel);
         CapPipe selCap = fromMem(unpack(pack(current)));
 
+        if (!getHardPerms(selCap).permitLoadCap) begin
+            $display("%t No permitLoadCap perm addr %h boundsVirtBase %h", $time, addr, boundsVirtBase);
+        end
+        
+
+
         if (!wasPrefetch) begin
                 // Write new access to backwards table
-                if (current.tag && getLength(selCap) <= fromInteger(maxCapSizeForDependence)) begin
+                if (current.tag && getLength(selCap) <= fromInteger(maxCapSizeForDependence) && getHardPerms(selCap).permitLoadCap) begin
 
                     backwardsTableIdxTagT bIdxTag = getBackwardsIdxTag(getBase(selCap)); // virt base of new child
                     backwardsTableIdxT bIdx = truncate(bIdxTag);
@@ -3603,12 +3613,11 @@ provisos (
         end
 
         // Read from prediction table as can now chain next prefetch
-        depthT newDepth = 0;
 
-        if (current.tag && getLength(selCap) <= fromInteger(maxCapSizeForDependence)) begin
+        if (current.tag && getLength(selCap) <= fromInteger(maxCapSizeForDependence) && getHardPerms(selCap).permitLoadCap) begin
             if (wasPrefetch) begin
                 if (prefetchOtherInfo matches tagged Valid .prefetchInfo) begin
-                    if (prefetchInfo.depth <= fromInteger(recursionDepth)) begin
+                    if (prefetchInfo.depth < fromInteger(recursionDepth)) begin
                         predictionDepReadRespDataT predRdRespData;
                         
                         predRdRespData.parentPC = prefetchInfo.childPC; // Chain PCs
