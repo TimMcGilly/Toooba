@@ -3430,6 +3430,8 @@ provisos (
             // end
             // else begin
                 
+                
+            if (isInBounds(cap, True)) begin
             // TODO: add permissions check
             TlbInfo tlbInfo;
             tlbInfo.cap = cap;
@@ -3438,6 +3440,26 @@ provisos (
 
             tlbLookupQueue.enq(tlbInfo);
             // end
+            end
+            else begin
+                let lineAddr = getLineAddr(prefetchAddr);
+                Addr fullLineAddr = {lineAddr, '0};
+                let newCap = setAddr(predRdRespData.filledCap, fullLineAddr).value;
+                if (isInBounds(newCap, True)) begin
+                    TlbInfo tlbInfo;
+                    tlbInfo.cap = cap;
+                    tlbInfo.childPC = predEntry.childPC;
+                    tlbInfo.depth = predRdRespData.depth;
+
+                    tlbLookupQueue.enq(tlbInfo);
+                    $display("%t Not in bounds oldCap but newCap on lineAddr %h is on prefetch ", $time, lineAddr, showCHERICap(cap), showCHERICap(newCap));
+                end 
+                else begin
+                    $display("%t Not in bounds on prefetch both bad ", $time, showCHERICap(cap), showCHERICap(newCap));
+                end
+                
+            end
+            
 
 
             capSizeTableIdxTagT cIdxTag = getCapSizeTableIdxTag(saturating_truncate(getLength(predRdRespData.filledCap)), getOffset(predRdRespData.filledCap));
